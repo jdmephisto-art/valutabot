@@ -64,12 +64,22 @@ export const getInitialRates = (): ExchangeRate[] => {
 };
 
 export const findRate = (from: string, to: string): number | undefined => {
+    if (from === to) return 1;
+
     const directRate = currentRates.find(r => r.from === from && r.to === to);
     if (directRate) return directRate.rate;
     
     // Try inverse rate
     const inverseRate = currentRates.find(r => r.from === to && r.to === from);
     if (inverseRate) return 1 / inverseRate.rate;
+
+    // Try calculating through USD as a base currency
+    const fromUsdRate = findRate(from, 'USD');
+    const usdToToRate = findRate('USD', to);
+
+    if (fromUsdRate && usdToToRate) {
+        return fromUsdRate * usdToToRate;
+    }
 
     return undefined;
 }
