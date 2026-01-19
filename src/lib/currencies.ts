@@ -15,6 +15,8 @@ export const currencies: Currency[] = [
   { code: 'JPY', name: 'Japanese Yen', icon: JapaneseYen },
   { code: 'RUB', name: 'Russian Ruble', icon: RussianRuble },
   { code: 'AED', name: 'UAE Dirham', icon: Landmark },
+  { code: 'BYN', name: 'Belarusian Ruble', icon: Landmark },
+  { code: 'CNY', name: 'Chinese Yuan', icon: Landmark },
 ];
 
 const baseRates: Omit<ExchangeRate, 'rate'>[] = [
@@ -35,10 +37,14 @@ const initialRates: ExchangeRate[] = [
     { from: 'USD', to: 'JPY', rate: 157.24 },
     { from: 'USD', to: 'RUB', rate: 89.10 },
     { from: 'USD', to: 'AED', rate: 3.67 },
+    { from: 'USD', to: 'BYN', rate: 3.28 },
+    { from: 'USD', to: 'CNY', rate: 7.25 },
     { from: 'EUR', to: 'USD', rate: 1.08 },
     { from: 'EUR', to: 'GBP', rate: 0.85 },
     { from: 'GBP', to: 'USD', rate: 1.27 },
     { from: 'GBP', to: 'EUR', rate: 1.17 },
+    { from: 'BYN', to: 'USD', rate: 0.30 },
+    { from: 'CNY', to: 'USD', rate: 0.14 },
 ]
 
 let currentRates: ExchangeRate[] = [...initialRates];
