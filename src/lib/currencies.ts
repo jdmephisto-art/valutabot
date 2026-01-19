@@ -7,6 +7,7 @@ import {
   RussianRuble,
   Landmark,
 } from 'lucide-react';
+import { subDays } from 'date-fns';
 
 export const currencies: Currency[] = [
   { code: 'USD', name: 'US Dollar', icon: DollarSign },
@@ -17,18 +18,6 @@ export const currencies: Currency[] = [
   { code: 'AED', name: 'UAE Dirham', icon: Landmark },
   { code: 'BYN', name: 'Belarusian Ruble', icon: Landmark },
   { code: 'CNY', name: 'Chinese Yuan', icon: Landmark },
-];
-
-const baseRates: Omit<ExchangeRate, 'rate'>[] = [
-  { from: 'USD', to: 'EUR' },
-  { from: 'USD', to: 'GBP' },
-  { from: 'USD', to: 'JPY' },
-  { from: 'USD', to: 'RUB' },
-  { from: 'USD', to: 'AED' },
-  { from: 'EUR', to: 'USD' },
-  { from: 'EUR', to: 'GBP' },
-  { from: 'GBP', to: 'USD' },
-  { from: 'GBP', to: 'EUR' },
 ];
 
 const initialRates: ExchangeRate[] = [
@@ -45,6 +34,9 @@ const initialRates: ExchangeRate[] = [
     { from: 'GBP', to: 'EUR', rate: 1.17 },
     { from: 'BYN', to: 'USD', rate: 0.30 },
     { from: 'CNY', to: 'USD', rate: 0.14 },
+    { from: 'RUB', to: 'USD', rate: 1 / 89.10 },
+    { from: 'AED', to: 'USD', rate: 1 / 3.67 },
+    { from: 'JPY', to: 'USD', rate: 1 / 157.24 },
 ]
 
 let currentRates: ExchangeRate[] = [...initialRates];
@@ -82,4 +74,49 @@ export const findRate = (from: string, to: string): number | undefined => {
     }
 
     return undefined;
+}
+
+export const getHistoricalRate = (from: string, to: string, date: Date): number | undefined => {
+    // In a real app, you would fetch this from an API.
+    // Here we generate a deterministic pseudo-random rate based on the date.
+    const baseRate = findRate(from, to);
+    if (baseRate === undefined) return undefined;
+
+    const dateSeed = date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
+    const pairSeed = from.charCodeAt(0) + from.charCodeAt(1) + to.charCodeAt(0) + to.charCodeAt(1);
+    
+    // Use sin to create a pseudo-random but deterministic fluctuation
+    const fluctuation = Math.sin(dateSeed + pairSeed) * 0.1; // Fluctuation up to 10%
+    
+    return baseRate * (1 + fluctuation);
+};
+
+export const getHistoricalRatesForRange = (from: string, to: string, startDate: Date, endDate: Date): {date: Date, rate: number}[] => {
+    const rates = [];
+    let currentDate = startDate;
+    while(currentDate <= endDate) {
+        const rate = getHistoricalRate(from, to, currentDate);
+        if (rate !== undefined) {
+            rates.push({ date: new Date(currentDate), rate });
+        }
+        currentDate = subDays(currentDate, -1);
+    }
+    return rates;
+}
+
+export const getDailyDynamics = (from: string, to: string, date: Date): { time: string, rate: number }[] => {
+    const historicalRate = getHistoricalRate(from, to, date);
+    if (historicalRate === undefined) return [];
+
+    const dynamics = [];
+    for (let i = 0; i < 24; i++) {
+        const hourSeed = i * 100;
+        // another deterministic fluctuation for intra-day
+        const fluctuation = (Math.sin(date.getTime() + hourSeed + from.charCodeAt(0)) - 0.5) * 0.005; 
+        dynamics.push({
+            time: `${String(i).padStart(2, '0')}:00`,
+            rate: historicalRate * (1 + fluctuation),
+        });
+    }
+    return dynamics;
 }
