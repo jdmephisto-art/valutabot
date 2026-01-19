@@ -103,7 +103,7 @@ export function ChatInterface() {
     });
   };
 
-  const handleAddTrackedPair = (from: string, to: string) => {
+  const handleAddTrackedPair = (from: string, to: string): boolean => {
     const pair = `${from}/${to}`;
     const rate = findRate(from, to);
     if (rate === undefined) {
@@ -112,10 +112,11 @@ export function ChatInterface() {
         title: 'Error tracking pair',
         description: 'Could not find an exchange rate for the selected pair.',
       });
-      return;
+      return false;
     }
     setTrackedPairs(prev => new Map(prev).set(pair, rate));
     addMessage({ sender: 'bot', text: `OK. I'm now tracking ${pair}. I'll notify you of any changes.` });
+    return true;
   };
 
   const handleRemoveTrackedPair = (pair: string) => {

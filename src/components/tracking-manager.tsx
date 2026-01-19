@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { currencies } from '@/lib/currencies';
 import { Eye, PlusCircle, Trash2 } from 'lucide-react';
 import { Separator } from './ui/separator';
+import { useState } from 'react';
 
 const trackingSchema = z.object({
     from: z.string().min(1, "Please select a currency."),
@@ -23,12 +24,14 @@ const trackingSchema = z.object({
 type TrackingFormValues = z.infer<typeof trackingSchema>;
 
 type TrackingManagerProps = {
-    onAddPair: (from: string, to: string) => void;
+    onAddPair: (from: string, to: string) => boolean;
     onRemovePair: (pair: string) => void;
     trackedPairs: string[];
 }
 
-export function TrackingManager({ onAddPair, onRemovePair, trackedPairs }: TrackingManagerProps) {
+export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initialTrackedPairs }: TrackingManagerProps) {
+  const [localTrackedPairs, setLocalTrackedPairs] = useState(initialTrackedPairs);
+
   const form = useForm<TrackingFormValues>({
     resolver: zodResolver(trackingSchema),
     defaultValues: {
@@ -38,8 +41,19 @@ export function TrackingManager({ onAddPair, onRemovePair, trackedPairs }: Track
   });
 
   const handleSubmit = (data: TrackingFormValues) => {
-    onAddPair(data.from, data.to);
-    form.reset();
+    const success = onAddPair(data.from, data.to);
+    if (success) {
+      const newPair = `${data.from}/${data.to}`;
+      if (!localTrackedPairs.includes(newPair)) {
+        setLocalTrackedPairs(prev => [...prev, newPair]);
+      }
+      form.reset();
+    }
+  }
+  
+  const handleRemove = (pair: string) => {
+    onRemovePair(pair);
+    setLocalTrackedPairs(prev => prev.filter(p => p !== pair));
   }
 
   return (
@@ -98,15 +112,15 @@ export function TrackingManager({ onAddPair, onRemovePair, trackedPairs }: Track
             </Button>
           </form>
         </Form>
-        {trackedPairs.length > 0 && (
+        {localTrackedPairs.length > 0 && (
             <>
                 <Separator className="my-6" />
                 <div className="space-y-2">
                     <h4 className="font-medium">Currently Tracking</h4>
-                    {trackedPairs.map(pair => (
+                    {localTrackedPairs.map(pair => (
                         <div key={pair} className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
                             <span className="font-mono text-sm">{pair}</span>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onRemovePair(pair)}>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleRemove(pair)}>
                                 <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
                         </div>
