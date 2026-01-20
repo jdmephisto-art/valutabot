@@ -1,25 +1,35 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { getInitialRates, getLatestRates, currencies } from '@/lib/currencies';
 import type { ExchangeRate } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { ArrowRight } from 'lucide-react';
 
 export function LatestRates() {
-  const [rates, setRates] = useState<ExchangeRate[]>(getInitialRates);
+  const [rates, setRates] = useState<ExchangeRate[]>([]);
   const [changedRates, setChangedRates] = useState<Map<string, 'up' | 'down'>>(new Map());
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      const newRates = getLatestRates();
+    getInitialRates().then(initialRates => {
+      setRates(initialRates);
+    });
+  }, []);
+
+  useEffect(() => {
+    // NBRB rates are updated daily, so frequent polling is not necessary.
+    // This interval is for demonstrating UI updates.
+    const interval = setInterval(async () => {
+      const oldRates = new Map(rates.map(r => [`${r.from}-${r.to}`, r.rate]));
+      const newRates = await getLatestRates();
       const changed = new Map<string, 'up' | 'down'>();
 
       for (const newRate of newRates) {
-        const oldRate = rates.find(r => r.from === newRate.from && r.to === newRate.to);
-        if (oldRate && oldRate.rate !== newRate.rate) {
-          changed.set(`${newRate.from}-${newRate.to}`, newRate.rate > oldRate.rate ? 'up' : 'down');
+        const key = `${newRate.from}-${newRate.to}`;
+        const oldRate = oldRates.get(key);
+        if (oldRate && oldRate !== newRate.rate) {
+          changed.set(key, newRate.rate > oldRate ? 'up' : 'down');
         }
       }
       
@@ -29,7 +39,7 @@ export function LatestRates() {
       if (changed.size > 0) {
         setTimeout(() => setChangedRates(new Map()), 1500);
       }
-    }, 3000);
+    }, 60000); // Check for new rates every minute
 
     return () => clearInterval(interval);
   }, [rates]);
@@ -42,8 +52,10 @@ export function LatestRates() {
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
       <CardHeader>
         <CardTitle className="text-lg font-semibold">Latest Rates</CardTitle>
+        <CardDescription>Rates vs USD from NBRB</CardDescription>
       </CardHeader>
       <CardContent>
+        {rates.length === 0 && <p className="text-sm text-muted-foreground">Loading rates...</p>}
         <div className="space-y-4">
           {rates.map(({ from, to, rate }) => {
             const FromIcon = currencyIconMap.get(from);

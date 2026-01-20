@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
-import { currencies, getDailyDynamics, getHistoricalRate, getHistoricalRatesForRange } from '@/lib/currencies';
+import { currencies, getDailyDynamics, getHistoricalRate } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { CalendarIcon, TrendingDown, TrendingUp } from 'lucide-react';
@@ -32,17 +32,17 @@ export function HistoricalRates() {
   const [dynamicsDate, setDynamicsDate] = useState<Date | undefined>(new Date());
   const [dynamicsData, setDynamicsData] = useState<any[]>([]);
 
-  const handleFetchSingleRate = () => {
+  const handleFetchSingleRate = async () => {
     if (date) {
-      const rate = getHistoricalRate(fromCurrency, toCurrency, date);
+      const rate = await getHistoricalRate(fromCurrency, toCurrency, date);
       setSingleRate(rate === undefined ? null : rate);
     }
   };
 
-  const handleFetchRangeRate = () => {
+  const handleFetchRangeRate = async () => {
     if (range?.from && range.to) {
-      const startRate = getHistoricalRate(fromCurrency, toCurrency, range.from);
-      const endRate = getHistoricalRate(fromCurrency, toCurrency, range.to);
+      const startRate = await getHistoricalRate(fromCurrency, toCurrency, range.from);
+      const endRate = await getHistoricalRate(fromCurrency, toCurrency, range.to);
       if (startRate !== undefined && endRate !== undefined) {
         setRangeResult({ startRate, endRate });
       } else {
@@ -51,9 +51,9 @@ export function HistoricalRates() {
     }
   };
 
-  const handleFetchDynamics = () => {
+  const handleFetchDynamics = async () => {
     if (dynamicsDate) {
-      const data = getDailyDynamics(fromCurrency, toCurrency, dynamicsDate);
+      const data = await getDailyDynamics(fromCurrency, toCurrency, dynamicsDate);
       setDynamicsData(data);
     }
   };
@@ -83,6 +83,7 @@ export function HistoricalRates() {
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
       <CardHeader>
         <CardTitle className="text-lg font-semibold">Historical Data</CardTitle>
+        <CardDescription>Rates provided by NBRB API</CardDescription>
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="single">
@@ -110,6 +111,7 @@ export function HistoricalRates() {
                 <p className="text-2xl font-bold font-mono">{singleRate.toFixed(4)}</p>
               </div>
             )}
+             {singleRate === null && <p className="text-xs text-center text-muted-foreground">Could not fetch rate for the selected date.</p>}
           </TabsContent>
 
           <TabsContent value="range" className="space-y-4 pt-4">
@@ -159,6 +161,7 @@ export function HistoricalRates() {
             <Button onClick={handleFetchDynamics} className="w-full">Show Dynamics</Button>
             {dynamicsData.length > 0 && (
                 <div className="h-[250px] w-full">
+                    <p className="text-xs text-center text-muted-foreground pb-2">Intraday dynamics are simulated for demonstration.</p>
                     <ChartContainer config={chartConfig}>
                         <AreaChart accessibilityLayer data={dynamicsData} margin={{ left: -20, right: 10, top: 10, bottom: 0 }}>
                             <CartesianGrid vertical={false} />

@@ -87,7 +87,7 @@ export function ChatInterface() {
       toast({
         variant: 'destructive',
         title: 'Error setting alert',
-        description: 'Could not find an exchange rate for the selected pair.',
+        description: 'Could not find an exchange rate for the selected pair. Rates might still be loading.',
       });
       return;
     }
@@ -110,7 +110,7 @@ export function ChatInterface() {
       toast({
         variant: 'destructive',
         title: 'Error tracking pair',
-        description: 'Could not find an exchange rate for the selected pair.',
+        description: 'Could not find an exchange rate for the selected pair. Rates might still be loading.',
       });
       return false;
     }
@@ -129,6 +129,7 @@ export function ChatInterface() {
   };
 
   useEffect(() => {
+    getLatestRates(); // Pre-load rates on initial start
     addMessage({
       sender: 'bot',
       text: 'Hello! I am ValutaBot. How can I assist you today?',
@@ -150,10 +151,10 @@ export function ChatInterface() {
   }, [messages]);
 
   useEffect(() => {
-    const checkRates = () => {
+    const checkRates = async () => {
         if(alerts.length === 0 && trackedPairs.size === 0) return;
         
-        getLatestRates(); // to update rates
+        await getLatestRates(); // to update rates
         
         // Check alerts
         const triggeredAlerts: Alert[] = [];
@@ -190,7 +191,7 @@ export function ChatInterface() {
             trackedPairs.forEach((lastRate, pair) => {
                 const [from, to] = pair.split('/');
                 const currentRate = findRate(from, to);
-                if (currentRate !== undefined && Math.abs(currentRate - lastRate) > 1e-6) {
+                if (currentRate !== undefined && Math.abs(currentRate - lastRate) > 1e-9) { // Use a small epsilon for float comparison
                     addMessage({
                         sender: 'bot',
                         component: <RateUpdateCard pair={pair} oldRate={lastRate} newRate={currentRate} />
@@ -204,7 +205,7 @@ export function ChatInterface() {
             }
         }
     };
-    const interval = setInterval(checkRates, 5000);
+    const interval = setInterval(checkRates, 30000); // Check every 30 seconds
     return () => clearInterval(interval);
   }, [alerts, toast, addMessage, trackedPairs]);
 
