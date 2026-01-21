@@ -7,7 +7,7 @@ import {
   RussianRuble,
   Landmark,
 } from 'lucide-react';
-import { format, subDays } from 'date-fns';
+import { format, subDays, differenceInDays } from 'date-fns';
 
 const iconMap: { [key: string]: React.ElementType } = {
   'USD': DollarSign,
@@ -191,28 +191,29 @@ export const getHistoricalRate = async (from: string, to: string, date: Date): P
     return undefined;
 };
 
-export const getDynamicsForPeriod = async (from: string, to: string, endDate: Date, days: number = 30): Promise<{ date: string, rate: number }[]> => {
+export const getDynamicsForPeriod = async (from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string, rate: number }[]> => {
+    const days = differenceInDays(endDate, startDate) + 1;
     if (from === to) {
         const rate = 1;
         const result: { date: string, rate: number }[] = [];
         for (let i = 0; i < days; i++) {
-            result.push({ date: format(subDays(endDate, i), 'dd.MM'), rate });
+            const currentDate = subDays(endDate, i);
+            const dateFormat = days > 365 ? 'dd.MM.yy' : 'dd.MM';
+            result.push({ date: format(currentDate, dateFormat), rate });
         }
         return result.reverse();
     }
     
-    const startDate = subDays(endDate, days - 1);
     const formattedStartDate = format(startDate, 'yyyy-MM-dd');
     const formattedEndDate = format(endDate, 'yyyy-MM-dd');
 
     const getRatesForPeriod = async (currencyCode: string): Promise<Map<string, number> | null> => {
         if (currencyCode === 'BYN') {
             const rates = new Map<string, number>();
-            for (let i = 0; i < days; i++) {
+            const numberOfDays = differenceInDays(endDate, startDate) + 1;
+            for (let i = 0; i < numberOfDays; i++) {
                 const currentDate = subDays(endDate, i);
                 const formattedCurrentDate = format(currentDate, 'yyyy-MM-dd');
-                // For BYN, we need to check if it's a weekend. There are no rates for weekends.
-                // We'll just populate with 1 and let the join handle missing days.
                  rates.set(formattedCurrentDate, 1);
             }
             return rates;
@@ -245,11 +246,11 @@ export const getDynamicsForPeriod = async (from: string, to: string, endDate: Da
     
     const result: { date: string, rate: number }[] = [];
     
-    // Use a date iterator to handle missing days (weekends/holidays)
     let lastKnownFromRate = -1;
     let lastKnownToRate = -1;
-    
-    for (let i = (days - 1); i >= 0; i--) {
+
+    const numberOfDays = differenceInDays(endDate, startDate) + 1;
+    for (let i = (numberOfDays - 1); i >= 0; i--) {
         const currentDate = subDays(endDate, i);
         const formattedCurrentDate = format(currentDate, 'yyyy-MM-dd');
         
@@ -263,7 +264,8 @@ export const getDynamicsForPeriod = async (from: string, to: string, endDate: Da
         else if(lastKnownToRate !== -1) toRate = lastKnownToRate;
         
         if (fromRate !== undefined && toRate !== undefined && toRate !== 0 && fromRate > 0 && toRate > 0) {
-            result.push({ date: format(currentDate, 'dd.MM'), rate: fromRate / toRate });
+            const dateFormat = numberOfDays > 365 ? 'dd.MM.yy' : 'dd.MM';
+            result.push({ date: format(currentDate, dateFormat), rate: fromRate / toRate });
         }
     }
 

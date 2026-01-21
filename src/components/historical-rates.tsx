@@ -11,7 +11,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { getDynamicsForPeriod, getHistoricalRate } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import { CalendarIcon, TrendingDown, TrendingUp } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import { useCurrencies } from '@/hooks/use-currencies';
@@ -30,7 +30,7 @@ export function HistoricalRates() {
   const [rangeResult, setRangeResult] = useState<{ startRate: number; endRate: number } | null>(null);
 
   // State for historical dynamics
-  const [dynamicsEndDate, setDynamicsEndDate] = useState<Date | undefined>(new Date());
+  const [dynamicsRange, setDynamicsRange] = useState<DateRange | undefined>({ from: subDays(new Date(), 29), to: new Date() });
   const [dynamicsData, setDynamicsData] = useState<any[]>([]);
   const [fetchingDynamics, setFetchingDynamics] = useState(false);
 
@@ -54,10 +54,10 @@ export function HistoricalRates() {
   };
 
   const handleFetchDynamics = async () => {
-    if (dynamicsEndDate) {
+    if (dynamicsRange?.from && dynamicsRange?.to) {
       setFetchingDynamics(true);
       setDynamicsData([]);
-      const data = await getDynamicsForPeriod(fromCurrency, toCurrency, dynamicsEndDate);
+      const data = await getDynamicsForPeriod(fromCurrency, toCurrency, dynamicsRange.from, dynamicsRange.to);
       setDynamicsData(data);
       setFetchingDynamics(false);
     }
@@ -156,23 +156,33 @@ export function HistoricalRates() {
             {renderCurrencySelects()}
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dynamicsEndDate && "text-muted-foreground")}>
+                <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dynamicsRange && "text-muted-foreground")}>
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dynamicsEndDate ? `30 days until ${format(dynamicsEndDate, "PPP")}` : <span>Pick an end date</span>}
+                  {dynamicsRange?.from ? (dynamicsRange.to ? <>{format(dynamicsRange.from, "LLL dd, y")} - {format(dynamicsRange.to, "LLL dd, y")}</> : format(dynamicsRange.from, "LLL dd, y")) : <span>Pick a date range</span>}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={dynamicsEndDate} onSelect={setDynamicsEndDate} initialFocus /></PopoverContent>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar 
+                    initialFocus 
+                    mode="range" 
+                    defaultMonth={dynamicsRange?.from} 
+                    selected={dynamicsRange} 
+                    onSelect={setDynamicsRange} 
+                    numberOfMonths={2} 
+                    disabled={{ before: new Date("2021-01-01"), after: new Date() }}
+                />
+              </PopoverContent>
             </Popover>
             <Button onClick={handleFetchDynamics} className="w-full" disabled={fetchingDynamics}>
-                {fetchingDynamics ? 'Loading...' : 'Show 30-Day Dynamics'}
+                {fetchingDynamics ? 'Loading...' : 'Show Dynamics'}
             </Button>
             {dynamicsData.length > 0 && (
                 <div className="h-[250px] w-full">
-                    <p className="text-xs text-center text-muted-foreground pb-2">30-day rate dynamics for {fromCurrency}/{toCurrency}</p>
+                    <p className="text-xs text-center text-muted-foreground pb-2">Rate dynamics for {fromCurrency}/{toCurrency}</p>
                     <ChartContainer config={chartConfig}>
                         <AreaChart accessibilityLayer data={dynamicsData} margin={{ left: -20, right: 10, top: 10, bottom: 0 }}>
                             <CartesianGrid vertical={false} />
-                             <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} />
+                             <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} interval={dynamicsData.length > 60 ? Math.floor(dynamicsData.length / 10) : 0} />
                              <YAxis domain={['dataMin - (dataMax - dataMin) * 0.1', 'dataMax + (dataMax - dataMin) * 0.1']} tickLine={false} axisLine={false} tickMargin={8} tickCount={3} tickFormatter={(value) => typeof value === 'number' ? value.toFixed(4) : ''} />
                             <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
                             <Area dataKey="rate" type="natural" fill="var(--color-rate)" fillOpacity={0.4} stroke="var(--color-rate)" />
@@ -180,7 +190,7 @@ export function HistoricalRates() {
                     </ChartContainer>
                 </div>
             )}
-             {!fetchingDynamics && dynamicsData.length === 0 && <p className="text-xs text-center text-muted-foreground pt-2">Could not fetch dynamics for the selected period. Select another date.</p>}
+             {!fetchingDynamics && dynamicsData.length === 0 && <p className="text-xs text-center text-muted-foreground pt-2">Could not fetch dynamics for the selected period. Select another date range.</p>}
           </TabsContent>
         </Tabs>
       </CardContent>
