@@ -7,7 +7,7 @@ import {
   RussianRuble,
   Landmark,
 } from 'lucide-react';
-import { format, subDays, differenceInDays } from 'date-fns';
+import { format, subDays, differenceInDays, addDays } from 'date-fns';
 
 const iconMap: { [key: string]: React.ElementType } = {
   'USD': DollarSign,
@@ -245,27 +245,29 @@ export const getDynamicsForPeriod = async (from: string, to: string, startDate: 
     if (!fromRatesMap || !toRatesMap) return [];
     
     const result: { date: string, rate: number }[] = [];
-    
-    let lastKnownFromRate = -1;
-    let lastKnownToRate = -1;
+
+    const dayBeforeStart = subDays(startDate, 1);
+    let lastKnownFromRate = (await getHistoricalRate(from, 'BYN', dayBeforeStart)) || 0;
+    let lastKnownToRate = (await getHistoricalRate(to, 'BYN', dayBeforeStart)) || 0;
 
     const numberOfDays = differenceInDays(endDate, startDate) + 1;
-    for (let i = (numberOfDays - 1); i >= 0; i--) {
-        const currentDate = subDays(endDate, i);
+    for (let i = 0; i < numberOfDays; i++) {
+        const currentDate = addDays(startDate, i);
         const formattedCurrentDate = format(currentDate, 'yyyy-MM-dd');
         
-        let fromRate = fromRatesMap.get(formattedCurrentDate);
-        let toRate = toRatesMap.get(formattedCurrentDate);
+        const fromRateToday = fromRatesMap.get(formattedCurrentDate);
+        if (fromRateToday) {
+            lastKnownFromRate = fromRateToday;
+        }
 
-        if (fromRate !== undefined) lastKnownFromRate = fromRate;
-        else if(lastKnownFromRate !== -1) fromRate = lastKnownFromRate;
-
-        if (toRate !== undefined) lastKnownToRate = toRate;
-        else if(lastKnownToRate !== -1) toRate = lastKnownToRate;
+        const toRateToday = toRatesMap.get(formattedCurrentDate);
+        if (toRateToday) {
+            lastKnownToRate = toRateToday;
+        }
         
-        if (fromRate !== undefined && toRate !== undefined && toRate !== 0 && fromRate > 0 && toRate > 0) {
+        if (lastKnownFromRate > 0 && lastKnownToRate > 0) {
             const dateFormat = numberOfDays > 365 ? 'dd.MM.yy' : 'dd.MM';
-            result.push({ date: format(currentDate, dateFormat), rate: fromRate / toRate });
+            result.push({ date: format(currentDate, dateFormat), rate: lastKnownFromRate / lastKnownToRate });
         }
     }
 
