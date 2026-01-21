@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -10,13 +9,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
-import { currencies, getDailyDynamics, getHistoricalRate } from '@/lib/currencies';
+import { getDynamicsForPeriod, getHistoricalRate } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { CalendarIcon, TrendingDown, TrendingUp } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
+import { useCurrencies } from '@/hooks/use-currencies';
 
 export function HistoricalRates() {
+  const { currencies } = useCurrencies();
   const [fromCurrency, setFromCurrency] = useState('USD');
   const [toCurrency, setToCurrency] = useState('EUR');
 
@@ -28,9 +29,10 @@ export function HistoricalRates() {
   const [range, setRange] = useState<DateRange | undefined>();
   const [rangeResult, setRangeResult] = useState<{ startRate: number; endRate: number } | null>(null);
 
-  // State for daily dynamics
-  const [dynamicsDate, setDynamicsDate] = useState<Date | undefined>(new Date());
+  // State for historical dynamics
+  const [dynamicsEndDate, setDynamicsEndDate] = useState<Date | undefined>(new Date());
   const [dynamicsData, setDynamicsData] = useState<any[]>([]);
+  const [fetchingDynamics, setFetchingDynamics] = useState(false);
 
   const handleFetchSingleRate = async () => {
     if (date) {
@@ -52,21 +54,24 @@ export function HistoricalRates() {
   };
 
   const handleFetchDynamics = async () => {
-    if (dynamicsDate) {
-      const data = await getDailyDynamics(fromCurrency, toCurrency, dynamicsDate);
+    if (dynamicsEndDate) {
+      setFetchingDynamics(true);
+      setDynamicsData([]);
+      const data = await getDynamicsForPeriod(fromCurrency, toCurrency, dynamicsEndDate);
       setDynamicsData(data);
+      setFetchingDynamics(false);
     }
   };
 
   const renderCurrencySelects = () => (
     <div className="flex items-center gap-2 mb-4">
-      <Select value={fromCurrency} onValueChange={setFromCurrency}>
+      <Select value={fromCurrency} onValueChange={setFromCurrency} disabled={currencies.length === 0}>
         <SelectTrigger><SelectValue /></SelectTrigger>
         <SelectContent>
           {currencies.map(c => <SelectItem key={c.code} value={c.code}>{c.code}</SelectItem>)}
         </SelectContent>
       </Select>
-      <Select value={toCurrency} onValueChange={setToCurrency}>
+      <Select value={toCurrency} onValueChange={setToCurrency} disabled={currencies.length === 0}>
         <SelectTrigger><SelectValue /></SelectTrigger>
         <SelectContent>
           {currencies.map(c => <SelectItem key={c.code} value={c.code}>{c.code}</SelectItem>)}
@@ -151,28 +156,31 @@ export function HistoricalRates() {
             {renderCurrencySelects()}
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dynamicsDate && "text-muted-foreground")}>
+                <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dynamicsEndDate && "text-muted-foreground")}>
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dynamicsDate ? format(dynamicsDate, "PPP") : <span>Pick a date</span>}
+                  {dynamicsEndDate ? `30 days until ${format(dynamicsEndDate, "PPP")}` : <span>Pick an end date</span>}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={dynamicsDate} onSelect={setDynamicsDate} initialFocus /></PopoverContent>
+              <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={dynamicsEndDate} onSelect={setDynamicsEndDate} initialFocus /></PopoverContent>
             </Popover>
-            <Button onClick={handleFetchDynamics} className="w-full">Show Dynamics</Button>
+            <Button onClick={handleFetchDynamics} className="w-full" disabled={fetchingDynamics}>
+                {fetchingDynamics ? 'Loading...' : 'Show 30-Day Dynamics'}
+            </Button>
             {dynamicsData.length > 0 && (
                 <div className="h-[250px] w-full">
-                    <p className="text-xs text-center text-muted-foreground pb-2">Intraday dynamics are simulated for demonstration.</p>
+                    <p className="text-xs text-center text-muted-foreground pb-2">30-day rate dynamics for {fromCurrency}/{toCurrency}</p>
                     <ChartContainer config={chartConfig}>
                         <AreaChart accessibilityLayer data={dynamicsData} margin={{ left: -20, right: 10, top: 10, bottom: 0 }}>
                             <CartesianGrid vertical={false} />
-                             <XAxis dataKey="time" tickLine={false} axisLine={false} tickMargin={8} tickFormatter={(value) => value.slice(0, 5)} />
-                             <YAxis domain={['dataMin - 0.001', 'dataMax + 0.001']} tickLine={false} axisLine={false} tickMargin={8} tickCount={3} tickFormatter={(value) => typeof value === 'number' ? value.toFixed(3) : ''} />
+                             <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} />
+                             <YAxis domain={['dataMin - (dataMax - dataMin) * 0.1', 'dataMax + (dataMax - dataMin) * 0.1']} tickLine={false} axisLine={false} tickMargin={8} tickCount={3} tickFormatter={(value) => typeof value === 'number' ? value.toFixed(4) : ''} />
                             <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
                             <Area dataKey="rate" type="natural" fill="var(--color-rate)" fillOpacity={0.4} stroke="var(--color-rate)" />
                         </AreaChart>
                     </ChartContainer>
                 </div>
             )}
+             {!fetchingDynamics && dynamicsData.length === 0 && <p className="text-xs text-center text-muted-foreground pt-2">Could not fetch dynamics for the selected period. Select another date.</p>}
           </TabsContent>
         </Tabs>
       </CardContent>

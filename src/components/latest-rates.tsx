@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { getInitialRates, getLatestRates, currencies } from '@/lib/currencies';
+import { getInitialRates, getLatestRates, getCurrencies } from '@/lib/currencies';
 import type { ExchangeRate } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { ArrowRight } from 'lucide-react';
@@ -10,10 +10,14 @@ import { ArrowRight } from 'lucide-react';
 export function LatestRates() {
   const [rates, setRates] = useState<ExchangeRate[]>([]);
   const [changedRates, setChangedRates] = useState<Map<string, 'up' | 'down'>>(new Map());
+  const [currencyIconMap, setCurrencyIconMap] = useState<Map<string, React.ElementType>>(new Map());
 
   useEffect(() => {
     getInitialRates().then(initialRates => {
       setRates(initialRates);
+    });
+    getCurrencies().then(allCurrencies => {
+        setCurrencyIconMap(new Map(allCurrencies.map(c => [c.code, c.icon])));
     });
   }, []);
 
@@ -43,10 +47,6 @@ export function LatestRates() {
 
     return () => clearInterval(interval);
   }, [rates]);
-
-  const currencyIconMap = useMemo(() => {
-    return new Map(currencies.map(c => [c.code, c.icon]));
-  }, []);
 
   return (
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">

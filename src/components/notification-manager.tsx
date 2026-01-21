@@ -8,8 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { currencies } from '@/lib/currencies';
 import { AlertTriangle, BellPlus } from 'lucide-react';
+import { useCurrencies } from '@/hooks/use-currencies';
 
 const alertSchema = z.object({
     from: z.string().min(1, "Please select a currency."),
@@ -28,6 +28,7 @@ type NotificationManagerProps = {
 }
 
 export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
+  const { currencies } = useCurrencies();
   const form = useForm<AlertFormValues>({
     resolver: zodResolver(alertSchema),
     defaultValues: {
@@ -55,7 +56,7 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
                 render={({ field }) => (
                   <FormItem className="flex-1">
                     <FormLabel>From</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={currencies.length === 0}>
                       <FormControl>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                       </FormControl>
@@ -73,7 +74,7 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
                 render={({ field }) => (
                   <FormItem className="flex-1">
                     <FormLabel>To</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={currencies.length === 0}>
                       <FormControl>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                       </FormControl>

@@ -4,11 +4,13 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { currencies, findRate } from '@/lib/currencies';
+import { findRate } from '@/lib/currencies';
 import { ArrowRightLeft } from 'lucide-react';
 import { Button } from './ui/button';
+import { useCurrencies } from '@/hooks/use-currencies';
 
 export function CurrencyConverter() {
+  const { currencies } = useCurrencies();
   const [fromCurrency, setFromCurrency] = useState('USD');
   const [toCurrency, setToCurrency] = useState('EUR');
   const [amount, setAmount] = useState('1');
@@ -44,7 +46,7 @@ export function CurrencyConverter() {
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <div className="flex-1 space-y-1">
-              <Select value={fromCurrency} onValueChange={setFromCurrency}>
+              <Select value={fromCurrency} onValueChange={setFromCurrency} disabled={currencies.length === 0}>
                 <SelectTrigger>
                   <SelectValue placeholder="From" />
                 </SelectTrigger>
@@ -69,7 +71,7 @@ export function CurrencyConverter() {
             </Button>
 
             <div className="flex-1 space-y-1">
-              <Select value={toCurrency} onValueChange={setToCurrency}>
+              <Select value={toCurrency} onValueChange={setToCurrency} disabled={currencies.length === 0}>
                 <SelectTrigger>
                   <SelectValue placeholder="To" />
                 </SelectTrigger>

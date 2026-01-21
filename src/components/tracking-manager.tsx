@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useForm } from 'react-hook-form';
@@ -8,10 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { currencies } from '@/lib/currencies';
 import { Eye, PlusCircle, Trash2 } from 'lucide-react';
 import { Separator } from './ui/separator';
 import { useState } from 'react';
+import { useCurrencies } from '@/hooks/use-currencies';
 
 const trackingSchema = z.object({
     from: z.string().min(1, "Please select a currency."),
@@ -30,6 +29,7 @@ type TrackingManagerProps = {
 }
 
 export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initialTrackedPairs }: TrackingManagerProps) {
+  const { currencies } = useCurrencies();
   const [localTrackedPairs, setLocalTrackedPairs] = useState(initialTrackedPairs);
 
   const form = useForm<TrackingFormValues>({
@@ -75,7 +75,7 @@ export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initial
                 render={({ field }) => (
                   <FormItem className="flex-1">
                     <FormLabel>From</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={currencies.length === 0}>
                       <FormControl>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                       </FormControl>
@@ -93,7 +93,7 @@ export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initial
                 render={({ field }) => (
                   <FormItem className="flex-1">
                     <FormLabel>To</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={currencies.length === 0}>
                       <FormControl>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                       </FormControl>
