@@ -2,6 +2,19 @@ import type { Currency, ExchangeRate, DataSource } from '@/lib/types';
 import { format, subDays, differenceInDays, addDays, startOfDay, parseISO } from 'date-fns';
 
 
+// --- Pub/Sub for State Management ---
+type Listener = () => void;
+const listeners = new Set<Listener>();
+
+export function subscribe(listener: Listener): () => void {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+}
+
+function notify() {
+    listeners.forEach(l => l());
+}
+
 // --- STATE MANAGEMENT ---
 let activeDataSource: DataSource = 'nbrb'; // Default data source
 
@@ -15,6 +28,7 @@ export function setDataSource(source: DataSource) {
         currencyApiCurrenciesCache = null;
         currencyApiRatesCache = {};
         lastCurrencyApiFetchTimestamp = 0;
+        notify(); // Notify subscribers of the change
     }
 }
 
@@ -134,7 +148,7 @@ async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date
 }
 
 async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string, rate: number }[]> {
-    const results: { date: string, rate: number }[] = [];
+    const resultsWithDate: { date: Date, rate: number }[] = [];
     const promises: Promise<{ date: Date, rate: number | undefined }>[] = [];
     
     for (let d = startOfDay(startDate); d <= endDate; d = addDays(d, 1)) {
@@ -142,17 +156,22 @@ async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDa
         promises.push(getCurrencyApiHistoricalRate(from, to, currentDate).then(rate => ({ date: currentDate, rate })));
     }
 
-    const settled = await Promise.all(settled);
+    const settled = await Promise.all(promises);
     settled.forEach(res => {
          if (res.rate !== undefined) {
-            results.push({
-                date: format(res.date, 'dd.MM'),
+            resultsWithDate.push({
+                date: res.date,
                 rate: res.rate,
             });
         }
     });
 
-    return results.sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime());
+    resultsWithDate.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    return resultsWithDate.map(res => ({
+        date: format(res.date, 'dd.MM'),
+        rate: res.rate
+    }));
 }
 
 
