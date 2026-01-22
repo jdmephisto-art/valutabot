@@ -37,9 +37,12 @@ export function CurrencyCombobox({
     >
       <SelectTrigger className="w-full font-normal">
         {selectedCurrency ? (
-            <span className="truncate">{`${selectedCurrency.code} - ${selectedCurrency.name}`}</span>
+          <div className="whitespace-normal text-left text-xs leading-tight">
+            <span className="font-semibold">{selectedCurrency.code}</span>
+            <span> - {selectedCurrency.name}</span>
+          </div>
         ) : (
-            <SelectValue placeholder={placeholder ?? 'Select currency...'} />
+          <SelectValue placeholder={placeholder ?? 'Select currency...'} />
         )}
       </SelectTrigger>
       <SelectContent>

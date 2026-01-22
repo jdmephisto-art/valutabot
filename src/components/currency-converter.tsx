@@ -45,7 +45,7 @@ export function CurrencyConverter() {
       <CardContent>
         <div className="space-y-4">
           <div className="flex items-center gap-2">
-            <div className="flex-1 space-y-1">
+            <div className="flex-1 space-y-1 min-w-0">
               <CurrencyCombobox 
                 value={fromCurrency}
                 onChange={setFromCurrency}
@@ -64,7 +64,7 @@ export function CurrencyConverter() {
               <ArrowRightLeft className="h-5 w-5 text-muted-foreground" />
             </Button>
 
-            <div className="flex-1 space-y-1">
+            <div className="flex-1 space-y-1 min-w-0">
               <CurrencyCombobox
                 value={toCurrency}
                 onChange={setToCurrency}
