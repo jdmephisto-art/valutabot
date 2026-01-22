@@ -47,8 +47,8 @@ export async function getInitialRates(): Promise<ExchangeRate[]> {
 }
 
 
-// --- CURRENCYAPI.NET PROVIDER ---
-const CURRENCY_API_BASE_URL = 'https://api.currencyapi.com/v3';
+// --- CURRENCYAPI.NET PROVIDER (v1) ---
+const CURRENCY_API_BASE_URL = 'https://api.currencyapi.net/api/v1';
 let currencyApiCurrenciesCache: Currency[] | null = null;
 let currencyApiRatesCache: { [key: string]: number } = {};
 let lastCurrencyApiFetchTimestamp = 0;
@@ -66,7 +66,8 @@ async function currencyApiFetch(endpoint: string, params: Record<string, string>
     if (!apiKey) return null;
 
     const url = new URL(`${CURRENCY_API_BASE_URL}/${endpoint}`);
-    url.searchParams.append('apikey', apiKey);
+    url.searchParams.append('key', apiKey);
+    url.searchParams.append('output', 'json');
     Object.entries(params).forEach(([key, value]) => url.searchParams.append(key, value));
 
     try {
@@ -87,30 +88,29 @@ async function getCurrencyApiCurrencies(): Promise<Currency[]> {
     if (currencyApiCurrenciesCache) {
         return currencyApiCurrenciesCache;
     }
-    const data = await currencyApiFetch('currencies');
-    if (data && data.data) {
-        const result: Currency[] = Object.values(data.data).map((c: any) => ({
-            code: c.code,
-            name: c.name,
-        }));
-        
-        if (!result.some(c => c.code === 'BYN')) {
-            result.push({ code: 'BYN', name: 'Belarusian Ruble' });
-        }
-
-        result.sort((a, b) => a.code.localeCompare(b.code));
-        currencyApiCurrenciesCache = result;
-        return result;
+    // v1 doesn't have a /currencies endpoint. We derive the list from the /rates endpoint.
+    // This means we won't have the full currency names, just the codes.
+    await updateCurrencyApiRatesCache('USD'); // Ensure rates are fetched
+    
+    const codes = Object.keys(currencyApiRatesCache);
+    if (!codes.includes('BYN')) {
+        codes.push('BYN');
     }
-    return [];
+
+    const result: Currency[] = codes.map(code => ({ code, name: code }));
+    result.sort((a, b) => a.code.localeCompare(b.code));
+    
+    currencyApiCurrenciesCache = result;
+    return result;
 }
 
 async function updateCurrencyApiRatesCache(baseCurrency = 'USD') {
-    const data = await currencyApiFetch('latest', { base_currency: baseCurrency });
-    if (data && data.data) {
+    // NOTE: currencyapi.net (v1) free tier only supports USD as base currency.
+    const data = await currencyApiFetch('rates', { base: baseCurrency });
+    if (data && data.rates) {
         const tempCache: { [key: string]: number } = {};
-        Object.entries(data.data).forEach(([code, rateData]: [string, any]) => {
-            tempCache[code] = rateData.value;
+        Object.entries(data.rates).forEach(([code, rate]: [string, any]) => {
+            tempCache[code] = rate;
         });
         tempCache[baseCurrency] = 1;
         currencyApiRatesCache = tempCache;
@@ -121,16 +121,10 @@ async function updateCurrencyApiRatesCache(baseCurrency = 'USD') {
 function findCurrencyApiRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
 
-    // The cache stores rates relative to a base currency (USD).
-    // e.g., { 'EUR': 0.93, 'CAD': 1.36 } meaning 1 USD = 0.93 EUR and 1 USD = 1.36 CAD.
-    const toRate = currencyApiRatesCache[to];     // How many 'TO' currency units for 1 USD.
-    const fromRate = currencyApiRatesCache[from]; // How many 'FROM' currency units for 1 USD.
+    const toRate = currencyApiRatesCache[to];
+    const fromRate = currencyApiRatesCache[from];
 
     if (fromRate && toRate) {
-        // We want to find how many 'TO' units for 1 'FROM' unit.
-        // 1 FROM = (1 / fromRate) USD
-        // 1 USD = toRate TO
-        // Substituting USD: 1 FROM = (1 / fromRate) * toRate TO = toRate / fromRate TO.
         return toRate / fromRate;
     }
     return undefined;
@@ -152,40 +146,13 @@ async function getCurrencyApiLatestRates(): Promise<ExchangeRate[]> {
 }
 
 async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
-    if (from === to) return 1;
-    const formattedDate = format(date, 'yyyy-MM-dd');
-    const data = await currencyApiFetch('historical', { date: formattedDate, base_currency: from, currencies: to });
-    if(data && data.data && data.data[to]) {
-        return data.data[to].value;
-    }
+    console.warn("Historical data is not supported by the provided currencyapi.net API key (v1).");
     return undefined;
 }
 
 async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string, rate: number }[]> {
-    const resultsWithDate: { date: Date, rate: number }[] = [];
-    const promises: Promise<{ date: Date, rate: number | undefined }>[] = [];
-    
-    for (let d = startOfDay(startDate); d <= endDate; d = addDays(d, 1)) {
-        const currentDate = new Date(d);
-        promises.push(getCurrencyApiHistoricalRate(from, to, currentDate).then(rate => ({ date: currentDate, rate })));
-    }
-
-    const settled = await Promise.all(promises);
-    settled.forEach(res => {
-         if (res.rate !== undefined) {
-            resultsWithDate.push({
-                date: res.date,
-                rate: res.rate,
-            });
-        }
-    });
-
-    resultsWithDate.sort((a, b) => a.date.getTime() - b.date.getTime());
-
-    return resultsWithDate.map(res => ({
-        date: format(res.date, 'dd.MM'),
-        rate: res.rate
-    }));
+    console.warn("Historical data is not supported by the provided currencyapi.net API key (v1).");
+    return [];
 }
 
 
@@ -217,7 +184,7 @@ async function getNbrbCurrencies(): Promise<Currency[]> {
                 .filter((c: any) => new Date(c.Cur_DateEnd) > new Date())
                 .map((c: any) => ({
                     code: c.Cur_Abbreviation,
-                    name: c.Cur_Name, // Use Russian name
+                    name: c.Cur_Name,
                     id: c.Cur_ID,
                     dateEnd: c.Cur_DateEnd,
                 }));
