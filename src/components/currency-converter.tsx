@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { findRate } from '@/lib/currencies';
 import { ArrowRightLeft } from 'lucide-react';
 import { Button } from './ui/button';
 import { useCurrencies } from '@/hooks/use-currencies';
+import { CurrencyCombobox } from './currency-combobox';
 
 export function CurrencyConverter() {
   const { currencies } = useCurrencies();
@@ -46,18 +46,12 @@ export function CurrencyConverter() {
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <div className="flex-1 space-y-1">
-              <Select value={fromCurrency} onValueChange={setFromCurrency} disabled={currencies.length === 0}>
-                <SelectTrigger>
-                  <SelectValue placeholder="From" />
-                </SelectTrigger>
-                <SelectContent>
-                  {currencies.map(c => (
-                    <SelectItem key={c.code} value={c.code}>
-                      {c.code} - {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <CurrencyCombobox 
+                value={fromCurrency}
+                onChange={setFromCurrency}
+                placeholder='From'
+                disabled={currencies.length === 0}
+              />
               <Input
                 type="text"
                 placeholder="Amount"
@@ -71,18 +65,12 @@ export function CurrencyConverter() {
             </Button>
 
             <div className="flex-1 space-y-1">
-              <Select value={toCurrency} onValueChange={setToCurrency} disabled={currencies.length === 0}>
-                <SelectTrigger>
-                  <SelectValue placeholder="To" />
-                </SelectTrigger>
-                <SelectContent>
-                  {currencies.map(c => (
-                    <SelectItem key={c.code} value={c.code}>
-                      {c.code} - {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <CurrencyCombobox
+                value={toCurrency}
+                onChange={setToCurrency}
+                placeholder='To'
+                disabled={currencies.length === 0}
+              />
               <Input
                 type="text"
                 placeholder="Converted"

@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
@@ -16,6 +15,7 @@ import { CalendarIcon, TrendingDown, TrendingUp } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useToast } from '@/hooks/use-toast';
+import { CurrencyCombobox } from './currency-combobox';
 
 
 export function HistoricalRates() {
@@ -91,18 +91,18 @@ export function HistoricalRates() {
 
   const renderCurrencySelects = () => (
     <div className="flex items-center gap-2 mb-4">
-      <Select value={fromCurrency} onValueChange={setFromCurrency} disabled={currencies.length === 0}>
-        <SelectTrigger><SelectValue placeholder="From" /></SelectTrigger>
-        <SelectContent>
-          {currencies.map(c => <SelectItem key={c.code} value={c.code}>{c.code}</SelectItem>)}
-        </SelectContent>
-      </Select>
-      <Select value={toCurrency} onValueChange={setToCurrency} disabled={currencies.length === 0}>
-        <SelectTrigger><SelectValue placeholder="To" /></SelectTrigger>
-        <SelectContent>
-          {currencies.map(c => <SelectItem key={c.code} value={c.code}>{c.code}</SelectItem>)}
-        </SelectContent>
-      </Select>
+      <CurrencyCombobox
+        value={fromCurrency}
+        onChange={setFromCurrency}
+        placeholder="From"
+        disabled={currencies.length === 0}
+      />
+      <CurrencyCombobox
+        value={toCurrency}
+        onChange={setToCurrency}
+        placeholder="To"
+        disabled={currencies.length === 0}
+      />
     </div>
   );
   

@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertTriangle, BellPlus } from 'lucide-react';
 import { useCurrencies } from '@/hooks/use-currencies';
+import { CurrencyCombobox } from './currency-combobox';
 
 const alertSchema = z.object({
     from: z.string().min(1, "Please select a currency."),
@@ -56,14 +57,14 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
                 render={({ field }) => (
                   <FormItem className="flex-1">
                     <FormLabel>From</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={currencies.length === 0}>
-                      <FormControl>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {currencies.map(c => <SelectItem key={c.code} value={c.code}>{c.code}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <CurrencyCombobox
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="From"
+                          disabled={currencies.length === 0}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -74,14 +75,14 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
                 render={({ field }) => (
                   <FormItem className="flex-1">
                     <FormLabel>To</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={currencies.length === 0}>
-                      <FormControl>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {currencies.map(c => <SelectItem key={c.code} value={c.code}>{c.code}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                     <FormControl>
+                      <CurrencyCombobox
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="To"
+                          disabled={currencies.length === 0}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}

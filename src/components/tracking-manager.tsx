@@ -6,11 +6,11 @@ import * as z from 'zod';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Eye, PlusCircle, Trash2 } from 'lucide-react';
 import { Separator } from './ui/separator';
 import { useState } from 'react';
 import { useCurrencies } from '@/hooks/use-currencies';
+import { CurrencyCombobox } from './currency-combobox';
 
 const trackingSchema = z.object({
     from: z.string().min(1, "Please select a currency."),
@@ -75,14 +75,14 @@ export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initial
                 render={({ field }) => (
                   <FormItem className="flex-1">
                     <FormLabel>From</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={currencies.length === 0}>
-                      <FormControl>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {currencies.map(c => <SelectItem key={c.code} value={c.code}>{c.code}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <CurrencyCombobox
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="From"
+                          disabled={currencies.length === 0}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -93,14 +93,14 @@ export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initial
                 render={({ field }) => (
                   <FormItem className="flex-1">
                     <FormLabel>To</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={currencies.length === 0}>
-                      <FormControl>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {currencies.map(c => <SelectItem key={c.code} value={c.code}>{c.code}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <CurrencyCombobox
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="To"
+                          disabled={currencies.length === 0}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
