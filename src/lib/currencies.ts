@@ -40,6 +40,7 @@ export function getDataSource(): DataSource {
 // --- SHARED ---
 export async function getInitialRates(): Promise<ExchangeRate[]> {
     if (activeDataSource === 'nbrb') {
+        await updateNbrbRatesCache();
         return await getNbrbLatestRates();
     } else {
         await updateCurrencyApiRatesCache('USD');
@@ -63,7 +64,6 @@ async function nbrbApiFetch(endpoint: string) {
 }
 
 async function currencyApiFetch(endpoint: string, params: Record<string, string> = {}) {
-    // The key is hardcoded as per the user's request.
     const apiKey = '6431078d4fc8bf5d4097027ee62c2c0dc4e0';
 
     const url = new URL(`https://currencyapi.net/api/v1/${endpoint}`);
@@ -158,12 +158,10 @@ async function getCurrencyApiCurrencies(): Promise<Currency[]> {
     if (currencyApiCurrenciesCache) {
         return currencyApiCurrenciesCache;
     }
-    // v1 doesn't have a /currencies endpoint. We derive the list from the /rates endpoint.
-    await updateCurrencyApiRatesCache('USD'); // Ensure rates are fetched
+    await updateCurrencyApiRatesCache('USD'); 
     
     const codes = Object.keys(currencyApiRatesCache);
     
-    // Ensure BYN is in the list for selection
     if (!codes.includes('BYN')) {
         codes.push('BYN');
     }
@@ -179,7 +177,6 @@ async function getCurrencyApiCurrencies(): Promise<Currency[]> {
 }
 
 async function updateCurrencyApiRatesCache(baseCurrency = 'USD') {
-    // NOTE: currencyapi.net (v1) free tier only supports USD as base currency.
     const data = await currencyApiFetch('rates', { base: baseCurrency });
     if (data && data.rates) {
         const tempCache: { [key: string]: number } = {};
@@ -191,15 +188,10 @@ async function updateCurrencyApiRatesCache(baseCurrency = 'USD') {
         lastCurrencyApiFetchTimestamp = Date.now();
     }
     
-    // --- Augmentation for BYN ---
-    // If BYN is not in the cache from currencyapi, fetch it from NBRB as a fallback.
-    // This assumes the base is USD, which is true for the free tier.
     if (baseCurrency === 'USD' && !currencyApiRatesCache['BYN']) {
         try {
-            // Cur_ID for USD is 431. Fetch daily rate.
             const nbrbUsdRateData = await nbrbApiFetch('rates/431?periodicity=0'); 
             if (nbrbUsdRateData && nbrbUsdRateData.Cur_OfficialRate) {
-                 // rate is BYN per `scale` USD.
                 const bynPerUsd = nbrbUsdRateData.Cur_OfficialRate / nbrbUsdRateData.Cur_Scale;
                 currencyApiRatesCache['BYN'] = bynPerUsd;
             }
@@ -212,13 +204,10 @@ async function updateCurrencyApiRatesCache(baseCurrency = 'USD') {
 function findCurrencyApiRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
 
-    // Rates in cache are relative to USD.
-    const fromRate = currencyApiRatesCache[from]; // FROM per USD
-    const toRate = currencyApiRatesCache[to];     // TO per USD
+    const fromRate = currencyApiRatesCache[from];
+    const toRate = currencyApiRatesCache[to];
 
     if (fromRate && toRate) {
-        // We want 'TO per FROM'.
-        // (TO / USD) / (FROM / USD) = TO / FROM
         return toRate / fromRate;
     }
     return undefined;
@@ -226,7 +215,6 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
 
 
 async function getCurrencyApiLatestRates(): Promise<ExchangeRate[]> {
-    // Free tier updates infrequently, but we can have a shorter cache for demo purposes
     if (Date.now() - lastCurrencyApiFetchTimestamp > 5 * 60 * 1000) { // 5 min cache
         await updateCurrencyApiRatesCache('USD');
     }
@@ -286,12 +274,12 @@ async function getNbrbCurrencies(): Promise<Currency[]> {
     if (nbrbFullCurrencyInfoCache) {
         currencies = nbrbFullCurrencyInfoCache.map((c: any) => ({
             code: c.Cur_Abbreviation,
-            name: c.Cur_Name_Eng,
+            name: c.Cur_Name, // Use Cyrillic name
         }));
     }
 
     if (!currencies.some(c => c.code === 'BYN')) {
-        currencies.push({ code: 'BYN', name: 'Belarusian Ruble' });
+        currencies.push({ code: 'BYN', name: 'Белорусский рубль' });
     }
 
     currencies.sort((a, b) => a.code.localeCompare(b.code));
@@ -301,12 +289,26 @@ async function getNbrbCurrencies(): Promise<Currency[]> {
 }
 
 async function updateNbrbRatesCache() {
-    const data = await nbrbApiFetch('rates?periodicity=0'); // 0 for daily
-    if (data) {
-        const tempCache: { [key: string]: { rate: number, scale: number } } = {};
-        data.forEach((r: any) => {
+    const dailyData = await nbrbApiFetch('rates?periodicity=0'); // 0 for daily
+    const monthlyData = await nbrbApiFetch('rates?periodicity=1'); // 1 for monthly
+
+    const tempCache: { [key: string]: { rate: number, scale: number } } = {};
+    
+    if (dailyData) {
+        dailyData.forEach((r: any) => {
             tempCache[r.Cur_Abbreviation] = { rate: r.Cur_OfficialRate, scale: r.Cur_Scale };
         });
+    }
+
+    if (monthlyData) {
+        monthlyData.forEach((r: any) => {
+            if (!tempCache[r.Cur_Abbreviation]) { // Don't overwrite daily rate with monthly
+                tempCache[r.Cur_Abbreviation] = { rate: r.Cur_OfficialRate, scale: r.Cur_Scale };
+            }
+        });
+    }
+
+    if (Object.keys(tempCache).length > 0) {
         nbrbRatesCache = tempCache;
     }
 }
@@ -315,7 +317,6 @@ function findNbrbRate(from: string, to: string): number | undefined {
     if (Object.keys(nbrbRatesCache).length === 0) return undefined;
     if (from === to) return 1;
 
-    // NBRB rates are all X -> BYN.
     const toRateInfo = nbrbRatesCache[to];
     const fromRateInfo = nbrbRatesCache[from];
     
@@ -323,10 +324,6 @@ function findNbrbRate(from: string, to: string): number | undefined {
     const rateToBynForTO = to === 'BYN' ? 1 : (toRateInfo ? toRateInfo.rate / toRateInfo.scale : undefined);
 
     if (rateToBynForFROM !== undefined && rateToBynForTO !== undefined) {
-        // We want to find how many TO for 1 FROM.
-        // 1 FROM = rateToBynForFROM BYN
-        // 1 TO   = rateToBynForTO BYN => 1 BYN = 1/rateToBynForTO TO
-        // So, 1 FROM = rateToBynForFROM * (1/rateToBynForTO) TO
         return rateToBynForFROM / rateToBynForTO;
     }
     return undefined;
@@ -412,7 +409,11 @@ async function getNbrbDynamicsForPeriod(from: string, to: string, startDate: Dat
 
 // --- UNIFIED API ---
 export async function getCurrencies(): Promise<Currency[]> {
-    return activeDataSource === 'nbrb' ? getNbrbCurrencies() : getCurrencyApiCurrencies();
+    if (activeDataSource === 'nbrb') {
+        return getNbrbCurrencies();
+    } else {
+        return getCurrencyApiCurrencies();
+    }
 }
 
 export async function getLatestRates(): Promise<ExchangeRate[]> {
