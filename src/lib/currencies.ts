@@ -93,6 +93,11 @@ async function getCurrencyApiCurrencies(): Promise<Currency[]> {
             code: c.code,
             name: c.name,
         }));
+        
+        if (!result.some(c => c.code === 'BYN')) {
+            result.push({ code: 'BYN', name: 'Belarusian Ruble' });
+        }
+
         result.sort((a, b) => a.name.localeCompare(b.name));
         currencyApiCurrenciesCache = result;
         return result;
@@ -212,7 +217,7 @@ async function getNbrbCurrencies(): Promise<Currency[]> {
                 .filter((c: any) => new Date(c.Cur_DateEnd) > new Date())
                 .map((c: any) => ({
                     code: c.Cur_Abbreviation,
-                    name: c.Cur_Name_Eng, // Using English name for consistency
+                    name: c.Cur_Name, // Use Russian name
                     id: c.Cur_ID,
                     dateEnd: c.Cur_DateEnd,
                 }));
@@ -228,11 +233,10 @@ async function getNbrbCurrencies(): Promise<Currency[]> {
         const currencies: Currency[] = nbrbCurrenciesCache.map(({ id, dateEnd, ...rest }) => rest);
         
         if (!currencies.some(c => c.code === 'BYN')) {
-            // Use a consistent name format
-            currencies.push({ code: 'BYN', name: 'Belarusian Ruble' });
+            currencies.push({ code: 'BYN', name: 'Белорусский рубль' });
         }
 
-        currencies.sort((a, b) => a.name.localeCompare(b.name));
+        currencies.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 
         return currencies;
     }
