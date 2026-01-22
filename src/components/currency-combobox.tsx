@@ -29,21 +29,11 @@ type CurrencyComboboxProps = {
 
 export function CurrencyCombobox({ value, onChange, placeholder, disabled }: CurrencyComboboxProps) {
   const { currencies } = useCurrencies();
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpen] = React.useState(false)
 
   const selectedCurrency = currencies.find(
     (currency) => currency.code.toLowerCase() === value.toLowerCase()
   );
-
-  const handleSelect = (currentValue: string) => {
-    // The `currentValue` is a string like "USD United States Dollar".
-    // We need to find the currency object that matches this and get its code.
-    const code = currencies.find(c => `${c.code} ${c.name}` === currentValue)?.code;
-    if (code) {
-        onChange(code);
-    }
-    setOpen(false);
-  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -64,10 +54,7 @@ export function CurrencyCombobox({ value, onChange, placeholder, disabled }: Cur
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-        <Command onSelect={handleSelect} filter={(value, search) => {
-            if (value.toLowerCase().includes(search.toLowerCase())) return 1;
-            return 0;
-        }}>
+        <Command>
           <CommandInput placeholder="Search currency..." />
           <CommandList>
             <CommandEmpty>No currency found.</CommandEmpty>
@@ -75,7 +62,11 @@ export function CurrencyCombobox({ value, onChange, placeholder, disabled }: Cur
               {currencies.map((currency) => (
                 <CommandItem
                   key={currency.code}
-                  value={`${currency.code} ${currency.name}`}
+                  value={currency.code}
+                  onSelect={(currentValue) => {
+                    onChange(currentValue.toUpperCase() === value ? "" : currentValue.toUpperCase())
+                    setOpen(false)
+                  }}
                 >
                   <Check
                     className={cn(
