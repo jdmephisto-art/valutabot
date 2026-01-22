@@ -98,7 +98,7 @@ async function getCurrencyApiCurrencies(): Promise<Currency[]> {
             result.push({ code: 'BYN', name: 'Belarusian Ruble' });
         }
 
-        result.sort((a, b) => a.name.localeCompare(b.name));
+        result.sort((a, b) => a.code.localeCompare(b.code));
         currencyApiCurrenciesCache = result;
         return result;
     }
@@ -236,8 +236,7 @@ async function getNbrbCurrencies(): Promise<Currency[]> {
             currencies.push({ code: 'BYN', name: 'Белорусский рубль' });
         }
 
-        currencies.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-
+        currencies.sort((a, b) => a.code.localeCompare(b.code));
         return currencies;
     }
 
