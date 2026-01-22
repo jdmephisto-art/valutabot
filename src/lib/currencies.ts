@@ -115,13 +115,22 @@ async function updateCurrencyApiRatesCache(baseCurrency = 'USD') {
 
 function findCurrencyApiRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
-    const fromRate = currencyApiRatesCache[from]; // Rate USD -> FROM
-    const toRate = currencyApiRatesCache[to];     // Rate USD -> TO
+
+    // The cache stores rates relative to a base currency (USD).
+    // e.g., { 'EUR': 0.93, 'CAD': 1.36 } meaning 1 USD = 0.93 EUR and 1 USD = 1.36 CAD.
+    const toRate = currencyApiRatesCache[to];     // How many 'TO' currency units for 1 USD.
+    const fromRate = currencyApiRatesCache[from]; // How many 'FROM' currency units for 1 USD.
+
     if (fromRate && toRate) {
-        return toRate / fromRate; // Rate FROM -> TO
+        // We want to find how many 'TO' units for 1 'FROM' unit.
+        // 1 FROM = (1 / fromRate) USD
+        // 1 USD = toRate TO
+        // Substituting USD: 1 FROM = (1 / fromRate) * toRate TO = toRate / fromRate TO.
+        return toRate / fromRate;
     }
     return undefined;
 }
+
 
 async function getCurrencyApiLatestRates(): Promise<ExchangeRate[]> {
     if (Date.now() - lastCurrencyApiFetchTimestamp > 60 * 60 * 1000) { // 1 hour cache
@@ -203,7 +212,7 @@ async function getNbrbCurrencies(): Promise<Currency[]> {
                 .filter((c: any) => new Date(c.Cur_DateEnd) > new Date())
                 .map((c: any) => ({
                     code: c.Cur_Abbreviation,
-                    name: c.Cur_Name,
+                    name: c.Cur_Name_Eng, // Using English name for consistency
                     id: c.Cur_ID,
                     dateEnd: c.Cur_DateEnd,
                 }));
@@ -219,10 +228,11 @@ async function getNbrbCurrencies(): Promise<Currency[]> {
         const currencies: Currency[] = nbrbCurrenciesCache.map(({ id, dateEnd, ...rest }) => rest);
         
         if (!currencies.some(c => c.code === 'BYN')) {
-            currencies.push({ code: 'BYN', name: 'Белорусский рубль' });
+            // Use a consistent name format
+            currencies.push({ code: 'BYN', name: 'Belarusian Ruble' });
         }
 
-        currencies.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+        currencies.sort((a, b) => a.name.localeCompare(b.name));
 
         return currencies;
     }
@@ -245,14 +255,20 @@ function findNbrbRate(from: string, to: string): number | undefined {
     if (Object.keys(nbrbRatesCache).length === 0) return undefined;
     if (from === to) return 1;
 
+    // NBRB rates are all X -> BYN.
+    // So rate for USD is how many BYN for 1 (or `scale`) USD.
     const toRateInfo = nbrbRatesCache[to];
     const fromRateInfo = nbrbRatesCache[from];
     
-    const bynToFrom = from === 'BYN' ? 1 : (fromRateInfo ? fromRateInfo.rate / fromRateInfo.scale : undefined);
-    const bynToTo = to === 'BYN' ? 1 : (toRateInfo ? toRateInfo.rate / toRateInfo.scale : undefined);
+    const rateToBynForFROM = from === 'BYN' ? 1 : (fromRateInfo ? fromRateInfo.rate / fromRateInfo.scale : undefined);
+    const rateToBynForTO = to === 'BYN' ? 1 : (toRateInfo ? toRateInfo.rate / toRateInfo.scale : undefined);
 
-    if (bynToFrom !== undefined && bynToTo !== undefined) {
-        return bynToTo / bynToFrom;
+    if (rateToBynForFROM !== undefined && rateToBynForTO !== undefined) {
+        // We want to find how many TO for 1 FROM.
+        // 1 FROM = rateToBynForFROM BYN
+        // 1 TO   = rateToBynForTO BYN => 1 BYN = 1/rateToBynForTO TO
+        // So, 1 FROM = rateToBynForFROM * (1/rateToBynForTO) TO
+        return rateToBynForTO / rateToBynForFROM;
     }
     return undefined;
 }
@@ -287,11 +303,11 @@ async function getNbrbHistoricalRate(from: string, to: string, date: Date): Prom
 
     const [fromRateInfo, toRateInfo] = await Promise.all([getRateForCode(from), getRateForCode(to)]);
     
-    const bynToFrom = fromRateInfo ? fromRateInfo.rate / fromRateInfo.scale : undefined;
-    const bynToTo = toRateInfo ? toRateInfo.rate / toRateInfo.scale : undefined;
+    const rateToBynForFROM = fromRateInfo ? fromRateInfo.rate / fromRateInfo.scale : undefined;
+    const rateToBynForTO = toRateInfo ? toRateInfo.rate / toRateInfo.scale : undefined;
     
-    if (bynToFrom !== undefined && bynToTo !== undefined) {
-        return bynToTo / bynToFrom;
+    if (rateToBynForFROM !== undefined && rateToBynForTO !== undefined) {
+        return rateToBynForTO / rateToBynForFROM;
     }
     return undefined;
 }
@@ -317,18 +333,20 @@ async function getNbrbDynamicsForPeriod(from: string, to: string, startDate: Dat
 
     const toMap = new Map(toDynamics.map(d => [format(d.date, 'yyyy-MM-dd'), { rate: d.rate, scale: d.scale }]));
     
-    return fromDynamics.map(fromDay => {
+    const result = fromDynamics.map(fromDay => {
         const toDay = toMap.get(format(fromDay.date, 'yyyy-MM-dd'));
         if (toDay) {
-            const bynToFrom = fromDay.rate / fromDay.scale;
-            const bynToTo = toDay.rate / toDay.scale;
+            const rateToBynForFROM = fromDay.rate / fromDay.scale;
+            const rateToBynForTO = toDay.rate / toDay.scale;
             return {
                 date: format(fromDay.date, 'dd.MM'),
-                rate: bynToTo / bynToFrom,
+                rate: rateToBynForTO / rateToBynForFROM,
             };
         }
         return null;
-    }).filter(d => d !== null) as { date: string, rate: number }[];
+    }).filter(d => d !== null);
+
+    return result as { date: string, rate: number }[];
 }
 
 // --- UNIFIED API ---
