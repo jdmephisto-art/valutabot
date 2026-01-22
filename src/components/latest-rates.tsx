@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { getInitialRates, getLatestRates } from '@/lib/currencies';
+import { getInitialRates, getLatestRates, getDataSource } from '@/lib/currencies';
 import type { ExchangeRate } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { ArrowRight } from 'lucide-react';
@@ -47,7 +47,7 @@ export function LatestRates() {
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
       <CardHeader>
         <CardTitle className="text-lg font-semibold">Latest Rates</CardTitle>
-        <CardDescription>Real-time data from CurrencyAPI</CardDescription>
+        <CardDescription>Data from {getDataSource().toUpperCase()}</CardDescription>
       </CardHeader>
       <CardContent>
         {rates.length === 0 && <p className="text-sm text-muted-foreground">Loading rates...</p>}

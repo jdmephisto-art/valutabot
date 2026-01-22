@@ -42,30 +42,30 @@ export async function getInitialRates(): Promise<ExchangeRate[]> {
         return await getNbrbLatestRates();
     } else {
         await updateCurrencyApiRatesCache('USD');
-        return getCurrencyApiLatestRates();
+        return await getCurrencyApiLatestRates();
     }
 }
 
-
-// --- CURRENCYAPI.NET PROVIDER (v1) ---
-const CURRENCY_API_BASE_URL = 'https://currencyapi.net/api/v1';
-let currencyApiCurrenciesCache: Currency[] | null = null;
-let currencyApiRatesCache: { [key: string]: number } = {};
-let lastCurrencyApiFetchTimestamp = 0;
-
-function getCurrencyApiKey(): string {
-    const apiKey = process.env.NEXT_PUBLIC_CURRENCY_API_KEY;
-    if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
-        console.error("Currency API key not found or is a placeholder. Please set NEXT_PUBLIC_CURRENCY_API_KEY in your .env.local file.");
+// --- API FETCH HELPERS ---
+async function nbrbApiFetch(endpoint: string) {
+    try {
+        const response = await fetch(`https://api.nbrb.by/exrates/${endpoint}`);
+        if (!response.ok) {
+            console.error(`NBRB request failed: ${response.status} ${response.statusText}`);
+            return null;
+        }
+        return response.json();
+    } catch (error) {
+        console.error('Failed to fetch from NBRB API:', error);
+        return null;
     }
-    return apiKey || '';
 }
 
 async function currencyApiFetch(endpoint: string, params: Record<string, string> = {}) {
-    const apiKey = getCurrencyApiKey();
-    if (!apiKey) return null;
+    // The key is hardcoded as per the user's request.
+    const apiKey = '6431078d4fc8bf5d4097027ee62c2c0dc4e0';
 
-    const url = new URL(`${CURRENCY_API_BASE_URL}/${endpoint}`);
+    const url = new URL(`https://currencyapi.net/api/v1/${endpoint}`);
     url.searchParams.append('key', apiKey);
     url.searchParams.append('output', 'json');
     Object.entries(params).forEach(([key, value]) => url.searchParams.append(key, value));
@@ -84,20 +84,42 @@ async function currencyApiFetch(endpoint: string, params: Record<string, string>
     }
 }
 
+
+// --- CURRENCYAPI.NET PROVIDER (v1) ---
+let currencyApiCurrenciesCache: Currency[] | null = null;
+let currencyApiRatesCache: { [key: string]: number } = {};
+let lastCurrencyApiFetchTimestamp = 0;
+const PREDEFINED_CURRENCY_NAMES: { [key: string]: string } = {
+    "AUD": "Australian Dollar", "BGN": "Bulgarian Lev", "BRL": "Brazilian Real", "CAD": "Canadian Dollar",
+    "CHF": "Swiss Franc", "CNY": "Chinese Yuan", "CZK": "Czech Koruna", "DKK": "Danish Krone",
+    "EUR": "Euro", "GBP": "British Pound", "HKD": "Hong Kong Dollar", "HRK": "Croatian Kuna",
+    "HUF": "Hungarian Forint", "IDR": "Indonesian Rupiah", "ILS": "Israeli New Shekel",
+    "INR": "Indian Rupee", "ISK": "Icelandic Króna", "JPY": "Japanese Yen", "KRW": "South Korean Won",
+    "MXN": "Mexican Peso", "MYR": "Malaysian Ringgit", "NOK": "Norwegian Krone", "NZD": "New Zealand Dollar",
+    "PHP": "Philippine Peso", "PLN": "Polish Złoty", "RON": "Romanian Leu", "RUB": "Russian Ruble",
+    "SEK": "Swedish Krona", "SGD": "Singapore Dollar", "THB": "Thai Baht", "TRY": "Turkish Lira",
+    "USD": "United States Dollar", "ZAR": "South African Rand", "BYN": "Belarusian Ruble"
+};
+
+
 async function getCurrencyApiCurrencies(): Promise<Currency[]> {
     if (currencyApiCurrenciesCache) {
         return currencyApiCurrenciesCache;
     }
     // v1 doesn't have a /currencies endpoint. We derive the list from the /rates endpoint.
-    // This means we won't have the full currency names, just the codes.
     await updateCurrencyApiRatesCache('USD'); // Ensure rates are fetched
     
     const codes = Object.keys(currencyApiRatesCache);
+    
+    // Ensure BYN is in the list for selection
     if (!codes.includes('BYN')) {
         codes.push('BYN');
     }
 
-    const result: Currency[] = codes.map(code => ({ code, name: code }));
+    const result: Currency[] = codes.map(code => ({
+        code,
+        name: PREDEFINED_CURRENCY_NAMES[code] || code
+    }));
     result.sort((a, b) => a.code.localeCompare(b.code));
     
     currencyApiCurrenciesCache = result;
@@ -110,21 +132,41 @@ async function updateCurrencyApiRatesCache(baseCurrency = 'USD') {
     if (data && data.rates) {
         const tempCache: { [key: string]: number } = {};
         Object.entries(data.rates).forEach(([code, rate]: [string, any]) => {
-            tempCache[code] = rate;
+            tempCache[code] = parseFloat(rate);
         });
         tempCache[baseCurrency] = 1;
         currencyApiRatesCache = tempCache;
         lastCurrencyApiFetchTimestamp = Date.now();
+    }
+    
+    // --- Augmentation for BYN ---
+    // If BYN is not in the cache from currencyapi, fetch it from NBRB as a fallback.
+    // This assumes the base is USD, which is true for the free tier.
+    if (baseCurrency === 'USD' && !currencyApiRatesCache['BYN']) {
+        try {
+            // Cur_ID for USD is 431. Fetch daily rate.
+            const nbrbUsdRateData = await nbrbApiFetch('rates/431?periodicity=0'); 
+            if (nbrbUsdRateData && nbrbUsdRateData.Cur_OfficialRate) {
+                 // rate is BYN per `scale` USD.
+                const bynPerUsd = nbrbUsdRateData.Cur_OfficialRate / nbrbUsdRateData.Cur_Scale;
+                currencyApiRatesCache['BYN'] = bynPerUsd;
+            }
+        } catch (e) {
+            console.error('Failed to augment cache with NBRB rate for BYN', e);
+        }
     }
 }
 
 function findCurrencyApiRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
 
-    const toRate = currencyApiRatesCache[to];
-    const fromRate = currencyApiRatesCache[from];
+    // Rates in cache are relative to USD.
+    const fromRate = currencyApiRatesCache[from]; // FROM per USD
+    const toRate = currencyApiRatesCache[to];     // TO per USD
 
     if (fromRate && toRate) {
+        // We want 'TO per FROM'.
+        // (TO / USD) / (FROM / USD) = TO / FROM
         return toRate / fromRate;
     }
     return undefined;
@@ -132,12 +174,13 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
 
 
 async function getCurrencyApiLatestRates(): Promise<ExchangeRate[]> {
-    if (Date.now() - lastCurrencyApiFetchTimestamp > 60 * 60 * 1000) { // 1 hour cache
+    // Free tier updates infrequently, but we can have a shorter cache for demo purposes
+    if (Date.now() - lastCurrencyApiFetchTimestamp > 5 * 60 * 1000) { // 5 min cache
         await updateCurrencyApiRatesCache('USD');
     }
     const displayedPairs = [
-        { from: 'USD', to: 'EUR' }, { from: 'USD', to: 'GBP' }, { from: 'USD', to: 'JPY' },
-        { from: 'EUR', to: 'BYN' }, { from: 'USD', to: 'BYN' }, { from: 'USD', to: 'CNY' },
+        { from: 'USD', to: 'EUR' }, { from: 'EUR', to: 'USD' }, { from: 'USD', to: 'BYN' },
+        { from: 'EUR', to: 'BYN' }, { from: 'USD', to: 'RUB' }, { from: 'EUR', to: 'RUB' },
     ];
     return displayedPairs.map(pair => ({
         ...pair,
@@ -157,24 +200,9 @@ async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDa
 
 
 // --- NBRB PROVIDER ---
-const NBRB_API_BASE_URL = 'https://api.nbrb.by/exrates';
 let nbrbCurrenciesCache: (Currency & { id: number, dateEnd: string })[] | null = null;
 let nbrbIdMap: { [key: string]: number } | null = null;
 let nbrbRatesCache: { [key: string]: { rate: number, scale: number } } = {};
-
-async function nbrbApiFetch(endpoint: string) {
-    try {
-        const response = await fetch(`${NBRB_API_BASE_URL}/${endpoint}`);
-        if (!response.ok) {
-            console.error(`NBRB request failed: ${response.status} ${response.statusText}`);
-            return null;
-        }
-        return response.json();
-    } catch (error) {
-        console.error('Failed to fetch from NBRB API:', error);
-        return null;
-    }
-}
 
 async function getNbrbCurrencies(): Promise<Currency[]> {
     if (!nbrbCurrenciesCache) {
@@ -184,7 +212,7 @@ async function getNbrbCurrencies(): Promise<Currency[]> {
                 .filter((c: any) => new Date(c.Cur_DateEnd) > new Date())
                 .map((c: any) => ({
                     code: c.Cur_Abbreviation,
-                    name: c.Cur_Name_Eng,
+                    name: c.Cur_Name_Eng, // Using English name as requested
                     id: c.Cur_ID,
                     dateEnd: c.Cur_DateEnd,
                 }));
@@ -226,7 +254,6 @@ function findNbrbRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
 
     // NBRB rates are all X -> BYN.
-    // So rate for USD is how many BYN for 1 (or `scale`) USD.
     const toRateInfo = nbrbRatesCache[to];
     const fromRateInfo = nbrbRatesCache[from];
     
@@ -248,8 +275,8 @@ async function getNbrbLatestRates(): Promise<ExchangeRate[]> {
         await updateNbrbRatesCache();
     }
     const displayedPairs = [
-        { from: 'USD', to: 'EUR' }, { from: 'USD', to: 'GBP' }, { from: 'USD', to: 'JPY' },
-        { from: 'EUR', to: 'BYN' }, { from: 'USD', to: 'BYN' }, { from: 'USD', to: 'CNY' },
+        { from: 'USD', to: 'EUR' }, { from: 'EUR', to: 'USD' }, { from: 'USD', to: 'BYN' },
+        { from: 'EUR', to: 'BYN' }, { from: 'USD', to: 'RUB' }, { from: 'EUR', to: 'RUB' },
     ];
      return displayedPairs.map(pair => ({
         ...pair,
@@ -325,7 +352,11 @@ export async function getCurrencies(): Promise<Currency[]> {
 }
 
 export async function getLatestRates(): Promise<ExchangeRate[]> {
-    return activeDataSource === 'nbrb' ? getNbrbLatestRates() : getCurrencyApiLatestRates();
+    if (activeDataSource === 'nbrb') {
+        return await getNbrbLatestRates();
+    } else {
+        return await getCurrencyApiLatestRates();
+    }
 }
 
 export function findRate(from: string, to: string): number | undefined {
