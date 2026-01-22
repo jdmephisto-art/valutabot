@@ -62,10 +62,11 @@ export function CurrencyCombobox({ value, onChange, placeholder, disabled }: Cur
               {currencies.map((currency) => (
                 <CommandItem
                   key={currency.code}
-                  value={currency.code}
+                  value={`${currency.code} - ${currency.name}`}
                   onSelect={(currentValue) => {
-                    onChange(currentValue.toUpperCase() === value ? "" : currentValue.toUpperCase())
-                    setOpen(false)
+                    const code = currentValue.split(' - ')[0];
+                    onChange(code.toUpperCase());
+                    setOpen(false);
                   }}
                 >
                   <Check
