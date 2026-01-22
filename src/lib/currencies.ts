@@ -252,7 +252,7 @@ function findNbrbRate(from: string, to: string): number | undefined {
     const bynToFrom = from === 'BYN' ? 1 : (fromRateInfo ? fromRateInfo.rate / fromRateInfo.scale : undefined);
 
     if (bynToFrom && bynToTo) {
-        return bynToTo / bynToFrom;
+        return bynToFrom / bynToTo;
     }
     return undefined;
 }
@@ -291,7 +291,7 @@ async function getNbrbHistoricalRate(from: string, to: string, date: Date): Prom
     const bynToFrom = fromRateInfo ? fromRateInfo.rate / fromRateInfo.scale : undefined;
     
     if (bynToFrom && bynToTo) {
-        return bynToTo / bynToFrom;
+        return bynToFrom / bynToTo;
     }
     return undefined;
 }
@@ -324,7 +324,7 @@ async function getNbrbDynamicsForPeriod(from: string, to: string, startDate: Dat
             const bynToTo = toDay.rate / toDay.scale;
             return {
                 date: format(fromDay.date, 'dd.MM'),
-                rate: bynToTo / bynToFrom,
+                rate: bynToFrom / bynToTo,
             };
         }
         return null;
