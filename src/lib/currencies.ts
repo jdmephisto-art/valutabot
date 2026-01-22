@@ -48,7 +48,7 @@ export async function getInitialRates(): Promise<ExchangeRate[]> {
 
 
 // --- CURRENCYAPI.NET PROVIDER (v1) ---
-const CURRENCY_API_BASE_URL = 'https://api.currencyapi.net/api/v1';
+const CURRENCY_API_BASE_URL = 'https://currencyapi.net/api/v1';
 let currencyApiCurrenciesCache: Currency[] | null = null;
 let currencyApiRatesCache: { [key: string]: number } = {};
 let lastCurrencyApiFetchTimestamp = 0;
@@ -184,7 +184,7 @@ async function getNbrbCurrencies(): Promise<Currency[]> {
                 .filter((c: any) => new Date(c.Cur_DateEnd) > new Date())
                 .map((c: any) => ({
                     code: c.Cur_Abbreviation,
-                    name: c.Cur_Name,
+                    name: c.Cur_Name_Eng,
                     id: c.Cur_ID,
                     dateEnd: c.Cur_DateEnd,
                 }));
@@ -200,7 +200,7 @@ async function getNbrbCurrencies(): Promise<Currency[]> {
         const currencies: Currency[] = nbrbCurrenciesCache.map(({ id, dateEnd, ...rest }) => rest);
         
         if (!currencies.some(c => c.code === 'BYN')) {
-            currencies.push({ code: 'BYN', name: 'Белорусский рубль' });
+            currencies.push({ code: 'BYN', name: 'Belarusian Ruble' });
         }
 
         currencies.sort((a, b) => a.code.localeCompare(b.code));
