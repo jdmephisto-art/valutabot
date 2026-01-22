@@ -11,13 +11,16 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { getDynamicsForPeriod, getHistoricalRate } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
-import { format, subDays } from 'date-fns';
+import { format, subDays, differenceInDays } from 'date-fns';
 import { CalendarIcon, TrendingDown, TrendingUp } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import { useCurrencies } from '@/hooks/use-currencies';
+import { useToast } from '@/hooks/use-toast';
+
 
 export function HistoricalRates() {
   const { currencies } = useCurrencies();
+  const { toast } = useToast();
   const [fromCurrency, setFromCurrency] = useState('USD');
   const [toCurrency, setToCurrency] = useState('EUR');
 
@@ -52,6 +55,18 @@ export function HistoricalRates() {
       }
     }
   };
+
+  const handleDynamicsRangeSelect = (range: DateRange | undefined) => {
+    if (range?.from && range.to && differenceInDays(range.to, range.from) > 30) {
+        toast({
+            variant: 'destructive',
+            title: 'Date range too large',
+            description: 'Please select a range of 30 days or less for dynamics to avoid exceeding API limits.'
+        });
+        return;
+    }
+    setDynamicsRange(range);
+  }
 
   const handleFetchDynamics = async () => {
     if (dynamicsRange?.from && dynamicsRange?.to) {
@@ -88,7 +103,7 @@ export function HistoricalRates() {
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
       <CardHeader>
         <CardTitle className="text-lg font-semibold">Historical Data</CardTitle>
-        <CardDescription>Rates provided by NBRB API</CardDescription>
+        <CardDescription>Data from CurrencyAPI</CardDescription>
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="single">
@@ -107,7 +122,7 @@ export function HistoricalRates() {
                   {date ? format(date, "PPP") : <span>Pick a date</span>}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus /></PopoverContent>
+              <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus disabled={{ after: new Date() }} /></PopoverContent>
             </Popover>
             <Button onClick={handleFetchSingleRate} className="w-full">Get Rate</Button>
             {singleRate !== null && (
@@ -128,7 +143,7 @@ export function HistoricalRates() {
                         {range?.from ? (range.to ? <>{format(range.from, "LLL dd, y")} - {format(range.to, "LLL dd, y")}</> : format(range.from, "LLL dd, y")) : <span>Pick a date range</span>}
                     </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start"><Calendar initialFocus mode="range" defaultMonth={range?.from} selected={range} onSelect={setRange} numberOfMonths={2} /></PopoverContent>
+                <PopoverContent className="w-auto p-0" align="start"><Calendar initialFocus mode="range" defaultMonth={range?.from} selected={range} onSelect={setRange} numberOfMonths={2} disabled={{ after: new Date() }}/></PopoverContent>
              </Popover>
              <Button onClick={handleFetchRangeRate} className="w-full">Compare Rates</Button>
              {rangeResult && (
@@ -167,9 +182,9 @@ export function HistoricalRates() {
                     mode="range" 
                     defaultMonth={dynamicsRange?.from} 
                     selected={dynamicsRange} 
-                    onSelect={setDynamicsRange} 
+                    onSelect={handleDynamicsRangeSelect} 
                     numberOfMonths={2} 
-                    disabled={{ before: new Date("2021-01-01"), after: new Date() }}
+                    disabled={{ after: new Date() }}
                 />
               </PopoverContent>
             </Popover>

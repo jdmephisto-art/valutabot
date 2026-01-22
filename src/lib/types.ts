@@ -3,7 +3,6 @@ import type { LucideIcon } from 'lucide-react';
 export type Currency = {
   code: string;
   name: string;
-  icon: LucideIcon;
 };
 
 export type ExchangeRate = {
