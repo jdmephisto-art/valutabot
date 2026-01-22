@@ -62,9 +62,12 @@ export function CurrencyCombobox({ value, onChange, placeholder, disabled }: Cur
               {currencies.map((currency) => (
                 <CommandItem
                   key={currency.code}
-                  value={`${currency.code} ${currency.name}`}
-                  onSelect={() => {
-                    onChange(currency.code);
+                  value={`${currency.code} - ${currency.name}`}
+                  onSelect={(currentValue) => {
+                    const selected = currencies.find(c => `${c.code} - ${c.name}`.toLowerCase() === currentValue);
+                    if (selected) {
+                       onChange(selected.code);
+                    }
                     setOpen(false);
                   }}
                 >
@@ -74,7 +77,7 @@ export function CurrencyCombobox({ value, onChange, placeholder, disabled }: Cur
                       value.toLowerCase() === currency.code.toLowerCase() ? "opacity-100" : "opacity-0"
                     )}
                   />
-                  <span className="truncate">{currency.code} - {currency.name}</span>
+                  <span>{currency.code} - {currency.name}</span>
                 </CommandItem>
               ))}
             </CommandGroup>
