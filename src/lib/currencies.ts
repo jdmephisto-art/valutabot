@@ -71,7 +71,9 @@ async function currencyApiFetch(endpoint: string, params: Record<string, string>
     Object.entries(params).forEach(([key, value]) => url.searchParams.append(key, value));
 
     try {
-        const response = await fetch(url.toString());
+        const response = await fetch(url.toString(), {
+            headers: { 'Accept': 'application/json' }
+        });
         if (!response.ok) {
             const errorBody = await response.json();
             console.error(`CurrencyAPI request failed: ${response.status} ${response.statusText}`, errorBody);
@@ -118,7 +120,7 @@ async function getCurrencyApiCurrencies(): Promise<Currency[]> {
 
     const result: Currency[] = codes.map(code => ({
         code,
-        name: PREDEFINED_CURRENCY_NAMES[code] || code
+        name: PREDEFINED_CURRENCY_NAMES[code] || `${code} name not found`
     }));
     result.sort((a, b) => a.code.localeCompare(b.code));
     
@@ -212,7 +214,7 @@ async function getNbrbCurrencies(): Promise<Currency[]> {
                 .filter((c: any) => new Date(c.Cur_DateEnd) > new Date())
                 .map((c: any) => ({
                     code: c.Cur_Abbreviation,
-                    name: c.Cur_Name_Eng, // Using English name as requested
+                    name: c.Cur_Name_Eng,
                     id: c.Cur_ID,
                     dateEnd: c.Cur_DateEnd,
                 }));
