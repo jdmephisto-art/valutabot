@@ -93,7 +93,7 @@ async function getCurrencyApiCurrencies(): Promise<Currency[]> {
             code: c.code,
             name: c.name,
         }));
-        result.sort((a, b) => a.code.localeCompare(b.code));
+        result.sort((a, b) => a.name.localeCompare(b.name));
         currencyApiCurrenciesCache = result;
         return result;
     }
@@ -219,10 +219,10 @@ async function getNbrbCurrencies(): Promise<Currency[]> {
         const currencies: Currency[] = nbrbCurrenciesCache.map(({ id, dateEnd, ...rest }) => rest);
         
         if (!currencies.some(c => c.code === 'BYN')) {
-            currencies.push({ code: 'BYN', name: 'Belarusian Ruble' });
+            currencies.push({ code: 'BYN', name: 'Белорусский рубль' });
         }
 
-        currencies.sort((a, b) => a.code.localeCompare(b.code));
+        currencies.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 
         return currencies;
     }
@@ -248,10 +248,10 @@ function findNbrbRate(from: string, to: string): number | undefined {
     const toRateInfo = nbrbRatesCache[to];
     const fromRateInfo = nbrbRatesCache[from];
     
-    const bynToTo = to === 'BYN' ? 1 : (toRateInfo ? toRateInfo.rate / toRateInfo.scale : undefined);
     const bynToFrom = from === 'BYN' ? 1 : (fromRateInfo ? fromRateInfo.rate / fromRateInfo.scale : undefined);
+    const bynToTo = to === 'BYN' ? 1 : (toRateInfo ? toRateInfo.rate / toRateInfo.scale : undefined);
 
-    if (bynToFrom && bynToTo) {
+    if (bynToFrom !== undefined && bynToTo !== undefined) {
         return bynToFrom / bynToTo;
     }
     return undefined;
@@ -287,10 +287,10 @@ async function getNbrbHistoricalRate(from: string, to: string, date: Date): Prom
 
     const [fromRateInfo, toRateInfo] = await Promise.all([getRateForCode(from), getRateForCode(to)]);
     
-    const bynToTo = toRateInfo ? toRateInfo.rate / toRateInfo.scale : undefined;
     const bynToFrom = fromRateInfo ? fromRateInfo.rate / fromRateInfo.scale : undefined;
+    const bynToTo = toRateInfo ? toRateInfo.rate / toRateInfo.scale : undefined;
     
-    if (bynToFrom && bynToTo) {
+    if (bynToFrom !== undefined && bynToTo !== undefined) {
         return bynToFrom / bynToTo;
     }
     return undefined;
