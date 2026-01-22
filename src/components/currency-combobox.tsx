@@ -70,9 +70,9 @@ export function CurrencyCombobox({
               {currencies.map((currency) => (
                 <CommandItem
                   key={currency.code}
-                  value={`${currency.code} ${currency.name}`} // This is for search
-                  onSelect={() => { // Using a closure to capture the currency code
-                    onChange(currency.code);
+                  value={currency.code}
+                  onSelect={(currentValue) => {
+                    onChange(currentValue.toUpperCase() === value ? '' : currentValue.toUpperCase());
                     setOpen(false);
                   }}
                 >
