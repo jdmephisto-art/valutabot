@@ -24,8 +24,8 @@ export function setDataSource(source: DataSource) {
         activeDataSource = source;
         // Clear all caches to ensure fresh data from the new source
         nbrbCurrenciesCache = null;
+        nbrbFullCurrencyInfoCache = null;
         nbrbRatesCache = {};
-        nbrbIdMap = null;
         currencyApiCurrenciesCache = null;
         currencyApiRatesCache = {};
         lastCurrencyApiFetchTimestamp = 0;
@@ -252,43 +252,52 @@ async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDa
 
 
 // --- NBRB PROVIDER ---
-let nbrbCurrenciesCache: (Currency & { id: number, dateEnd: string, nameMulti: string })[] | null = null;
-let nbrbIdMap: { [key: string]: number } | null = null;
+let nbrbCurrenciesCache: Currency[] | null = null;
+let nbrbFullCurrencyInfoCache: any[] | null = null;
 let nbrbRatesCache: { [key: string]: { rate: number, scale: number } } = {};
 
+async function ensureNbrbFullCache() {
+    if (nbrbFullCurrencyInfoCache) return;
+    const data = await nbrbApiFetch('currencies');
+    if (data) {
+        nbrbFullCurrencyInfoCache = data.filter((c: any) => new Date(c.Cur_DateEnd) > new Date());
+    } else {
+        nbrbFullCurrencyInfoCache = [];
+    }
+}
+
+function buildNbrbIdMap() {
+    if (!nbrbFullCurrencyInfoCache) return {};
+    return nbrbFullCurrencyInfoCache.reduce((acc, cur) => {
+        acc[cur.Cur_Abbreviation] = cur.Cur_ID;
+        return acc;
+    }, {} as {[key: string]: number});
+}
+
+
 async function getNbrbCurrencies(): Promise<Currency[]> {
-    if (!nbrbCurrenciesCache) {
-        const data = await nbrbApiFetch('currencies');
-        if (data) {
-            nbrbCurrenciesCache = data
-                .filter((c: any) => new Date(c.Cur_DateEnd) > new Date())
-                .map((c: any) => ({
-                    code: c.Cur_Abbreviation,
-                    name: c.Cur_Name_Eng,
-                    nameMulti: c.Cur_Name_Eng,
-                    id: c.Cur_ID,
-                    dateEnd: c.Cur_DateEnd,
-                }));
-            
-            nbrbIdMap = nbrbCurrenciesCache.reduce((acc, cur) => {
-                acc[cur.code] = cur.id;
-                return acc;
-            }, {} as {[key: string]: number});
-        }
+    if (nbrbCurrenciesCache) {
+        return nbrbCurrenciesCache;
     }
     
-    if (nbrbCurrenciesCache) {
-        const currencies: Currency[] = nbrbCurrenciesCache.map(({ id, dateEnd, nameMulti, ...rest }) => rest);
-        
-        if (!currencies.some(c => c.code === 'BYN')) {
-            currencies.push({ code: 'BYN', name: 'Belarusian Ruble' });
-        }
-
-        currencies.sort((a, b) => a.code.localeCompare(b.code));
-        return currencies;
+    await ensureNbrbFullCache();
+    
+    let currencies: Currency[] = [];
+    if (nbrbFullCurrencyInfoCache) {
+        currencies = nbrbFullCurrencyInfoCache.map((c: any) => ({
+            code: c.Cur_Abbreviation,
+            name: c.Cur_Name_Eng,
+        }));
     }
 
-    return [];
+    if (!currencies.some(c => c.code === 'BYN')) {
+        currencies.push({ code: 'BYN', name: 'Belarusian Ruble' });
+    }
+
+    currencies.sort((a, b) => a.code.localeCompare(b.code));
+    
+    nbrbCurrenciesCache = currencies;
+    return nbrbCurrenciesCache;
 }
 
 async function updateNbrbRatesCache() {
@@ -339,7 +348,8 @@ async function getNbrbLatestRates(): Promise<ExchangeRate[]> {
 
 async function getNbrbHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
     if (from === to) return 1;
-    if (!nbrbIdMap) await getNbrbCurrencies(); // Ensure map is populated
+    await ensureNbrbFullCache();
+    const nbrbIdMap = buildNbrbIdMap();
     
     const formattedDate = format(date, 'yyyy-MM-dd');
     
@@ -363,7 +373,8 @@ async function getNbrbHistoricalRate(from: string, to: string, date: Date): Prom
 }
 
 async function getNbrbDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string, rate: number }[]> {
-    if (!nbrbIdMap) await getNbrbCurrencies();
+    await ensureNbrbFullCache();
+    const nbrbIdMap = buildNbrbIdMap();
     
     const formattedStart = format(startDate, 'yyyy-MM-dd');
     const formattedEnd = format(endDate, 'yyyy-MM-dd');
@@ -423,3 +434,4 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
     return activeDataSource === 'nbrb' ? getNbrbDynamicsForPeriod(from, to, startDate, endDate) : getCurrencyApiDynamicsForPeriod(from, to, startDate, endDate);
 }
+
