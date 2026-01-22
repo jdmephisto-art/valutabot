@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
-import { getDynamicsForPeriod, getHistoricalRate } from '@/lib/currencies';
+import { getDynamicsForPeriod, getHistoricalRate, getDataSource } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
 import { format, subDays, differenceInDays } from 'date-fns';
 import { CalendarIcon, TrendingDown, TrendingUp } from 'lucide-react';
@@ -39,6 +39,7 @@ export function HistoricalRates() {
 
   const handleFetchSingleRate = async () => {
     if (date) {
+      setSingleRate(null);
       const rate = await getHistoricalRate(fromCurrency, toCurrency, date);
       setSingleRate(rate === undefined ? null : rate);
     }
@@ -46,6 +47,7 @@ export function HistoricalRates() {
 
   const handleFetchRangeRate = async () => {
     if (range?.from && range.to) {
+      setRangeResult(null);
       const startRate = await getHistoricalRate(fromCurrency, toCurrency, range.from);
       const endRate = await getHistoricalRate(fromCurrency, toCurrency, range.to);
       if (startRate !== undefined && endRate !== undefined) {
@@ -57,11 +59,11 @@ export function HistoricalRates() {
   };
 
   const handleDynamicsRangeSelect = (range: DateRange | undefined) => {
-    if (range?.from && range.to && differenceInDays(range.to, range.from) > 30) {
+    if (getDataSource() === 'currencyapi' && range?.from && range.to && differenceInDays(range.to, range.from) > 30) {
         toast({
             variant: 'destructive',
             title: 'Date range too large',
-            description: 'Please select a range of 30 days or less for dynamics to avoid exceeding API limits.'
+            description: 'Please select a range of 30 days or less for CurrencyAPI to avoid exceeding API limits.'
         });
         return;
     }
@@ -78,16 +80,25 @@ export function HistoricalRates() {
     }
   };
 
+  const getCalendarDisabledDates = () => {
+    const disabled: { before?: Date, after?: Date } = { after: new Date() };
+    if (getDataSource() === 'nbrb') {
+        disabled.before = new Date('2021-01-01');
+    }
+    return disabled;
+  }
+
+
   const renderCurrencySelects = () => (
     <div className="flex items-center gap-2 mb-4">
       <Select value={fromCurrency} onValueChange={setFromCurrency} disabled={currencies.length === 0}>
-        <SelectTrigger><SelectValue /></SelectTrigger>
+        <SelectTrigger><SelectValue placeholder="From" /></SelectTrigger>
         <SelectContent>
           {currencies.map(c => <SelectItem key={c.code} value={c.code}>{c.code}</SelectItem>)}
         </SelectContent>
       </Select>
       <Select value={toCurrency} onValueChange={setToCurrency} disabled={currencies.length === 0}>
-        <SelectTrigger><SelectValue /></SelectTrigger>
+        <SelectTrigger><SelectValue placeholder="To" /></SelectTrigger>
         <SelectContent>
           {currencies.map(c => <SelectItem key={c.code} value={c.code}>{c.code}</SelectItem>)}
         </SelectContent>
@@ -103,15 +114,63 @@ export function HistoricalRates() {
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
       <CardHeader>
         <CardTitle className="text-lg font-semibold">Historical Data</CardTitle>
-        <CardDescription>Data from CurrencyAPI</CardDescription>
+        <CardDescription>Data from {getDataSource().toUpperCase()}</CardDescription>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="single">
+        <Tabs defaultValue="dynamics">
           <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="dynamics">Dynamics</TabsTrigger>
             <TabsTrigger value="single">Single Date</TabsTrigger>
             <TabsTrigger value="range">Range</TabsTrigger>
-            <TabsTrigger value="dynamics">Dynamics</TabsTrigger>
           </TabsList>
+          
+          <TabsContent value="dynamics" className="space-y-4 pt-4">
+            {renderCurrencySelects()}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dynamicsRange && "text-muted-foreground")}>
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {dynamicsRange?.from ? (dynamicsRange.to ? <>{format(dynamicsRange.from, "LLL dd, y")} - {format(dynamicsRange.to, "LLL dd, y")}</> : format(dynamicsRange.from, "LLL dd, y")) : <span>Pick a date range</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar 
+                    initialFocus 
+                    mode="range" 
+                    defaultMonth={dynamicsRange?.from} 
+                    selected={dynamicsRange} 
+                    onSelect={handleDynamicsRangeSelect} 
+                    numberOfMonths={2} 
+                    disabled={getCalendarDisabledDates()}
+                />
+              </PopoverContent>
+            </Popover>
+            <Button onClick={handleFetchDynamics} className="w-full" disabled={fetchingDynamics}>
+                {fetchingDynamics ? 'Loading...' : 'Show Dynamics'}
+            </Button>
+            {dynamicsData.length > 0 && (
+                <div className="h-[250px] w-full">
+                    <p className="text-xs text-center text-muted-foreground pb-2">Rate dynamics for {fromCurrency}/{toCurrency}</p>
+                    <ChartContainer config={chartConfig}>
+                        <AreaChart accessibilityLayer data={dynamicsData} margin={{ left: -20, right: 10, top: 10, bottom: 0 }}>
+                            <CartesianGrid vertical={false} />
+                             <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} interval={'preserveStartEnd'} tickFormatter={(value, index) => {
+                                 if (dynamicsData.length > 30) {
+                                     // Show fewer ticks for large ranges
+                                    if (index % Math.floor(dynamicsData.length / 10) === 0) return value;
+                                    return '';
+                                 }
+                                 return value;
+                             }}/>
+                             <YAxis domain={['dataMin - (dataMax - dataMin) * 0.1', 'dataMax + (dataMax - dataMin) * 0.1']} tickLine={false} axisLine={false} tickMargin={8} tickCount={3} tickFormatter={(value) => typeof value === 'number' ? value.toFixed(4) : ''} />
+                            <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
+                            <Area dataKey="rate" type="natural" fill="var(--color-rate)" fillOpacity={0.4} stroke="var(--color-rate)" />
+                        </AreaChart>
+                    </ChartContainer>
+                </div>
+            )}
+             {!fetchingDynamics && dynamicsData.length === 0 && <p className="text-xs text-center text-muted-foreground pt-2">Could not fetch dynamics for the selected period. Select another date range.</p>}
+          </TabsContent>
 
           <TabsContent value="single" className="space-y-4 pt-4">
             {renderCurrencySelects()}
@@ -122,16 +181,16 @@ export function HistoricalRates() {
                   {date ? format(date, "PPP") : <span>Pick a date</span>}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus disabled={{ after: new Date() }} /></PopoverContent>
+              <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus disabled={getCalendarDisabledDates()} /></PopoverContent>
             </Popover>
             <Button onClick={handleFetchSingleRate} className="w-full">Get Rate</Button>
-            {singleRate !== null && (
+            {singleRate !== null && singleRate !== undefined && (
               <div className="text-center p-4 bg-muted/50 rounded-lg">
                 <p className="text-sm text-muted-foreground">Rate on {date ? format(date, "PPP") : ''}</p>
                 <p className="text-2xl font-bold font-mono">{singleRate.toFixed(4)}</p>
               </div>
             )}
-             {singleRate === null && <p className="text-xs text-center text-muted-foreground">Could not fetch rate for the selected date.</p>}
+             {(singleRate === null || singleRate === undefined) && <p className="text-xs text-center text-muted-foreground">Could not fetch rate for the selected date.</p>}
           </TabsContent>
 
           <TabsContent value="range" className="space-y-4 pt-4">
@@ -143,7 +202,7 @@ export function HistoricalRates() {
                         {range?.from ? (range.to ? <>{format(range.from, "LLL dd, y")} - {format(range.to, "LLL dd, y")}</> : format(range.from, "LLL dd, y")) : <span>Pick a date range</span>}
                     </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start"><Calendar initialFocus mode="range" defaultMonth={range?.from} selected={range} onSelect={setRange} numberOfMonths={2} disabled={{ after: new Date() }}/></PopoverContent>
+                <PopoverContent className="w-auto p-0" align="start"><Calendar initialFocus mode="range" defaultMonth={range?.from} selected={range} onSelect={setRange} numberOfMonths={2} disabled={getCalendarDisabledDates()}/></PopoverContent>
              </Popover>
              <Button onClick={handleFetchRangeRate} className="w-full">Compare Rates</Button>
              {rangeResult && (
@@ -165,47 +224,6 @@ export function HistoricalRates() {
                     </div>
                 </div>
              )}
-          </TabsContent>
-          
-          <TabsContent value="dynamics" className="space-y-4 pt-4">
-            {renderCurrencySelects()}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dynamicsRange && "text-muted-foreground")}>
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dynamicsRange?.from ? (dynamicsRange.to ? <>{format(dynamicsRange.from, "LLL dd, y")} - {format(dynamicsRange.to, "LLL dd, y")}</> : format(dynamicsRange.from, "LLL dd, y")) : <span>Pick a date range</span>}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar 
-                    initialFocus 
-                    mode="range" 
-                    defaultMonth={dynamicsRange?.from} 
-                    selected={dynamicsRange} 
-                    onSelect={handleDynamicsRangeSelect} 
-                    numberOfMonths={2} 
-                    disabled={{ after: new Date() }}
-                />
-              </PopoverContent>
-            </Popover>
-            <Button onClick={handleFetchDynamics} className="w-full" disabled={fetchingDynamics}>
-                {fetchingDynamics ? 'Loading...' : 'Show Dynamics'}
-            </Button>
-            {dynamicsData.length > 0 && (
-                <div className="h-[250px] w-full">
-                    <p className="text-xs text-center text-muted-foreground pb-2">Rate dynamics for {fromCurrency}/{toCurrency}</p>
-                    <ChartContainer config={chartConfig}>
-                        <AreaChart accessibilityLayer data={dynamicsData} margin={{ left: -20, right: 10, top: 10, bottom: 0 }}>
-                            <CartesianGrid vertical={false} />
-                             <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} interval={dynamicsData.length > 60 ? Math.floor(dynamicsData.length / 10) : 0} />
-                             <YAxis domain={['dataMin - (dataMax - dataMin) * 0.1', 'dataMax + (dataMax - dataMin) * 0.1']} tickLine={false} axisLine={false} tickMargin={8} tickCount={3} tickFormatter={(value) => typeof value === 'number' ? value.toFixed(4) : ''} />
-                            <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
-                            <Area dataKey="rate" type="natural" fill="var(--color-rate)" fillOpacity={0.4} stroke="var(--color-rate)" />
-                        </AreaChart>
-                    </ChartContainer>
-                </div>
-            )}
-             {!fetchingDynamics && dynamicsData.length === 0 && <p className="text-xs text-center text-muted-foreground pt-2">Could not fetch dynamics for the selected period. Select another date range.</p>}
           </TabsContent>
         </Tabs>
       </CardContent>

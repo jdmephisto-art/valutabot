@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye } from 'lucide-react';
+import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LatestRates } from '@/components/latest-rates';
@@ -11,8 +11,9 @@ import { NotificationManager } from '@/components/notification-manager';
 import { HistoricalRates } from '@/components/historical-rates';
 import { TrackingManager } from '@/components/tracking-manager';
 import { RateUpdateCard } from '@/components/rate-update-card';
-import type { Alert } from '@/lib/types';
-import { findRate, getLatestRates } from '@/lib/currencies';
+import { DataSourceSwitcher } from '@/components/data-source-switcher';
+import type { Alert, DataSource } from '@/lib/types';
+import { findRate, getLatestRates, setDataSource, getDataSource, getInitialRates } from '@/lib/currencies';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent } from './ui/card';
 
@@ -35,6 +36,7 @@ export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [trackedPairs, setTrackedPairs] = useState<Map<string, number>>(new Map());
+  const [dataSource, setDataSourceState] = useState<DataSource>(getDataSource());
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const componentId = useId();
@@ -81,6 +83,38 @@ export function ChatInterface() {
     }, 500);
   }
   
+  const handleShowDataSourceSwitcher = () => {
+    addMessage({ sender: 'user', text: 'Change data source' });
+    setTimeout(() => {
+      addMessage({
+        sender: 'bot',
+        component: <DataSourceSwitcher currentSource={dataSource} onSourceChange={handleDataSourceChange} />,
+      });
+    }, 500);
+  };
+
+  const handleDataSourceChange = (source: DataSource) => {
+    setDataSource(source);
+    setDataSourceState(source);
+    setMessages([]);
+    setAlerts([]);
+    setTrackedPairs(new Map());
+
+    toast({
+        title: 'Data Source Changed',
+        description: `Now using ${source.toUpperCase()}. The chat has been reset.`,
+    });
+
+    setTimeout(() => {
+        getInitialRates();
+        addMessage({
+            sender: 'bot',
+            text: `Data source switched to ${source.toUpperCase()}. How can I help?`,
+            options: actionButtons,
+        });
+    }, 100);
+  };
+
   const handleSetAlert = (data: Omit<Alert, 'id' | 'baseRate'>) => {
     const baseRate = findRate(data.from, data.to);
     if (baseRate === undefined) {
@@ -127,19 +161,22 @@ export function ChatInterface() {
     });
     addMessage({ sender: 'bot', text: `I've stopped tracking ${pair}.` });
   };
+  
+  const actionButtons: ActionButtonProps[] = [
+    { id: 'rates', label: 'Latest Rates', icon: LineChart, action: handleShowRates },
+    { id: 'convert', label: 'Convert', icon: CircleDollarSign, action: handleShowConverter },
+    { id: 'alert', label: 'Set Alert', icon: BellRing, action: handleShowAlertManager },
+    { id: 'history', label: 'History', icon: History, action: handleShowHistoricalRates },
+    { id: 'track', label: 'Track', icon: Eye, action: handleShowTrackingManager },
+    { id: 'settings', label: 'Data Source', icon: Settings, action: handleShowDataSourceSwitcher },
+  ];
 
   useEffect(() => {
-    getLatestRates(); // Pre-load rates on initial start
+    getInitialRates();
     addMessage({
       sender: 'bot',
       text: 'Hello! I am ValutaBot. How can I assist you today?',
-      options: [
-        { id: 'rates', label: 'Latest Rates', icon: LineChart, action: handleShowRates },
-        { id: 'convert', label: 'Convert', icon: CircleDollarSign, action: handleShowConverter },
-        { id: 'alert', label: 'Set Alert', icon: BellRing, action: handleShowAlertManager },
-        { id: 'history', label: 'History', icon: History, action: handleShowHistoricalRates },
-        { id: 'track', label: 'Track', icon: Eye, action: handleShowTrackingManager },
-      ],
+      options: actionButtons,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

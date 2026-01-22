@@ -19,3 +19,5 @@ export type Alert = {
   threshold: number;
   baseRate: number;
 };
+
+export type DataSource = 'nbrb' | 'currencyapi';
