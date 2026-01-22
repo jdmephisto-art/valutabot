@@ -196,26 +196,37 @@ async function nbrbApiFetch(endpoint: string) {
 }
 
 async function getNbrbCurrencies(): Promise<Currency[]> {
-    if (nbrbCurrenciesCache) return nbrbCurrenciesCache.map(({ id, dateEnd, ...rest}) => rest);
-    const data = await nbrbApiFetch('currencies');
-    if (data) {
-        const today = new Date().toISOString();
-        nbrbCurrenciesCache = data
-            .filter((c: any) => new Date(c.Cur_DateEnd) > new Date())
-            .map((c: any) => ({
-                code: c.Cur_Abbreviation,
-                name: c.Cur_Name,
-                id: c.Cur_ID,
-                dateEnd: c.Cur_DateEnd,
-            }));
-        
-        nbrbIdMap = nbrbCurrenciesCache.reduce((acc, cur) => {
-            acc[cur.code] = cur.id;
-            return acc;
-        }, {} as {[key: string]: number});
-
-        return nbrbCurrenciesCache.map(({ id, dateEnd, ...rest}) => rest);
+    if (!nbrbCurrenciesCache) {
+        const data = await nbrbApiFetch('currencies');
+        if (data) {
+            nbrbCurrenciesCache = data
+                .filter((c: any) => new Date(c.Cur_DateEnd) > new Date())
+                .map((c: any) => ({
+                    code: c.Cur_Abbreviation,
+                    name: c.Cur_Name,
+                    id: c.Cur_ID,
+                    dateEnd: c.Cur_DateEnd,
+                }));
+            
+            nbrbIdMap = nbrbCurrenciesCache.reduce((acc, cur) => {
+                acc[cur.code] = cur.id;
+                return acc;
+            }, {} as {[key: string]: number});
+        }
     }
+    
+    if (nbrbCurrenciesCache) {
+        const currencies: Currency[] = nbrbCurrenciesCache.map(({ id, dateEnd, ...rest }) => rest);
+        
+        if (!currencies.some(c => c.code === 'BYN')) {
+            currencies.push({ code: 'BYN', name: 'Belarusian Ruble' });
+        }
+
+        currencies.sort((a, b) => a.code.localeCompare(b.code));
+
+        return currencies;
+    }
+
     return [];
 }
 
