@@ -5,15 +5,12 @@ import { useCurrencies } from '@/hooks/use-currencies';
 import { Button } from '@/components/ui/button';
 import {
   Command,
-  CommandEmpty,
-  CommandGroup,
   CommandInput,
-  CommandItem,
-  CommandList,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ChevronsUpDown, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ScrollArea } from './ui/scroll-area';
 
 type CurrencyComboboxProps = {
   value: string;
@@ -30,11 +27,29 @@ export function CurrencyCombobox({
 }: CurrencyComboboxProps) {
   const { currencies } = useCurrencies();
   const [open, setOpen] = React.useState(false);
+  const [searchTerm, setSearchTerm] = React.useState('');
+
+  const filteredCurrencies = React.useMemo(() => {
+    if (!searchTerm) {
+        return currencies;
+    }
+    return currencies.filter(currency =>
+        currency.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        currency.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [currencies, searchTerm]);
+
 
   const selectedCurrency = React.useMemo(
     () => currencies.find((currency) => currency.code.toLowerCase() === value.toLowerCase()),
     [currencies, value]
   );
+  
+  React.useEffect(() => {
+    if (!open) {
+      setSearchTerm('');
+    }
+  }, [open]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -56,36 +71,42 @@ export function CurrencyCombobox({
       </PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
         <Command>
-          <CommandInput placeholder="Search currency..." />
-          <CommandList>
-            <CommandEmpty>No currency found.</CommandEmpty>
-            <CommandGroup>
-              {currencies.map((currency) => (
-                <CommandItem
-                  key={currency.code}
-                  value={`${currency.code} - ${currency.name}`} // value for search
-                  onSelect={() => {
-                    console.log(`Выбрана валюта: ${currency.code}`);
-                    onChange(currency.code);
-                    setOpen(false);
-                  }}
-                >
-                  <Check
-                    className={cn(
-                      'mr-2 h-4 w-4',
-                      value.toLowerCase() === currency.code.toLowerCase()
-                        ? 'opacity-100'
-                        : 'opacity-0'
-                    )}
-                  />
-                  <div className="flex-1 whitespace-normal text-left">
-                    <span className="font-semibold">{currency.code}</span>
-                    <span className="text-xs"> - {currency.name}</span>
-                  </div>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
+          <CommandInput 
+            placeholder="Search currency..." 
+            value={searchTerm}
+            onValueChange={setSearchTerm}
+          />
+          <ScrollArea className="h-[200px]">
+            {filteredCurrencies.length > 0 ? (
+                filteredCurrencies.map((currency) => (
+                    <button
+                        key={currency.code}
+                        onClick={() => {
+                            console.log(`Выбрана валюта: ${currency.code}`);
+                            onChange(currency.code);
+                            setOpen(false);
+                        }}
+                        className={cn(
+                            "w-full text-left p-2 text-sm flex items-center hover:bg-accent",
+                            value.toLowerCase() === currency.code.toLowerCase() && "bg-accent"
+                        )}
+                    >
+                        <Check
+                            className={cn(
+                            'mr-2 h-4 w-4',
+                            value.toLowerCase() === currency.code.toLowerCase() ? 'opacity-100' : 'opacity-0'
+                            )}
+                        />
+                        <div className="flex-1 whitespace-normal text-left">
+                            <span className="font-semibold">{currency.code}</span>
+                            <span className="text-xs"> - {currency.name}</span>
+                        </div>
+                    </button>
+                ))
+            ) : (
+                <div className="p-2 text-center text-sm text-muted-foreground">No currency found.</div>
+            )}
+          </ScrollArea>
         </Command>
       </PopoverContent>
     </Popover>
