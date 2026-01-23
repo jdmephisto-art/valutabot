@@ -1,22 +1,17 @@
 import type { Currency, ExchangeRate, DataSource } from '@/lib/types';
 import { format, subDays, differenceInDays, addDays, startOfDay, parseISO } from 'date-fns';
 
-
-// --- Pub/Sub for State Management ---
-type Listener = () => void;
-const listeners = new Set<Listener>();
-
-export function subscribe(listener: Listener): () => void {
-    listeners.add(listener);
-    return () => listeners.delete(listener);
-}
-
-function notify() {
-    listeners.forEach(l => l());
-}
-
-// --- STATE MANAGEMENT ---
 let activeDataSource: DataSource = 'nbrb'; // Default data source
+
+// Caches
+let nbrbCurrenciesCache: Currency[] | null = null;
+let nbrbFullCurrencyInfoCache: any[] | null = null;
+let nbrbRatesCache: { [key: string]: { rate: number, scale: number } } = {};
+
+let currencyApiCurrenciesCache: Currency[] | null = null;
+let currencyApiRatesCache: { [key: string]: number } = {};
+let lastCurrencyApiFetchTimestamp = 0;
+
 
 export function setDataSource(source: DataSource) {
     if (source !== activeDataSource) {
@@ -28,7 +23,6 @@ export function setDataSource(source: DataSource) {
         currencyApiCurrenciesCache = null;
         currencyApiRatesCache = {};
         lastCurrencyApiFetchTimestamp = 0;
-        notify(); // Notify subscribers of the change
     }
 }
 
@@ -40,10 +34,10 @@ export function getDataSource(): DataSource {
 export async function getInitialRates(): Promise<ExchangeRate[]> {
     if (activeDataSource === 'nbrb') {
         await updateNbrbRatesCache();
-        return await getNbrbLatestRates();
+        return getNbrbLatestRates();
     } else {
         await updateCurrencyApiRatesCache('USD');
-        return await getCurrencyApiLatestRates();
+        return getCurrencyApiLatestRates();
     }
 }
 
@@ -85,11 +79,6 @@ async function currencyApiFetch(endpoint: string, params: Record<string, string>
 
 
 // --- CURRENCYAPI.COM PROVIDER (v3) ---
-let currencyApiCurrenciesCache: Currency[] | null = null;
-let currencyApiRatesCache: { [key: string]: number } = {};
-let lastCurrencyApiFetchTimestamp = 0;
-
-
 async function getCurrencyApiCurrencies(): Promise<Currency[]> {
     if (currencyApiCurrenciesCache) {
         return currencyApiCurrenciesCache;
@@ -126,27 +115,8 @@ async function updateCurrencyApiRatesCache(baseCurrency = 'USD') {
 function findCurrencyApiRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
 
-    const fromRate = currencyApiRatesCache[from]; // Rate relative to base
-    const toRate = currencyApiRatesCache[to];   // Rate relative to base
-
-    // All rates are relative to the base currency (e.g., USD).
-    // To convert from A to B: (A -> USD) / (B -> USD) is wrong.
-    // Correct is: (value in A) * (USD per A) * (B per USD)
-    // Or simpler: Rate of B / Rate of A (when both are vs USD)
-    // e.g. from=EUR, to=JPY. base=USD. We have EUR/USD and JPY/USD. We want EUR/JPY.
-    // (JPY/USD) / (EUR/USD) = JPY/EUR. This is to/from. We want from/to, so we inverse it.
-    // Wait, no. We want how many `to` currency units for one `from` currency unit.
-    // 1 EUR = ? JPY.
-    // 1 EUR = 1.1 USD. 1 USD = 130 JPY.
-    // So 1 EUR = 1.1 * 130 JPY.
-    // toRate is how many target currency units per base. e.g. JPY/USD
-    // fromRate is how many from currency units per base. e.g. EUR/USD
-    // We want to find rate of `to` relative to `from`.
-    // Example: Convert 10 EUR to JPY. Base is USD.
-    // rates['EUR'] = 0.9 (means 1 USD = 0.9 EUR) -> 1/0.9 USD/EUR
-    // rates['JPY'] = 130 (means 1 USD = 130 JPY) -> 130 JPY/USD
-    // 10 EUR * (1/0.9 USD/EUR) * (130 JPY/USD) = 10 * 130 / 0.9 JPY
-    // So the rate is toRate / fromRate.
+    const fromRate = currencyApiRatesCache[from];
+    const toRate = currencyApiRatesCache[to];   
     
     if (fromRate && toRate) {
         return toRate / fromRate;
@@ -206,10 +176,6 @@ async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDa
 
 
 // --- NBRB PROVIDER ---
-let nbrbCurrenciesCache: Currency[] | null = null;
-let nbrbFullCurrencyInfoCache: any[] | null = null;
-let nbrbRatesCache: { [key: string]: { rate: number, scale: number } } = {};
-
 async function ensureNbrbFullCache() {
     if (nbrbFullCurrencyInfoCache) return;
     const data = await nbrbApiFetch('currencies');
@@ -399,10 +365,10 @@ export async function getCurrencies(): Promise<Currency[]> {
 export async function getLatestRates(): Promise<ExchangeRate[]> {
     if (activeDataSource === 'nbrb') {
         await updateNbrbRatesCache();
-        return await getNbrbLatestRates();
+        return getNbrbLatestRates();
     } else {
         await updateCurrencyApiRatesCache();
-        return await getCurrencyApiLatestRates();
+        return getCurrencyApiLatestRates();
     }
 }
 
