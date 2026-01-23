@@ -36,8 +36,8 @@ export function CurrencyCombobox({
       <SelectTrigger className="w-full [&>span]:truncate">
          {selectedCurrency ? `${selectedCurrency.code} - ${selectedCurrency.name}` : (placeholder ?? 'Select currency...')}
       </SelectTrigger>
-      <SelectContent>
-        <ScrollArea className="h-72 w-[var(--radix-select-trigger-width)]">
+      <SelectContent className="w-[300px]">
+        <ScrollArea className="h-72">
             {currencies.map((currency) => (
                 <SelectItem key={currency.code} value={currency.code}>
                 <div className="flex-1 whitespace-normal text-left">
