@@ -6,19 +6,21 @@ import { getInitialRates, getLatestRates, getDataSource } from '@/lib/currencies
 import type { ExchangeRate } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { ArrowRight } from 'lucide-react';
+import { useTranslation } from '@/hooks/use-translation';
 
 export function LatestRates() {
   const [rates, setRates] = useState<ExchangeRate[]>([]);
   const [changedRates, setChangedRates] = useState<Map<string, 'up' | 'down'>>(new Map());
+  const { t } = useTranslation();
+  const dataSource = getDataSource();
 
   useEffect(() => {
     getInitialRates().then(initialRates => {
       setRates(initialRates);
     });
-  }, []);
+  }, [dataSource]); // Re-fetch when data source changes
 
   useEffect(() => {
-    // currencyapi.net free tier updates hourly, but we can poll more often for demo purposes
     const interval = setInterval(async () => {
       const oldRates = new Map(rates.map(r => [`${r.from}-${r.to}`, r.rate]));
       const newRates = await getLatestRates();
@@ -46,11 +48,11 @@ export function LatestRates() {
   return (
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
       <CardHeader>
-        <CardTitle className="text-lg font-semibold">Последние курсы</CardTitle>
-        <CardDescription>Данные из {getDataSource().toUpperCase()}</CardDescription>
+        <CardTitle className="text-lg font-semibold">{t('latestRates.title')}</CardTitle>
+        <CardDescription>{t('latestRates.description', { source: dataSource.toUpperCase() })}</CardDescription>
       </CardHeader>
       <CardContent>
-        {rates.length === 0 && <p className="text-sm text-muted-foreground">Загрузка курсов...</p>}
+        {rates.length === 0 && <p className="text-sm text-muted-foreground">{t('latestRates.loading')}</p>}
         <div className="space-y-4">
           {rates.map(({ from, to, rate }) => {
             const changeDirection = changedRates.get(`${from}-${to}`);

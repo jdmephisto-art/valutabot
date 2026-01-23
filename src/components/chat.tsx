@@ -15,6 +15,7 @@ import { DataSourceSwitcher } from '@/components/data-source-switcher';
 import type { Alert, DataSource } from '@/lib/types';
 import { findRate, getLatestRates, setDataSource, getDataSource, getInitialRates } from '@/lib/currencies';
 import { useToast } from '@/hooks/use-toast';
+import { useTranslation } from '@/hooks/use-translation';
 import { Card, CardContent } from './ui/card';
 
 type Message = {
@@ -40,23 +41,24 @@ export function ChatInterface() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const componentId = useId();
+  const { t, lang } = useTranslation();
 
   const addMessage = useCallback((message: Omit<Message, 'id'>) => {
     setMessages(prev => [...prev, { ...message, id: `${componentId}-${prev.length}` }]);
   }, [componentId]);
 
   const handleShowRates = () => {
-    addMessage({ sender: 'user', text: 'Показать последние курсы' });
+    addMessage({ sender: 'user', text: t('chat.user.showRates') });
     setTimeout(() => addMessage({ sender: 'bot', component: <LatestRates /> }), 500);
   };
 
   const handleShowConverter = () => {
-    addMessage({ sender: 'user', text: 'Я хочу конвертировать валюту' });
+    addMessage({ sender: 'user', text: t('chat.user.showConverter') });
     setTimeout(() => addMessage({ sender: 'bot', component: <CurrencyConverter /> }), 500);
   };
 
   const handleShowAlertManager = () => {
-    addMessage({ sender: 'user', text: 'Установить оповещение о курсе' });
+    addMessage({ sender: 'user', text: t('chat.user.setAlert') });
     setTimeout(() => {
       addMessage({
         sender: 'bot',
@@ -66,14 +68,14 @@ export function ChatInterface() {
   };
 
   const handleShowHistoricalRates = () => {
-    addMessage({ sender: 'user', text: 'Показать историю курсов' });
+    addMessage({ sender: 'user', text: t('chat.user.showHistory') });
     setTimeout(() => {
         addMessage({ sender: 'bot', component: <HistoricalRates /> });
     }, 500);
   }
 
   const handleShowTrackingManager = () => {
-    addMessage({ sender: 'user', text: 'Отслеживать валютную пару' });
+    addMessage({ sender: 'user', text: t('chat.user.trackPair') });
     setTimeout(() => {
         addMessage({ sender: 'bot', component: <TrackingManager 
             trackedPairs={Array.from(trackedPairs.keys())}
@@ -84,7 +86,7 @@ export function ChatInterface() {
   }
   
   const handleShowDataSourceSwitcher = () => {
-    addMessage({ sender: 'user', text: 'Изменить источник данных' });
+    addMessage({ sender: 'user', text: t('chat.user.switchSource') });
     setTimeout(() => {
       addMessage({
         sender: 'bot',
@@ -101,39 +103,66 @@ export function ChatInterface() {
     setTrackedPairs(new Map());
 
     toast({
-        title: 'Источник данных изменен',
-        description: `Теперь используется ${source.toUpperCase()}. Чат был сброшен.`,
+        title: t('dataSource.toast'),
+        description: t('dataSource.toastDesc', { source: source.toUpperCase() }),
     });
 
     setTimeout(() => {
         getInitialRates();
-        addMessage({
-            sender: 'bot',
-            text: `Источник данных переключен на ${source.toUpperCase()}. Чем могу помочь?`,
-            options: actionButtons,
-        });
     }, 100);
   };
+
+  useEffect(() => {
+    const actionButtons: ActionButtonProps[] = [
+      { id: 'rates', label: t('chat.showRates'), icon: LineChart, action: handleShowRates },
+      { id: 'convert', label: t('chat.showConverter'), icon: CircleDollarSign, action: handleShowConverter },
+      { id: 'alert', label: t('chat.setAlert'), icon: BellRing, action: handleShowAlertManager },
+      { id: 'history', label: t('chat.showHistory'), icon: History, action: handleShowHistoricalRates },
+      { id: 'track', label: t('chat.trackPair'), icon: Eye, action: handleShowTrackingManager },
+      { id: 'settings', label: t('chat.switchSource'), icon: Settings, action: handleShowDataSourceSwitcher },
+    ];
+    
+    // This effect runs when the language changes, resetting the chat.
+    getInitialRates();
+    setMessages([]); // Clear previous messages
+    addMessage({
+      sender: 'bot',
+      text: t('chat.placeholder'),
+      options: actionButtons,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang]);
+
 
   const handleSetAlert = (data: Omit<Alert, 'id' | 'baseRate'>) => {
     const baseRate = findRate(data.from, data.to);
     if (baseRate === undefined) {
       toast({
         variant: 'destructive',
-        title: 'Ошибка установки оповещения',
-        description: 'Не удалось найти обменный курс для выбранной пары. Возможно, курсы еще загружаются.',
+        title: t('notifications.toast.errorTitle'),
+        description: t('notifications.toast.errorDescription'),
       });
       return;
     }
     const newAlert: Alert = { ...data, id: Date.now().toString(), baseRate };
     setAlerts(prev => [...prev, newAlert]);
     toast({
-      title: 'Оповещение установлено!',
-      description: `Мы сообщим вам, когда ${data.from}/${data.to} станет ${data.condition === 'above' ? 'выше' : 'ниже'} ${data.threshold}.`,
+      title: t('notifications.toast.title'),
+      description: t('notifications.toast.description', {
+        from: data.from,
+        to: data.to,
+        condition: data.condition === 'above' ? t('notifications.above') : t('notifications.below'),
+        threshold: data.threshold,
+      }),
     });
     addMessage({
         sender: 'bot',
-        text: `ОК! Оповещение установлено для ${data.from}/${data.to} ${data.condition === 'above' ? 'выше' : 'ниже'} ${data.threshold}.`
+        text: t('chat.bot.alertSet', {
+            from: data.from,
+            to: data.to,
+            condition: data.condition === 'above' ? t('notifications.above') : t('notifications.below'),
+            threshold: data.threshold,
+        })
     });
   };
 
@@ -143,13 +172,13 @@ export function ChatInterface() {
     if (rate === undefined) {
       toast({
         variant: 'destructive',
-        title: 'Ошибка отслеживания пары',
-        description: 'Не удалось найти обменный курс для выбранной пары. Возможно, курсы еще загружаются.',
+        title: t('tracking.toast.errorTitle'),
+        description: t('tracking.toast.errorDescription'),
       });
       return false;
     }
     setTrackedPairs(prev => new Map(prev).set(pair, rate));
-    addMessage({ sender: 'bot', text: `ОК. Теперь я отслеживаю ${pair}. Я сообщу вам о любых изменениях.` });
+    addMessage({ sender: 'bot', text: t('chat.bot.pairTracked', { pair }) });
     return true;
   };
 
@@ -159,28 +188,9 @@ export function ChatInterface() {
       newMap.delete(pair);
       return newMap;
     });
-    addMessage({ sender: 'bot', text: `Я прекратил отслеживание ${pair}.` });
+    addMessage({ sender: 'bot', text: t('chat.bot.pairUntracked', { pair }) });
   };
   
-  const actionButtons: ActionButtonProps[] = [
-    { id: 'rates', label: 'Последние курсы', icon: LineChart, action: handleShowRates },
-    { id: 'convert', label: 'Конвертировать', icon: CircleDollarSign, action: handleShowConverter },
-    { id: 'alert', label: 'Установить оповещение', icon: BellRing, action: handleShowAlertManager },
-    { id: 'history', label: 'История', icon: History, action: handleShowHistoricalRates },
-    { id: 'track', label: 'Отслеживать', icon: Eye, action: handleShowTrackingManager },
-    { id: 'settings', label: 'Источник данных', icon: Settings, action: handleShowDataSourceSwitcher },
-  ];
-
-  useEffect(() => {
-    getInitialRates();
-    addMessage({
-      sender: 'bot',
-      text: 'Здравствуйте! Я ВалютаБот. Чем могу помочь?',
-      options: actionButtons,
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   useEffect(() => {
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
@@ -206,8 +216,8 @@ export function ChatInterface() {
             if(hasTriggered) {
                 triggeredAlerts.push(alert);
                 toast({
-                    title: 'Сработало оповещение о курсе!',
-                    description: `${alert.from}/${alert.to} сейчас ${currentRate.toFixed(4)}, что ${alert.condition === 'above' ? 'выше' : 'ниже'} вашего порога ${alert.threshold}.`
+                    title: t('alertCard.title'),
+                    description: `${alert.from}/${alert.to} ${t('alertCard.currentRate', { currentRate: currentRate.toFixed(4) })}`
                 });
             } else {
                 remainingAlerts.push(alert);
@@ -244,7 +254,7 @@ export function ChatInterface() {
     };
     const interval = setInterval(checkRates, 30000); // Check every 30 seconds
     return () => clearInterval(interval);
-  }, [alerts, toast, addMessage, trackedPairs]);
+  }, [alerts, toast, addMessage, trackedPairs, t]);
 
   return (
     <div className="w-full max-w-md h-[85vh] max-h-[900px] flex flex-col bg-card rounded-2xl shadow-2xl overflow-hidden border">
@@ -255,8 +265,8 @@ export function ChatInterface() {
                  <span className="absolute bottom-0 right-0 block h-3 w-3 rounded-full bg-positive border-2 border-card" />
             </div>
           <div>
-            <h1 className="text-lg font-bold">ВалютаБот</h1>
-            <p className="text-sm text-positive">В сети</p>
+            <h1 className="text-lg font-bold">{t('chat.title')}</h1>
+            <p className="text-sm text-positive">{t('chat.online')}</p>
           </div>
         </div>
       </header>
@@ -305,8 +315,9 @@ export function ChatInterface() {
 }
 
 function AlertCard({ alert, currentRate }: { alert: Alert; currentRate: number }) {
+  const { t } = useTranslation();
   const change = ((currentRate - alert.baseRate) / alert.baseRate) * 100;
-  const conditionText = alert.condition === 'above' ? 'выше' : 'ниже';
+  const conditionText = alert.condition === 'above' ? t('notifications.above') : t('notifications.below');
 
   return (
     <Card className="bg-accent/10 border-accent/50">
@@ -316,13 +327,13 @@ function AlertCard({ alert, currentRate }: { alert: Alert; currentRate: number }
                     <BellRing className="h-5 w-5 text-accent-foreground" />
                 </div>
                 <div>
-                    <h3 className="font-bold text-accent">Сработало оповещение о курсе!</h3>
+                    <h3 className="font-bold text-accent">{t('alertCard.title')}</h3>
                     <p className="text-sm mt-1">
-                        <span className="font-semibold">{alert.from}/{alert.to}</span> сейчас <span className="font-bold">{currentRate.toFixed(4)}</span>
+                        <span className="font-semibold">{alert.from}/{alert.to}</span> {t('alertCard.currentRate', { currentRate: currentRate.toFixed(4) })}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                        Ваше оповещение было на {conditionText} {alert.threshold}.
-                        (Изменение: <span className={cn(change >= 0 ? 'text-positive' : 'text-negative')}>{change.toFixed(2)}%</span>)
+                        {t('alertCard.yourAlert', { condition: conditionText, threshold: alert.threshold })}
+                        ({t('alertCard.change', { change: change.toFixed(2) })})
                     </p>
                 </div>
             </div>

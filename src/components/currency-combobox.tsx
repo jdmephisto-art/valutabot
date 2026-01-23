@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { useCurrencies } from '@/hooks/use-currencies';
+import { useTranslation } from '@/hooks/use-translation';
 import { Button } from '@/components/ui/button';
 import {
   Command,
@@ -26,6 +27,7 @@ export function CurrencyCombobox({
   disabled,
 }: CurrencyComboboxProps) {
   const { currencies } = useCurrencies();
+  const { t, getCurrencyName } = useTranslation();
   const [open, setOpen] = React.useState(false);
   const [searchTerm, setSearchTerm] = React.useState('');
 
@@ -35,9 +37,9 @@ export function CurrencyCombobox({
     }
     return currencies.filter(currency =>
         currency.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        currency.name.toLowerCase().includes(searchTerm.toLowerCase())
+        getCurrencyName(currency.code).toLowerCase().includes(searchTerm.toLowerCase())
     );
-  }, [currencies, searchTerm]);
+  }, [currencies, searchTerm, getCurrencyName]);
 
 
   const selectedCurrency = React.useMemo(
@@ -63,8 +65,8 @@ export function CurrencyCombobox({
         >
           <div className="flex-1 whitespace-normal text-left mr-2">
             {selectedCurrency
-              ? `${selectedCurrency.code} - ${selectedCurrency.name}`
-              : placeholder ?? 'Выберите валюту...'}
+              ? `${selectedCurrency.code} - ${getCurrencyName(selectedCurrency.code)}`
+              : placeholder ?? t('combobox.placeholder')}
           </div>
           <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -72,7 +74,7 @@ export function CurrencyCombobox({
       <PopoverContent className="w-72 p-0">
         <Command>
           <CommandInput 
-            placeholder='Поиск валюты...'
+            placeholder={t('combobox.searchPlaceholder')}
             value={searchTerm}
             onValueChange={setSearchTerm}
           />
@@ -82,7 +84,6 @@ export function CurrencyCombobox({
                     <button
                         key={currency.code}
                         onClick={() => {
-                            console.log(`Выбрана валюта: ${currency.code}`);
                             onChange(currency.code);
                             setOpen(false);
                         }}
@@ -99,12 +100,12 @@ export function CurrencyCombobox({
                         />
                         <div className="flex-1 whitespace-normal text-left">
                             <span className="font-semibold">{currency.code}</span>
-                            <span className="text-xs"> - {currency.name}</span>
+                            <span className="text-xs"> - {getCurrencyName(currency.code)}</span>
                         </div>
                     </button>
                 ))
             ) : (
-                <div className="p-2 text-center text-sm text-muted-foreground">Валюта не найдена.</div>
+                <div className="p-2 text-center text-sm text-muted-foreground">{t('combobox.notFound')}</div>
             )}
           </ScrollArea>
         </Command>

@@ -7,10 +7,12 @@ import { findRate } from '@/lib/currencies';
 import { ArrowRightLeft } from 'lucide-react';
 import { Button } from './ui/button';
 import { useCurrencies } from '@/hooks/use-currencies';
+import { useTranslation } from '@/hooks/use-translation';
 import { CurrencyCombobox } from './currency-combobox';
 
 export function CurrencyConverter() {
   const { currencies } = useCurrencies();
+  const { t } = useTranslation();
   const [fromCurrency, setFromCurrency] = useState('USD');
   const [toCurrency, setToCurrency] = useState('EUR');
   const [amount, setAmount] = useState('1');
@@ -40,7 +42,7 @@ export function CurrencyConverter() {
   return (
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
       <CardHeader>
-        <CardTitle className="text-lg font-semibold">Конвертер валют</CardTitle>
+        <CardTitle className="text-lg font-semibold">{t('converter.title')}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
@@ -49,12 +51,12 @@ export function CurrencyConverter() {
               <CurrencyCombobox 
                 value={fromCurrency}
                 onChange={setFromCurrency}
-                placeholder='Из'
+                placeholder={t('converter.from')}
                 disabled={currencies.length === 0}
               />
               <Input
                 type="text"
-                placeholder='Сумма'
+                placeholder={t('converter.amount')}
                 value={amount}
                 onChange={handleAmountChange}
               />
@@ -68,12 +70,12 @@ export function CurrencyConverter() {
               <CurrencyCombobox
                 value={toCurrency}
                 onChange={setToCurrency}
-                placeholder='В'
+                placeholder={t('converter.to')}
                 disabled={currencies.length === 0}
               />
               <Input
                 type="text"
-                placeholder='Конвертировано'
+                placeholder={t('converter.converted')}
                 value={convertedAmount}
                 readOnly
                 className="bg-muted/50"

@@ -8,19 +8,18 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Eye, PlusCircle, Trash2 } from 'lucide-react';
 import { Separator } from './ui/separator';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useCurrencies } from '@/hooks/use-currencies';
+import { useTranslation } from '@/hooks/use-translation';
 import { CurrencyCombobox } from './currency-combobox';
 
-const trackingSchema = z.object({
-    from: z.string().min(1, 'Пожалуйста, выберите валюту.'),
-    to: z.string().min(1, 'Пожалуйста, выберите валюту.'),
+const getTrackingSchema = (t: (key: string) => string) => z.object({
+    from: z.string().min(1, t('validation.selectCurrency')),
+    to: z.string().min(1, t('validation.selectCurrency')),
   }).refine(data => data.from !== data.to, {
-    message: 'Валюты должны быть разными.',
+    message: t('validation.differentCurrencies'),
     path: ["to"],
   });
-
-type TrackingFormValues = z.infer<typeof trackingSchema>;
 
 type TrackingManagerProps = {
     onAddPair: (from: string, to: string) => boolean;
@@ -30,7 +29,11 @@ type TrackingManagerProps = {
 
 export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initialTrackedPairs }: TrackingManagerProps) {
   const { currencies } = useCurrencies();
+  const { t } = useTranslation();
   const [localTrackedPairs, setLocalTrackedPairs] = useState(initialTrackedPairs);
+
+  const trackingSchema = useMemo(() => getTrackingSchema(t), [t]);
+  type TrackingFormValues = z.infer<typeof trackingSchema>;
 
   const form = useForm<TrackingFormValues>({
     resolver: zodResolver(trackingSchema),
@@ -61,9 +64,9 @@ export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initial
       <CardHeader>
         <CardTitle className="text-lg font-semibold flex items-center gap-2">
             <Eye />
-            Отслеживание валютных пар
+            {t('tracking.title')}
         </CardTitle>
-        <CardDescription>Получайте уведомления в чате при изменении курса.</CardDescription>
+        <CardDescription>{t('tracking.description')}</CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -74,12 +77,12 @@ export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initial
                 name="from"
                 render={({ field }) => (
                   <FormItem className="flex-1">
-                    <FormLabel>Из</FormLabel>
+                    <FormLabel>{t('tracking.from')}</FormLabel>
                     <FormControl>
                       <CurrencyCombobox
                           value={field.value}
                           onChange={field.onChange}
-                          placeholder='Из'
+                          placeholder={t('tracking.from')}
                           disabled={currencies.length === 0}
                       />
                     </FormControl>
@@ -92,12 +95,12 @@ export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initial
                 name="to"
                 render={({ field }) => (
                   <FormItem className="flex-1">
-                    <FormLabel>В</FormLabel>
+                    <FormLabel>{t('tracking.to')}</FormLabel>
                     <FormControl>
                       <CurrencyCombobox
                           value={field.value}
                           onChange={field.onChange}
-                          placeholder='В'
+                          placeholder={t('tracking.to')}
                           disabled={currencies.length === 0}
                       />
                     </FormControl>
@@ -108,7 +111,7 @@ export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initial
             </div>
             <Button type="submit" className="w-full">
               <PlusCircle className="mr-2 h-4 w-4" />
-              Добавить пару
+              {t('tracking.addPair')}
             </Button>
           </form>
         </Form>
@@ -116,7 +119,7 @@ export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initial
             <>
                 <Separator className="my-6" />
                 <div className="space-y-2">
-                    <h4 className="font-medium">Сейчас отслеживается</h4>
+                    <h4 className="font-medium">{t('tracking.currentlyTracking')}</h4>
                     {localTrackedPairs.map(pair => (
                         <div key={pair} className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
                             <span className="font-mono text-sm">{pair}</span>

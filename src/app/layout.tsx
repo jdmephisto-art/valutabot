@@ -4,8 +4,8 @@ import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
-  title: 'ВалютаБот',
-  description: 'Телеграм бот для курсов валют',
+  title: 'ВалютаБот / CurrencyBot',
+  description: 'Телеграм бот для курсов валют / Telegram bot for currency rates',
 };
 
 export default function RootLayout({

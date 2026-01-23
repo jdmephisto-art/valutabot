@@ -21,3 +21,5 @@ export type Alert = {
 };
 
 export type DataSource = 'nbrb' | 'currencyapi';
+
+export type Language = 'en' | 'ru';

@@ -11,17 +11,20 @@ export function useCurrencies() {
     useEffect(() => {
         const fetchCurrencies = () => {
             setLoading(true);
+            // We get currencies from the library, which now depends on the data source
             getCurrenciesFromLib().then(fetchedCurrencies => {
                 setCurrencies(fetchedCurrencies);
                 setLoading(false);
             });
         };
 
-        fetchCurrencies(); // Initial fetch
+        // Initial fetch
+        fetchCurrencies(); 
 
-        const unsubscribe = subscribe(fetchCurrencies); // Re-fetch when data source changes
+        // Re-fetch when data source changes by subscribing to the currency store
+        const unsubscribe = subscribe(fetchCurrencies); 
         return () => unsubscribe();
-    }, []); // Empty dependency array is correct here, as we are managing subscription manually
+    }, []);
 
     return { currencies, loading };
 }

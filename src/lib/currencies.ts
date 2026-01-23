@@ -1,4 +1,3 @@
-
 import type { Currency, ExchangeRate, DataSource } from '@/lib/types';
 import { format, subDays, differenceInDays, addDays, startOfDay, parseISO } from 'date-fns';
 
@@ -64,17 +63,14 @@ async function nbrbApiFetch(endpoint: string) {
 }
 
 async function currencyApiFetch(endpoint: string, params: Record<string, string> = {}) {
-    const apiKey = '6431078d4fc8bf5d4097027ee62c2c0dc4e0';
+    const apiKey = 'cur_live_tJgYq8LtS5b5bgeCjSg0wHsozFqfe3sR6g485f83';
 
-    const url = new URL(`https://currencyapi.net/api/v1/${endpoint}`);
-    url.searchParams.append('key', apiKey);
-    url.searchParams.append('output', 'json');
+    const url = new URL(`https://api.currencyapi.com/v3/${endpoint}`);
+    url.searchParams.append('apikey', apiKey);
     Object.entries(params).forEach(([key, value]) => url.searchParams.append(key, value));
 
     try {
-        const response = await fetch(url.toString(), {
-            headers: { 'Accept': 'application/json' }
-        });
+        const response = await fetch(url.toString());
         if (!response.ok) {
             const errorBody = await response.json();
             console.error(`CurrencyAPI request failed: ${response.status} ${response.statusText}`, errorBody);
@@ -88,126 +84,70 @@ async function currencyApiFetch(endpoint: string, params: Record<string, string>
 }
 
 
-// --- CURRENCYAPI.NET PROVIDER (v1) ---
+// --- CURRENCYAPI.COM PROVIDER (v3) ---
 let currencyApiCurrenciesCache: Currency[] | null = null;
 let currencyApiRatesCache: { [key: string]: number } = {};
 let lastCurrencyApiFetchTimestamp = 0;
 
-const PREDEFINED_CURRENCY_NAMES: { [key: string]: string } = {
-    "AED": "United Arab Emirates Dirham", "AFN": "Afghan Afghani", "ALL": "Albanian Lek",
-    "AMD": "Armenian Dram", "ANG": "Netherlands Antillean Guilder", "AOA": "Angolan Kwanza",
-    "ARS": "Argentine Peso", "AUD": "Australian Dollar", "AWG": "Aruban Florin",
-    "AZN": "Azerbaijani Manat", "BAM": "Bosnia-Herzegovina Convertible Mark", "BBD": "Barbadian Dollar",
-    "BDT": "Bangladeshi Taka", "BGN": "Bulgarian Lev", "BHD": "Bahraini Dinar",
-    "BIF": "Burundian Franc", "BMD": "Bermudan Dollar", "BND": "Brunei Dollar",
-    "BOB": "Bolivian Boliviano", "BRL": "Brazilian Real", "BSD": "Bahamian Dollar",
-    "BTC": "Bitcoin", "BTN": "Bhutanese Ngultrum", "BWP": "Botswanan Pula",
-    "BYN": "Belarusian Ruble", "BZD": "Belize Dollar", "CAD": "Canadian Dollar",
-    "CDF": "Congolese Franc", "CHF": "Swiss Franc","CLF": "Chilean Unit of Account (UF)",
-    "CLP": "Chilean Peso", "CNH": "Chinese Yuan (Offshore)", "CNY": "Chinese Yuan",
-    "COP": "Colombian Peso", "CRC": "Costa Rican Colón", "CUC": "Cuban Convertible Peso",
-    "CUP": "Cuban Peso", "CVE": "Cape Verdean Escudo", "CZK": "Czech Republic Koruna",
-    "DJF": "Djiboutian Franc", "DKK": "Danish Krone", "DOP": "Dominican Peso",
-    "DZD": "Algerian Dinar", "EGP": "Egyptian Pound", "ERN": "Eritrean Nakfa",
-    "ETB": "Ethiopian Birr", "EUR": "Euro", "FJD": "Fijian Dollar",
-    "FKP": "Falkland Islands Pound", "GBP": "British Pound Sterling", "GEL": "Georgian Lari",
-    "GGP": "Guernsey Pound", "GHS": "Ghanaian Cedi", "GIP": "Gibraltar Pound",
-    "GMD": "Gambian Dalasi", "GNF": "Guinean Franc", "GTQ": "Guatemalan Quetzal",
-    "GYD": "Guyanaese Dollar", "HKD": "Hong Kong Dollar", "HNL": "Honduran Lempira",
-    "HRK": "Croatian Kuna", "HTG": "Haitian Gourde", "HUF": "Hungarian Forint",
-    "IDR": "Indonesian Rupiah", "ILS": "Israeli New Shekel", "IMP": "Manx pound",
-    "INR": "Indian Rupee", "IQD": "Iraqi Dinar", "IRR": "Iranian Rial",
-    "ISK": "Icelandic Króna", "JEP": "Jersey Pound", "JMD": "Jamaican Dollar",
-    "JOD": "Jordanian Dinar", "JPY": "Japanese Yen", "KES": "Kenyan Shilling",
-    "KGS": "Kyrgystani Som", "KHR": "Cambodian Riel", "KMF": "Comorian Franc",
-    "KPW": "North Korean Won", "KRW": "South Korean Won", "KWD": "Kuwaiti Dinar",
-    "KYD": "Cayman Islands Dollar", "KZT": "Kazakhstani Tenge", "LAK": "Laotian Kip",
-    "LBP": "Lebanese Pound", "LKR": "Sri Lankan Rupee", "LRD": "Liberian Dollar",
-    "LSL": "Lesotho Loti", "LYD": "Libyan Dinar", "MAD": "Moroccan Dirham",
-    "MDL": "Moldovan Leu", "MGA": "Malagasy Ariary", "MKD": "Macedonian Denar",
-    "MMK": "Myanma Kyat", "MNT": "Mongolian Tugrik", "MOP": "Macanese Pataca",
-    "MRO": "Mauritanian Ouguiya (pre-2018)", "MRU": "Mauritanian Ouguiya", "MUR": "Mauritian Rupee",
-    "MVR": "Maldivian Rufiyaa", "MWK": "Malawian Kwacha", "MXN": "Mexican Peso",
-    "MYR": "Malaysian Ringgit", "MZN": "Mozambican Metical", "NAD": "Namibian Dollar",
-    "NGN": "Nigerian Naira", "NIO": "Nicaraguan Córdoba", "NOK": "Norwegian Krone",
-    "NPR": "Nepalese Rupee", "NZD": "New Zealand Dollar", "OMR": "Omani Rial",
-    "PAB": "Panamanian Balboa", "PEN": "Peruvian Nuevo Sol", "PGK": "Papua New Guinean Kina",
-    "PHP": "Philippine Peso", "PKR": "Pakistani Rupee", "PLN": "Polish Zloty",
-    "PYG": "Paraguayan Guarani", "QAR": "Qatari Rial", "RON": "Romanian Leu",
-    "RSD": "Serbian Dinar", "RUB": "Russian Ruble", "RWF": "Rwandan Franc",
-    "SAR": "Saudi Riyal", "SBD": "Solomon Islands Dollar", "SCR": "Seychellois Rupee",
-    "SDG": "Sudanese Pound", "SEK": "Swedish Krona", "SGD": "Singapore Dollar",
-    "SHP": "Saint Helena Pound", "SLL": "Sierra Leonean Leone", "SOS": "Somali Shilling",
-    "SRD": "Surinamese Dollar", "SSP": "South Sudanese Pound", "STD": "São Tomé and Príncipe Dobra (pre-2018)",
-    "STN": "São Tomé and Príncipe Dobra", "SVC": "Salvadoran Colón", "SYP": "Syrian Pound",
-    "SZL": "Swazi Lilangeni", "THB": "Thai Baht", "TJS": "Tajikistani Somoni",
-    "TMT": "Turkmenistani Manat", "TND": "Tunisian Dinar", "TOP": "Tongan Paʻanga",
-    "TRY": "Turkish Lira", "TTD": "Trinidad and Tobago Dollar", "TWD": "New Taiwan Dollar",
-    "TZS": "Tanzanian Shilling", "UAH": "Ukrainian Hryvnia", "UGX": "Ugandan Shilling",
-    "USD": "United States Dollar", "UYU": "Uruguayan Peso", "UZS": "Uzbekistan Som",
-    "VEF": "Venezuelan Bolívar Fuerte (Old)", "VES": "Venezuelan Bolívar Soberano",
-    "VND": "Vietnamese Dong", "VUV": "Vanuatu Vatu", "WST": "Samoan Tala",
-    "XAF": "CFA Franc BEAC", "XAG": "Silver Ounce", "XAU": "Gold Ounce",
-    "XCD": "East Caribbean Dollar", "XDR": "Special Drawing Rights", "XOF": "CFA Franc BCEAO",
-    "XPD": "Palladium Ounce", "XPF": "CFP Franc", "XPT": "Platinum Ounce",
-    "YER": "Yemeni Rial", "ZAR": "South African Rand", "ZMW": "Zambian Kwacha",
-    "ZWL": "Zimbabwean Dollar"
-};
 
 async function getCurrencyApiCurrencies(): Promise<Currency[]> {
     if (currencyApiCurrenciesCache) {
         return currencyApiCurrenciesCache;
     }
+
+    const data = await currencyApiFetch('currencies');
     
-    await updateCurrencyApiRatesCache('USD'); 
-    
-    const codes = Object.keys(currencyApiRatesCache);
-    
-    if (!codes.includes('BYN')) {
-        codes.push('BYN');
+    if (data && data.data) {
+        const result: Currency[] = Object.values(data.data).map((c: any) => ({
+            code: c.code,
+            name: c.name
+        }));
+        result.sort((a, b) => a.code.localeCompare(b.code));
+        currencyApiCurrenciesCache = result;
+        return result;
     }
 
-    const result: Currency[] = codes.map(code => ({
-        code,
-        name: PREDEFINED_CURRENCY_NAMES[code] || `${code} name not found`
-    }));
-    result.sort((a, b) => a.code.localeCompare(b.code));
-    
-    currencyApiCurrenciesCache = result;
-    return result;
+    return [];
 }
 
 async function updateCurrencyApiRatesCache(baseCurrency = 'USD') {
-    const data = await currencyApiFetch('rates', { base: baseCurrency });
-    if (data && data.rates) {
+    const data = await currencyApiFetch('latest', { base_currency: baseCurrency });
+    if (data && data.data) {
         const tempCache: { [key: string]: number } = {};
-        Object.entries(data.rates).forEach(([code, rate]: [string, any]) => {
-            tempCache[code] = parseFloat(rate);
+        Object.values(data.data).forEach((rate: any) => {
+            tempCache[rate.code] = rate.value;
         });
         tempCache[baseCurrency] = 1;
         currencyApiRatesCache = tempCache;
         lastCurrencyApiFetchTimestamp = Date.now();
-    }
-    
-    if (baseCurrency === 'USD' && !currencyApiRatesCache['BYN']) {
-        try {
-            const nbrbUsdRateData = await nbrbApiFetch('rates/431?periodicity=0'); 
-            if (nbrbUsdRateData && nbrbUsdRateData.Cur_OfficialRate) {
-                const bynPerUsd = nbrbUsdRateData.Cur_OfficialRate / nbrbUsdRateData.Cur_Scale;
-                currencyApiRatesCache['BYN'] = bynPerUsd;
-            }
-        } catch (e) {
-            console.error('Failed to augment cache with NBRB rate for BYN', e);
-        }
     }
 }
 
 function findCurrencyApiRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
 
-    const fromRate = currencyApiRatesCache[from];
-    const toRate = currencyApiRatesCache[to];
+    const fromRate = currencyApiRatesCache[from]; // Rate relative to base
+    const toRate = currencyApiRatesCache[to];   // Rate relative to base
 
+    // All rates are relative to the base currency (e.g., USD).
+    // To convert from A to B: (A -> USD) / (B -> USD) is wrong.
+    // Correct is: (value in A) * (USD per A) * (B per USD)
+    // Or simpler: Rate of B / Rate of A (when both are vs USD)
+    // e.g. from=EUR, to=JPY. base=USD. We have EUR/USD and JPY/USD. We want EUR/JPY.
+    // (JPY/USD) / (EUR/USD) = JPY/EUR. This is to/from. We want from/to, so we inverse it.
+    // Wait, no. We want how many `to` currency units for one `from` currency unit.
+    // 1 EUR = ? JPY.
+    // 1 EUR = 1.1 USD. 1 USD = 130 JPY.
+    // So 1 EUR = 1.1 * 130 JPY.
+    // toRate is how many target currency units per base. e.g. JPY/USD
+    // fromRate is how many from currency units per base. e.g. EUR/USD
+    // We want to find rate of `to` relative to `from`.
+    // Example: Convert 10 EUR to JPY. Base is USD.
+    // rates['EUR'] = 0.9 (means 1 USD = 0.9 EUR) -> 1/0.9 USD/EUR
+    // rates['JPY'] = 130 (means 1 USD = 130 JPY) -> 130 JPY/USD
+    // 10 EUR * (1/0.9 USD/EUR) * (130 JPY/USD) = 10 * 130 / 0.9 JPY
+    // So the rate is toRate / fromRate.
+    
     if (fromRate && toRate) {
         return toRate / fromRate;
     }
@@ -216,7 +156,7 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
 
 
 async function getCurrencyApiLatestRates(): Promise<ExchangeRate[]> {
-    if (Date.now() - lastCurrencyApiFetchTimestamp > 5 * 60 * 1000) { // 5 min cache
+    if (Object.keys(currencyApiRatesCache).length === 0 || Date.now() - lastCurrencyApiFetchTimestamp > 5 * 60 * 1000) { // 5 min cache
         await updateCurrencyApiRatesCache('USD');
     }
     const displayedPairs = [
@@ -230,13 +170,38 @@ async function getCurrencyApiLatestRates(): Promise<ExchangeRate[]> {
 }
 
 async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
-    console.warn("Historical data is not supported by the provided currencyapi.net API key (v1).");
+    const formattedDate = format(date, 'yyyy-MM-dd');
+    const data = await currencyApiFetch('historical', { date: formattedDate, base_currency: from, currencies: to });
+    if (data && data.data && data.data[to]) {
+        return data.data[to].value;
+    }
     return undefined;
 }
 
 async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string, rate: number }[]> {
-    console.warn("Historical data is not supported by the provided currencyapi.net API key (v1).");
-    return [];
+    const result: { date: string, rate: number }[] = [];
+    let currentDate = startDate;
+
+    const promises = [];
+    while (currentDate <= endDate) {
+        promises.push(getCurrencyApiHistoricalRate(from, to, currentDate));
+        currentDate = addDays(currentDate, 1);
+    }
+
+    const rates = await Promise.all(promises);
+
+    currentDate = startDate;
+    for (const rate of rates) {
+        if (rate !== undefined) {
+            result.push({
+                date: format(currentDate, 'dd.MM'),
+                rate: rate
+            });
+        }
+        currentDate = addDays(currentDate, 1);
+    }
+    
+    return result;
 }
 
 
@@ -275,7 +240,7 @@ async function getNbrbCurrencies(): Promise<Currency[]> {
     if (nbrbFullCurrencyInfoCache) {
         currencies = nbrbFullCurrencyInfoCache.map((c: any) => ({
             code: c.Cur_Abbreviation,
-            name: c.Cur_Name,
+            name: c.Cur_Name, // This name is in Russian, which is fine as a fallback
         }));
     }
 
@@ -324,7 +289,7 @@ function findNbrbRate(from: string, to: string): number | undefined {
     const rateToBynForFROM = from === 'BYN' ? 1 : (fromRateInfo ? fromRateInfo.rate / fromRateInfo.scale : undefined);
     const rateToBynForTO = to === 'BYN' ? 1 : (toRateInfo ? toRateInfo.rate / toRateInfo.scale : undefined);
 
-    if (rateToBynForFROM !== undefined && rateToBynForTO !== undefined) {
+    if (rateToBynForFROM !== undefined && rateToBynForTO !== undefined && rateToBynForTO !== 0) {
         return rateToBynForFROM / rateToBynForTO;
     }
     return undefined;
@@ -364,7 +329,7 @@ async function getNbrbHistoricalRate(from: string, to: string, date: Date): Prom
     const rateToBynForFROM = fromRateInfo ? fromRateInfo.rate / fromRateInfo.scale : undefined;
     const rateToBynForTO = toRateInfo ? toRateInfo.rate / toRateInfo.scale : undefined;
     
-    if (rateToBynForFROM !== undefined && rateToBynForTO !== undefined) {
+    if (rateToBynForFROM !== undefined && rateToBynForTO !== undefined && rateToBynForTO !== 0) {
         return rateToBynForFROM / rateToBynForTO;
     }
     return undefined;
