@@ -68,9 +68,9 @@ export function CurrencyCombobox({
               {currencies.map((currency) => (
                 <CommandItem
                   key={currency.code}
-                  value={currency.code}
+                  value={currency.code.toLowerCase()}
                   onSelect={(currentValue) => {
-                    // currentValue is the `value` prop of the CommandItem, which is lowercase.
+                    // currentValue is the lowercase code from the `value` prop
                     const selectedCode = currencies.find(c => c.code.toLowerCase() === currentValue)?.code;
                     if (selectedCode) {
                       onChange(selectedCode);
