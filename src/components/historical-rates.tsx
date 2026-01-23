@@ -132,27 +132,45 @@ export function HistoricalRates() {
           
           <TabsContent value="dynamics" className="space-y-4 pt-4">
             {renderCurrencySelects()}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dynamicsRange && "text-muted-foreground")}>
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dynamicsRange?.from ? (dynamicsRange.to ? <>{format(dynamicsRange.from, "LLL dd, y", { locale: dateLocale })} - {format(dynamicsRange.to, "LLL dd, y", { locale: dateLocale })}</> : format(dynamicsRange.from, "LLL dd, y", { locale: dateLocale })) : <span>{t('history.selectRange')}</span>}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar 
-                    initialFocus 
-                    mode="range" 
-                    defaultMonth={dynamicsRange?.from} 
-                    selected={dynamicsRange} 
-                    onSelect={handleDynamicsRangeSelect} 
-                    numberOfMonths={2} 
-                    disabled={getCalendarDisabledDates()}
-                    locale={dateLocale}
-                />
-              </PopoverContent>
-            </Popover>
-            <Button onClick={handleFetchDynamics} className="w-full" disabled={fetchingDynamics}>
+            <div className="grid grid-cols-2 gap-2">
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dynamicsRange?.from && "text-muted-foreground")}>
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {dynamicsRange?.from ? format(dynamicsRange.from, "LLL dd, y", { locale: dateLocale }) : <span>{t('history.startDate')}</span>}
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                            initialFocus
+                            mode="single"
+                            selected={dynamicsRange?.from}
+                            onSelect={(day) => handleDynamicsRangeSelect({ from: day, to: dynamicsRange?.to })}
+                            disabled={(date) => (dynamicsRange?.to ? date > dynamicsRange.to : false) || (getCalendarDisabledDates().before ? date < getCalendarDisabledDates().before! : false) || (getCalendarDisabledDates().after ? date > getCalendarDisabledDates().after! : false)}
+                            locale={dateLocale}
+                        />
+                    </PopoverContent>
+                </Popover>
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dynamicsRange?.to && "text-muted-foreground")}>
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {dynamicsRange?.to ? format(dynamicsRange.to, "LLL dd, y", { locale: dateLocale }) : <span>{t('history.endDate')}</span>}
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                            initialFocus
+                            mode="single"
+                            selected={dynamicsRange?.to}
+                            onSelect={(day) => handleDynamicsRangeSelect({ from: dynamicsRange?.from, to: day })}
+                            disabled={(date) => (dynamicsRange?.from ? date < dynamicsRange.from : false) || (getCalendarDisabledDates().before ? date < getCalendarDisabledDates().before! : false) || (getCalendarDisabledDates().after ? date > getCalendarDisabledDates().after! : false)}
+                            locale={dateLocale}
+                        />
+                    </PopoverContent>
+                </Popover>
+            </div>
+            <Button onClick={handleFetchDynamics} className="w-full" disabled={fetchingDynamics || !dynamicsRange?.from || !dynamicsRange?.to}>
                 {fetchingDynamics ? t('latestRates.loading') : t('history.showDynamics')}
             </Button>
             {dynamicsData.length > 0 && (

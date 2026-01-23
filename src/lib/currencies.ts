@@ -122,8 +122,10 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
     const toRate = currencyApiRatesCache[to];   
     
     if (fromRate && toRate) {
-        // 1 USD = fromRate FROM
-        // 1 USD = toRate TO
+        // All rates are against the base currency (USD) from the API
+        // So we can calculate the cross rate.
+        // 1 BASE = fromRate FROM
+        // 1 BASE = toRate TO
         // -> fromRate FROM = toRate TO
         // -> 1 FROM = (toRate / fromRate) TO
         return toRate / fromRate;
@@ -147,10 +149,16 @@ async function getCurrencyApiLatestRates(): Promise<ExchangeRate[]> {
 }
 
 async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
+    if (from === to) return 1;
     const formattedDate = format(date, 'yyyy-MM-dd');
-    const data = await currencyApiNetFetch('history', { date: formattedDate, base: from });
-    if (data && data.rates && data.rates[to]) {
-        return data.rates[to];
+    // Base currency for historical data is USD on the free plan.
+    const data = await currencyApiNetFetch('historical', { date: formattedDate });
+    if (data && data.rates) {
+        const fromRate = from === 'USD' ? 1 : data.rates[from];
+        const toRate = to === 'USD' ? 1 : data.rates[to];
+        if (fromRate && toRate && fromRate !== 0) {
+            return toRate / fromRate;
+        }
     }
     return undefined;
 }
@@ -158,18 +166,27 @@ async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date
 async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string, rate: number }[]> {
     const formattedStart = format(startDate, 'yyyy-MM-dd');
     const formattedEnd = format(endDate, 'yyyy-MM-dd');
-    
+
+    // The base currency for timeseries is USD on the free plan.
     const data = await currencyApiNetFetch('timeseries', {
         start_date: formattedStart,
         end_date: formattedEnd,
-        base: from,
     });
 
     if (data && data.rates) {
-        return Object.entries(data.rates).map(([date, dailyRates]: [string, any]) => ({
-            date: format(parseISO(date), 'dd.MM'),
-            rate: dailyRates[to]
-        })).filter(d => d.rate !== undefined);
+        const result = Object.entries(data.rates).map(([date, dailyRates]: [string, any]) => {
+            const fromRate = from === 'USD' ? 1 : dailyRates[from];
+            const toRate = to === 'USD' ? 1 : dailyRates[to];
+            
+            if (fromRate && toRate && fromRate !== 0) {
+                return {
+                    date: format(parseISO(date), 'dd.MM'),
+                    rate: toRate / fromRate
+                };
+            }
+            return null;
+        });
+        return result.filter((d): d is { date: string; rate: number } => d !== null);
     }
 
     return [];
