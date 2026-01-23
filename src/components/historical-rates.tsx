@@ -70,16 +70,6 @@ export function HistoricalRates() {
     setDynamicsRange(range);
   }
 
-  const handleFetchDynamics = async () => {
-    if (dynamicsRange?.from && dynamicsRange?.to) {
-      setFetchingDynamics(true);
-      setDynamicsData([]);
-      const data = await getDynamicsForPeriod(fromCurrency, toCurrency, dynamicsRange.from, dynamicsRange.to);
-      setDynamicsData(data);
-      setFetchingDynamics(false);
-    }
-  };
-
   const getCalendarDisabledDates = () => {
     const disabled: { before?: Date, after?: Date } = { after: new Date() };
     if (getDataSource() === 'nbrb') {
@@ -195,16 +185,43 @@ export function HistoricalRates() {
 
           <TabsContent value="range" className="space-y-4 pt-4">
              {renderCurrencySelects()}
-             <Popover>
-                <PopoverTrigger asChild>
-                    <Button id="date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !range && "text-muted-foreground")}>
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {range?.from ? (range.to ? <>{format(range.from, "LLL dd, y")} - {format(range.to, "LLL dd, y")}</> : format(range.from, "LLL dd, y")) : <span>Pick a date range</span>}
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start"><Calendar initialFocus mode="range" defaultMonth={range?.from} selected={range} onSelect={setRange} numberOfMonths={2} disabled={getCalendarDisabledDates()}/></PopoverContent>
-             </Popover>
-             <Button onClick={handleFetchRangeRate} className="w-full">Compare Rates</Button>
+             <div className="grid grid-cols-2 gap-2">
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button id="start-date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !range?.from && "text-muted-foreground")}>
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {range?.from ? format(range.from, "LLL dd, y") : <span>Start date</span>}
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar 
+                            initialFocus 
+                            mode="single" 
+                            selected={range?.from} 
+                            onSelect={(day) => setRange(currentRange => ({ from: day, to: currentRange?.to }))}
+                            disabled={(date) => (range?.to ? date > range.to : false) || (getCalendarDisabledDates().before ? date < getCalendarDisabledDates().before! : false) || (getCalendarDisabledDates().after ? date > getCalendarDisabledDates().after! : false)}
+                        />
+                    </PopoverContent>
+                </Popover>
+                 <Popover>
+                    <PopoverTrigger asChild>
+                        <Button id="end-date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !range?.to && "text-muted-foreground")}>
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {range?.to ? format(range.to, "LLL dd, y") : <span>End date</span>}
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar 
+                            initialFocus 
+                            mode="single" 
+                            selected={range?.to} 
+                            onSelect={(day) => setRange(currentRange => ({ from: currentRange?.from, to: day }))}
+                            disabled={(date) => (range?.from ? date < range.from : false) || (getCalendarDisabledDates().before ? date < getCalendarDisabledDates().before! : false) || (getCalendarDisabledDates().after ? date > getCalendarDisabledDates().after! : false)}
+                        />
+                    </PopoverContent>
+                </Popover>
+             </div>
+             <Button onClick={handleFetchRangeRate} className="w-full" disabled={!range?.from || !range?.to}>Compare Rates</Button>
              {rangeResult && (
                 <div className="p-4 bg-muted/50 rounded-lg space-y-2">
                     <div className="flex justify-between items-center">
