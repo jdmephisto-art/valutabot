@@ -7,18 +7,12 @@ import { cn } from '@/lib/utils';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { Button } from '@/components/ui/button';
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command';
-import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { ScrollArea } from './ui/scroll-area';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 
 type CurrencyComboboxProps = {
   value: string;
@@ -60,19 +54,17 @@ export function CurrencyCombobox({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-        <Command>
-          <CommandInput placeholder="Search currency..." />
-          <CommandList>
-            <CommandEmpty>No currency found.</CommandEmpty>
-            <CommandGroup>
+         <ScrollArea className="h-72">
+            <div className="p-1">
               {currencies.map((currency) => (
-                <CommandItem
-                  key={currency.code}
-                  value={currency.code}
-                  onSelect={(currentValue) => {
-                    onChange(currentValue.toUpperCase());
-                    setOpen(false);
-                  }}
+                <Button
+                    variant="ghost"
+                    key={currency.code}
+                    onClick={() => {
+                        onChange(currency.code);
+                        setOpen(false);
+                    }}
+                    className="w-full justify-start font-normal h-auto py-2"
                 >
                   <Check
                     className={cn(
@@ -84,11 +76,10 @@ export function CurrencyCombobox({
                       <span className="font-semibold">{currency.code}</span>
                       <span className="text-xs"> - {currency.name}</span>
                   </div>
-                </CommandItem>
+                </Button>
               ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
+            </div>
+        </ScrollArea>
       </PopoverContent>
     </Popover>
   );
