@@ -87,13 +87,13 @@ export function CurrencyCombobox({
                             setOpen(false);
                         }}
                         className={cn(
-                            "w-full text-left p-2 text-sm flex items-center hover:bg-accent",
+                            "w-full text-left p-2 text-sm flex items-start justify-start hover:bg-accent",
                             value.toLowerCase() === currency.code.toLowerCase() && "bg-accent"
                         )}
                     >
                         <Check
                             className={cn(
-                            'mr-2 h-4 w-4',
+                            'mr-2 h-4 w-4 shrink-0 mt-0.5',
                             value.toLowerCase() === currency.code.toLowerCase() ? 'opacity-100' : 'opacity-0'
                             )}
                         />
