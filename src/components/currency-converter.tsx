@@ -8,8 +8,10 @@ import { ArrowRightLeft } from 'lucide-react';
 import { Button } from './ui/button';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { CurrencyCombobox } from './currency-combobox';
+import { useTranslation } from '@/hooks/use-translation';
 
 export function CurrencyConverter() {
+  const { t } = useTranslation();
   const { currencies } = useCurrencies();
   const [fromCurrency, setFromCurrency] = useState('USD');
   const [toCurrency, setToCurrency] = useState('EUR');
@@ -40,7 +42,7 @@ export function CurrencyConverter() {
   return (
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
       <CardHeader>
-        <CardTitle className="text-lg font-semibold">Currency Converter</CardTitle>
+        <CardTitle className="text-lg font-semibold">{t('converter.title')}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
@@ -49,12 +51,12 @@ export function CurrencyConverter() {
               <CurrencyCombobox 
                 value={fromCurrency}
                 onChange={setFromCurrency}
-                placeholder='From'
+                placeholder={t('converter.from')}
                 disabled={currencies.length === 0}
               />
               <Input
                 type="text"
-                placeholder="Amount"
+                placeholder={t('converter.amount')}
                 value={amount}
                 onChange={handleAmountChange}
               />
@@ -68,12 +70,12 @@ export function CurrencyConverter() {
               <CurrencyCombobox
                 value={toCurrency}
                 onChange={setToCurrency}
-                placeholder='To'
+                placeholder={t('converter.to')}
                 disabled={currencies.length === 0}
               />
               <Input
                 type="text"
-                placeholder="Converted"
+                placeholder={t('converter.converted')}
                 value={convertedAmount}
                 readOnly
                 className="bg-muted/50"

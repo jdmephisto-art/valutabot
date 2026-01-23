@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ChevronsUpDown, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from './ui/scroll-area';
+import { useTranslation } from '@/hooks/use-translation';
 
 type CurrencyComboboxProps = {
   value: string;
@@ -25,6 +26,7 @@ export function CurrencyCombobox({
   placeholder,
   disabled,
 }: CurrencyComboboxProps) {
+  const { t } = useTranslation();
   const { currencies } = useCurrencies();
   const [open, setOpen] = React.useState(false);
   const [searchTerm, setSearchTerm] = React.useState('');
@@ -64,7 +66,7 @@ export function CurrencyCombobox({
           <div className="flex-1 whitespace-normal text-left mr-2">
             {selectedCurrency
               ? `${selectedCurrency.code} - ${selectedCurrency.name}`
-              : placeholder ?? 'Select currency...'}
+              : placeholder ?? t('combobox.placeholder')}
           </div>
           <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -72,7 +74,7 @@ export function CurrencyCombobox({
       <PopoverContent className="w-72 p-0">
         <Command>
           <CommandInput 
-            placeholder="Search currency..." 
+            placeholder={t('combobox.searchPlaceholder')}
             value={searchTerm}
             onValueChange={setSearchTerm}
           />
@@ -104,7 +106,7 @@ export function CurrencyCombobox({
                     </button>
                 ))
             ) : (
-                <div className="p-2 text-center text-sm text-muted-foreground">No currency found.</div>
+                <div className="p-2 text-center text-sm text-muted-foreground">{t('combobox.notFound')}</div>
             )}
           </ScrollArea>
         </Command>

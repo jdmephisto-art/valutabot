@@ -1,6 +1,7 @@
 
 import type { Currency, ExchangeRate, DataSource } from '@/lib/types';
 import { format, subDays, differenceInDays, addDays, startOfDay, parseISO } from 'date-fns';
+import { getLang } from './localization';
 
 
 // --- Pub/Sub for State Management ---
@@ -89,9 +90,10 @@ async function currencyApiFetch(endpoint: string, params: Record<string, string>
 
 
 // --- CURRENCYAPI.NET PROVIDER (v1) ---
-let currencyApiCurrenciesCache: Currency[] | null = null;
+let currencyApiCurrenciesCache: { lang: string, data: Currency[] } | null = null;
 let currencyApiRatesCache: { [key: string]: number } = {};
 let lastCurrencyApiFetchTimestamp = 0;
+
 const PREDEFINED_CURRENCY_NAMES: { [key: string]: string } = {
     "AED": "United Arab Emirates Dirham", "AFN": "Afghan Afghani", "ALL": "Albanian Lek",
     "AMD": "Armenian Dram", "ANG": "Netherlands Antillean Guilder", "AOA": "Angolan Kwanza",
@@ -153,14 +155,78 @@ const PREDEFINED_CURRENCY_NAMES: { [key: string]: string } = {
     "ZWL": "Zimbabwean Dollar"
 };
 
+const PREDEFINED_CURRENCY_NAMES_RU: { [key: string]: string } = {
+    "AED": "Дирхам ОАЭ", "AFN": "Афганский афгани", "ALL": "Албанский лек",
+    "AMD": "Армянский драм", "ANG": "Нидерландский антильский гульден", "AOA": "Ангольская кванза",
+    "ARS": "Аргентинское песо", "AUD": "Австралийский доллар", "AWG": "Арубанский флорин",
+    "AZN": "Азербайджанский манат", "BAM": "Конвертируемая марка Боснии и Герцеговины", "BBD": "Барбадосский доллар",
+    "BDT": "Бангладешская така", "BGN": "Болгарский лев", "BHD": "Бахрейнский динар",
+    "BIF": "Бурундийский франк", "BMD": "Бермудский доллар", "BND": "Брунейский доллар",
+    "BOB": "Боливийский боливиано", "BRL": "Бразильский реал", "BSD": "Багамский доллар",
+    "BTC": "Биткойн", "BTN": "Бутанский нгултрум", "BWP": "Ботсванская пула",
+    "BYN": "Белорусский рубль", "BZD": "Белизский доллар", "CAD": "Канадский доллар",
+    "CDF": "Конголезский франк", "CHF": "Швейцарский франк", "CLF": "Чилийская единица счета (UF)",
+    "CLP": "Чилийское песо", "CNH": "Китайский юань (офшорный)", "CNY": "Китайский юань",
+    "COP": "Колумбийское песо", "CRC": "Коста-риканский колон", "CUC": "Кубинское конвертируемое песо",
+    "CUP": "Кубинское песо", "CVE": "Эскудо Кабо-Верде", "CZK": "Чешская крона",
+    "DJF": "Джибутийский франк", "DKK": "Датская крона", "DOP": "Доминиканское песо",
+    "DZD": "Алжирский динар", "EGP": "Египетский фунт", "ERN": "Эритрейская накфа",
+    "ETB": "Эфиопский быр", "EUR": "Евро", "FJD": "Фиджийский доллар",
+    "FKP": "Фунт Фолклендских островов", "GBP": "Британский фунт стерлингов", "GEL": "Грузинский лари",
+    "GGP": "Гернсийский фунт", "GHS": "Ганский седи", "GIP": "Гибралтарский фунт",
+    "GMD": "Гамбийский даласи", "GNF": "Гвинейский франк", "GTQ": "Гватемальский кетсаль",
+    "GYD": "Гайанский доллар", "HKD": "Гонконгский доллар", "HNL": "Гондурасская лемпира",
+    "HRK": "Хорватская куна", "HTG": "Гаитянский гурд", "HUF": "Венгерский форинт",
+    "IDR": "Индонезийская рупия", "ILS": "Израильский новый шекель", "IMP": "Мэнский фунт",
+    "INR": "Индийская рупия", "IQD": "Иракский динар", "IRR": "Иранский риал",
+    "ISK": "Исландская крона", "JEP": "Джерсийский фунт", "JMD": "Ямайский доллар",
+    "JOD": "Иорданский динар", "JPY": "Японская иена", "KES": "Кенийский шиллинг",
+    "KGS": "Киргизский сом", "KHR": "Камбоджийский риель", "KMF": "Коморский франк",
+    "KPW": "Северокорейская вона", "KRW": "Южнокорейская вона", "KWD": "Кувейтский динар",
+    "KYD": "Доллар Каймановых островов", "KZT": "Казахстанский тенге", "LAK": "Лаосский кип",
+    "LBP": "Ливанский фунт", "LKR": "Шри-ланкийская рупия", "LRD": "Либерийский доллар",
+    "LSL": "Лоти Лесото", "LYD": "Ливийский динар", "MAD": "Марокканский дирхам",
+    "MDL": "Молдавский лей", "MGA": "Малагасийский ариари", "MKD": "Македонский денар",
+    "MMK": "Мьянманский кьят", "MNT": "Монгольский тугрик", "MOP": "Патака Макао",
+    "MRO": "Мавританская угия (до 2018)", "MRU": "Мавританская угия", "MUR": "Маврикийская рупия",
+    "MVR": "Мальдивская руфия", "MWK": "Малавийская квача", "MXN": "Мексиканское песо",
+    "MYR": "Малайзийский ринггит", "MZN": "Мозамбикский метикал", "NAD": "Намибийский доллар",
+    "NGN": "Нигерийская найра", "NIO": "Никарагуанская кордоба", "NOK": "Норвежская крона",
+    "NPR": "Непальская рупия", "NZD": "Новозеландский доллар", "OMR": "Оманский риал",
+    "PAB": "Панамский бальбоа", "PEN": "Перуанский новый соль", "PGK": "Кина Папуа-Новой Гвинеи",
+    "PHP": "Филиппинское песо", "PKR": "Пакистанская рупия", "PLN": "Польский злотый",
+    "PYG": "Парагвайский гуарани", "QAR": "Катарский риал", "RON": "Румынский лей",
+    "RSD": "Сербский динар", "RUB": "Российский рубль", "RWF": "Руандийский франк",
+    "SAR": "Саудовский риял", "SBD": "Доллар Соломоновых островов", "SCR": "Сейшельская рупия",
+    "SDG": "Суданский фунт", "SEK": "Шведская крона", "SGD": "Сингапурский доллар",
+    "SHP": "Фунт Святой Елены", "SLL": "Сьерра-леонский леоне", "SOS": "Сомалийский шиллинг",
+    "SRD": "Суринамский доллар", "SSP": "Южносуданский фунт", "STD": "Добра Сан-Томе и Принсипи (до 2018)",
+    "STN": "Добра Сан-Томе и Принсипи", "SVC": "Сальвадорский колон", "SYP": "Сирийский фунт",
+    "SZL": "Свазилендский лилангени", "THB": "Таиландский бат", "TJS": "Таджикский сомони",
+    "TMT": "Туркменский манат", "TND": "Тунисский динар", "TOP": "Тонганская паанга",
+    "TRY": "Турецкая лира", "TTD": "Доллар Тринидада и Тобаго", "TWD": "Новый тайваньский доллар",
+    "TZS": "Танзанийский шиллинг", "UAH": "Украинская гривна", "UGX": "Угандийский шиллинг",
+    "USD": "Доллар США", "UYU": "Уругвайское песо", "UZS": "Узбекский сум",
+    "VEF": "Венесуэльский боливар фуэрте (старый)", "VES": "Венесуэльский боливар соберано",
+    "VND": "Вьетнамский донг", "VUV": "Вату Вануату", "WST": "Самоанская тала",
+    "XAF": "Франк КФА BEAC", "XAG": "Унция серебра", "XAU": "Унция золота",
+    "XCD": "Восточно-карибский доллар", "XDR": "Специальные права заимствования", "XOF": "Франк КФА BCEAO",
+    "XPD": "Унция палладия", "XPF": "Франк КФП", "XPT": "Унция платины",
+    "YER": "Йеменский риал", "ZAR": "Южноафриканский рэнд", "ZMW": "Замбийская квача",
+    "ZWL": "Зимбабвийский доллар"
+};
+
 
 async function getCurrencyApiCurrencies(): Promise<Currency[]> {
-    if (currencyApiCurrenciesCache) {
-        return currencyApiCurrenciesCache;
+    const lang = getLang();
+    if (currencyApiCurrenciesCache && currencyApiCurrenciesCache.lang === lang) {
+        return currencyApiCurrenciesCache.data;
     }
+    
     await updateCurrencyApiRatesCache('USD'); 
     
     const codes = Object.keys(currencyApiRatesCache);
+    const nameMap = lang === 'ru' ? PREDEFINED_CURRENCY_NAMES_RU : PREDEFINED_CURRENCY_NAMES;
     
     if (!codes.includes('BYN')) {
         codes.push('BYN');
@@ -168,11 +234,11 @@ async function getCurrencyApiCurrencies(): Promise<Currency[]> {
 
     const result: Currency[] = codes.map(code => ({
         code,
-        name: PREDEFINED_CURRENCY_NAMES[code] || `${code} name not found`
+        name: nameMap[code] || PREDEFINED_CURRENCY_NAMES[code] || `${code} name not found`
     }));
     result.sort((a, b) => a.code.localeCompare(b.code));
     
-    currencyApiCurrenciesCache = result;
+    currencyApiCurrenciesCache = { lang, data: result };
     return result;
 }
 
@@ -274,13 +340,24 @@ async function getNbrbCurrencies(): Promise<Currency[]> {
     if (nbrbFullCurrencyInfoCache) {
         currencies = nbrbFullCurrencyInfoCache.map((c: any) => ({
             code: c.Cur_Abbreviation,
-            name: c.Cur_Name, // Use Cyrillic name
+            name: c.Cur_Name_Eng, // NBRB API also has Cur_Name for Russian
         }));
     }
 
-    if (!currencies.some(c => c.code === 'BYN')) {
-        currencies.push({ code: 'BYN', name: 'Белорусский рубль' });
+    if (getLang() === 'ru') {
+        currencies.forEach(c => {
+            const fullInfo = nbrbFullCurrencyInfoCache?.find(fi => fi.Cur_Abbreviation === c.code);
+            if(fullInfo) c.name = fullInfo.Cur_Name;
+        });
+        if (!currencies.some(c => c.code === 'BYN')) {
+            currencies.push({ code: 'BYN', name: 'Белорусский рубль' });
+        }
+    } else {
+         if (!currencies.some(c => c.code === 'BYN')) {
+            currencies.push({ code: 'BYN', name: 'Belarusian Ruble' });
+        }
     }
+
 
     currencies.sort((a, b) => a.code.localeCompare(b.code));
     
@@ -449,4 +526,3 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
     return activeDataSource === 'nbrb' ? getNbrbDynamicsForPeriod(from, to, startDate, endDate) : getCurrencyApiDynamicsForPeriod(from, to, startDate, endDate);
 }
-

@@ -1,13 +1,15 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { getInitialRates, getLatestRates, getDataSource } from '@/lib/currencies';
 import type { ExchangeRate } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { ArrowRight } from 'lucide-react';
+import { useTranslation } from '@/hooks/use-translation';
 
 export function LatestRates() {
+  const { t } = useTranslation();
   const [rates, setRates] = useState<ExchangeRate[]>([]);
   const [changedRates, setChangedRates] = useState<Map<string, 'up' | 'down'>>(new Map());
 
@@ -46,11 +48,11 @@ export function LatestRates() {
   return (
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
       <CardHeader>
-        <CardTitle className="text-lg font-semibold">Latest Rates</CardTitle>
-        <CardDescription>Data from {getDataSource().toUpperCase()}</CardDescription>
+        <CardTitle className="text-lg font-semibold">{t('latestRates.title')}</CardTitle>
+        <CardDescription>{t('latestRates.description', { source: getDataSource().toUpperCase() })}</CardDescription>
       </CardHeader>
       <CardContent>
-        {rates.length === 0 && <p className="text-sm text-muted-foreground">Loading rates...</p>}
+        {rates.length === 0 && <p className="text-sm text-muted-foreground">{t('latestRates.loading')}</p>}
         <div className="space-y-4">
           {rates.map(({ from, to, rate }) => {
             const changeDirection = changedRates.get(`${from}-${to}`);

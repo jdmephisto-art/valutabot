@@ -16,6 +16,7 @@ import type { Alert, DataSource } from '@/lib/types';
 import { findRate, getLatestRates, setDataSource, getDataSource, getInitialRates } from '@/lib/currencies';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent } from './ui/card';
+import { useTranslation } from '@/hooks/use-translation';
 
 type Message = {
   id: string;
@@ -33,6 +34,7 @@ type ActionButtonProps = {
 };
 
 export function ChatInterface() {
+  const { t } = useTranslation();
   const [messages, setMessages] = useState<Message[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [trackedPairs, setTrackedPairs] = useState<Map<string, number>>(new Map());
@@ -46,17 +48,17 @@ export function ChatInterface() {
   }, [componentId]);
 
   const handleShowRates = () => {
-    addMessage({ sender: 'user', text: 'Show latest rates' });
+    addMessage({ sender: 'user', text: t('chat.user.showLatestRates') });
     setTimeout(() => addMessage({ sender: 'bot', component: <LatestRates /> }), 500);
   };
 
   const handleShowConverter = () => {
-    addMessage({ sender: 'user', text: 'I want to convert currency' });
+    addMessage({ sender: 'user', text: t('chat.user.convertCurrency') });
     setTimeout(() => addMessage({ sender: 'bot', component: <CurrencyConverter /> }), 500);
   };
 
   const handleShowAlertManager = () => {
-    addMessage({ sender: 'user', text: 'Set a price alert' });
+    addMessage({ sender: 'user', text: t('chat.user.setPriceAlert') });
     setTimeout(() => {
       addMessage({
         sender: 'bot',
@@ -66,14 +68,14 @@ export function ChatInterface() {
   };
 
   const handleShowHistoricalRates = () => {
-    addMessage({ sender: 'user', text: 'Show historical rates' });
+    addMessage({ sender: 'user', text: t('chat.user.showHistoricalRates') });
     setTimeout(() => {
         addMessage({ sender: 'bot', component: <HistoricalRates /> });
     }, 500);
   }
 
   const handleShowTrackingManager = () => {
-    addMessage({ sender: 'user', text: 'Track currency pair' });
+    addMessage({ sender: 'user', text: t('chat.user.trackCurrencyPair') });
     setTimeout(() => {
         addMessage({ sender: 'bot', component: <TrackingManager 
             trackedPairs={Array.from(trackedPairs.keys())}
@@ -84,7 +86,7 @@ export function ChatInterface() {
   }
   
   const handleShowDataSourceSwitcher = () => {
-    addMessage({ sender: 'user', text: 'Change data source' });
+    addMessage({ sender: 'user', text: t('chat.user.changeDataSource') });
     setTimeout(() => {
       addMessage({
         sender: 'bot',
@@ -101,15 +103,15 @@ export function ChatInterface() {
     setTrackedPairs(new Map());
 
     toast({
-        title: 'Data Source Changed',
-        description: `Now using ${source.toUpperCase()}. The chat has been reset.`,
+        title: t('chat.dataSourceChanged.toast.title'),
+        description: t('chat.dataSourceChanged.toast.description', { source: source.toUpperCase() }),
     });
 
     setTimeout(() => {
         getInitialRates();
         addMessage({
             sender: 'bot',
-            text: `Data source switched to ${source.toUpperCase()}. How can I help?`,
+            text: t('chat.dataSourceChanged.message', { source: source.toUpperCase() }),
             options: actionButtons,
         });
     }, 100);
@@ -120,20 +122,20 @@ export function ChatInterface() {
     if (baseRate === undefined) {
       toast({
         variant: 'destructive',
-        title: 'Error setting alert',
-        description: 'Could not find an exchange rate for the selected pair. Rates might still be loading.',
+        title: t('chat.setAlert.error.toast.title'),
+        description: t('chat.setAlert.error.toast.description'),
       });
       return;
     }
     const newAlert: Alert = { ...data, id: Date.now().toString(), baseRate };
     setAlerts(prev => [...prev, newAlert]);
     toast({
-      title: 'Alert Set!',
-      description: `We'll notify you when ${data.from}/${data.to} goes ${data.condition} ${data.threshold}.`,
+      title: t('chat.setAlert.success.toast.title'),
+      description: t('chat.setAlert.success.toast.description', { from: data.from, to: data.to, condition: data.condition, threshold: data.threshold }),
     });
     addMessage({
         sender: 'bot',
-        text: `OK! Alert set for ${data.from}/${data.to} ${data.condition} ${data.threshold}.`
+        text: t('chat.setAlert.success.message', { from: data.from, to: data.to, condition: data.condition, threshold: data.threshold })
     });
   };
 
@@ -143,13 +145,13 @@ export function ChatInterface() {
     if (rate === undefined) {
       toast({
         variant: 'destructive',
-        title: 'Error tracking pair',
-        description: 'Could not find an exchange rate for the selected pair. Rates might still be loading.',
+        title: t('chat.trackPair.error.toast.title'),
+        description: t('chat.trackPair.error.toast.description'),
       });
       return false;
     }
     setTrackedPairs(prev => new Map(prev).set(pair, rate));
-    addMessage({ sender: 'bot', text: `OK. I'm now tracking ${pair}. I'll notify you of any changes.` });
+    addMessage({ sender: 'bot', text: t('chat.trackPair.success.message', { pair }) });
     return true;
   };
 
@@ -159,23 +161,23 @@ export function ChatInterface() {
       newMap.delete(pair);
       return newMap;
     });
-    addMessage({ sender: 'bot', text: `I've stopped tracking ${pair}.` });
+    addMessage({ sender: 'bot', text: t('chat.trackPair.remove.message', { pair }) });
   };
   
   const actionButtons: ActionButtonProps[] = [
-    { id: 'rates', label: 'Latest Rates', icon: LineChart, action: handleShowRates },
-    { id: 'convert', label: 'Convert', icon: CircleDollarSign, action: handleShowConverter },
-    { id: 'alert', label: 'Set Alert', icon: BellRing, action: handleShowAlertManager },
-    { id: 'history', label: 'History', icon: History, action: handleShowHistoricalRates },
-    { id: 'track', label: 'Track', icon: Eye, action: handleShowTrackingManager },
-    { id: 'settings', label: 'Data Source', icon: Settings, action: handleShowDataSourceSwitcher },
+    { id: 'rates', label: t('action.latestRates'), icon: LineChart, action: handleShowRates },
+    { id: 'convert', label: t('action.convert'), icon: CircleDollarSign, action: handleShowConverter },
+    { id: 'alert', label: t('action.setAlert'), icon: BellRing, action: handleShowAlertManager },
+    { id: 'history', label: t('action.history'), icon: History, action: handleShowHistoricalRates },
+    { id: 'track', label: t('action.track'), icon: Eye, action: handleShowTrackingManager },
+    { id: 'settings', label: t('action.dataSource'), icon: Settings, action: handleShowDataSourceSwitcher },
   ];
 
   useEffect(() => {
     getInitialRates();
     addMessage({
       sender: 'bot',
-      text: 'Hello! I am ValutaBot. How can I assist you today?',
+      text: t('chat.welcome'),
       options: actionButtons,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -206,8 +208,14 @@ export function ChatInterface() {
             if(hasTriggered) {
                 triggeredAlerts.push(alert);
                 toast({
-                    title: 'Price Alert Triggered!',
-                    description: `${alert.from}/${alert.to} is now ${currentRate.toFixed(4)}, which is ${alert.condition} your threshold of ${alert.threshold}.`
+                    title: t('chat.alert.triggered.toast.title'),
+                    description: t('chat.alert.triggered.toast.description', {
+                        from: alert.from,
+                        to: alert.to,
+                        currentRate: currentRate.toFixed(4),
+                        condition: t(`notification.condition.${alert.condition}`),
+                        threshold: alert.threshold
+                    })
                 });
             } else {
                 remainingAlerts.push(alert);
@@ -244,7 +252,7 @@ export function ChatInterface() {
     };
     const interval = setInterval(checkRates, 30000); // Check every 30 seconds
     return () => clearInterval(interval);
-  }, [alerts, toast, addMessage, trackedPairs]);
+  }, [alerts, toast, addMessage, trackedPairs, t]);
 
   return (
     <div className="w-full max-w-md h-[85vh] max-h-[900px] flex flex-col bg-card rounded-2xl shadow-2xl overflow-hidden border">
@@ -255,8 +263,8 @@ export function ChatInterface() {
                  <span className="absolute bottom-0 right-0 block h-3 w-3 rounded-full bg-positive border-2 border-card" />
             </div>
           <div>
-            <h1 className="text-lg font-bold">ValutaBot</h1>
-            <p className="text-sm text-positive">Online</p>
+            <h1 className="text-lg font-bold">{t('chat.title')}</h1>
+            <p className="text-sm text-positive">{t('chat.status.online')}</p>
           </div>
         </div>
       </header>
@@ -305,7 +313,8 @@ export function ChatInterface() {
 }
 
 function AlertCard({ alert, currentRate }: { alert: Alert; currentRate: number }) {
-    const change = ((currentRate - alert.baseRate) / alert.baseRate) * 100;
+  const { t } = useTranslation();
+  const change = ((currentRate - alert.baseRate) / alert.baseRate) * 100;
 
   return (
     <Card className="bg-accent/10 border-accent/50">
@@ -315,13 +324,13 @@ function AlertCard({ alert, currentRate }: { alert: Alert; currentRate: number }
                     <BellRing className="h-5 w-5 text-accent-foreground" />
                 </div>
                 <div>
-                    <h3 className="font-bold text-accent">Price Alert Triggered!</h3>
+                    <h3 className="font-bold text-accent">{t('chat.alert.card.title')}</h3>
                     <p className="text-sm mt-1">
-                        <span className="font-semibold">{alert.from}/{alert.to}</span> is now <span className="font-bold">{currentRate.toFixed(4)}</span>
+                        <span className="font-semibold">{alert.from}/{alert.to}</span> {t('chat.alert.card.now')} <span className="font-bold">{currentRate.toFixed(4)}</span>
                     </p>
                     <p className="text-xs text-muted-foreground">
-                        Your alert was for {alert.condition} {alert.threshold}.
-                        (Change: <span className={cn(change >= 0 ? 'text-positive' : 'text-negative')}>{change.toFixed(2)}%</span>)
+                        {t('chat.alert.card.yourAlert')} {t(`notification.condition.${alert.condition}`)} {alert.threshold}.
+                        ({t('chat.alert.card.change')}: <span className={cn(change >= 0 ? 'text-positive' : 'text-negative')}>{change.toFixed(2)}%</span>)
                     </p>
                 </div>
             </div>
