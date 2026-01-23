@@ -398,8 +398,10 @@ export async function getCurrencies(): Promise<Currency[]> {
 
 export async function getLatestRates(): Promise<ExchangeRate[]> {
     if (activeDataSource === 'nbrb') {
+        await updateNbrbRatesCache();
         return await getNbrbLatestRates();
     } else {
+        await updateCurrencyApiRatesCache();
         return await getCurrencyApiLatestRates();
     }
 }

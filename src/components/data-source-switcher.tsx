@@ -26,9 +26,9 @@ export function DataSourceSwitcher({ currentSource, onSourceChange }: DataSource
                     className="w-full justify-start text-left h-auto py-2"
                 >
                     <Server className="mr-3 h-5 w-5 flex-shrink-0" />
-                    <div>
+                    <div className="flex-1">
                         <p className="font-semibold">{t('dataSource.nbrb')}</p>
-                        <p className="text-xs text-muted-foreground font-normal">{t('dataSource.nbrbDesc')}</p>
+                        <p className="text-xs text-muted-foreground font-normal whitespace-normal">{t('dataSource.nbrbDesc')}</p>
                     </div>
                 </Button>
                 <Button 
@@ -37,9 +37,9 @@ export function DataSourceSwitcher({ currentSource, onSourceChange }: DataSource
                     className="w-full justify-start text-left h-auto py-2"
                 >
                     <Globe className="mr-3 h-5 w-5 flex-shrink-0" />
-                     <div>
+                     <div className="flex-1">
                         <p className="font-semibold">{t('dataSource.currencyapi')}</p>
-                        <p className="text-xs text-muted-foreground font-normal">{t('dataSource.currencyapiDesc')}</p>
+                        <p className="text-xs text-muted-foreground font-normal whitespace-normal">{t('dataSource.currencyapiDesc')}</p>
                     </div>
                 </Button>
                  <p className="text-xs text-muted-foreground pt-2">{t('dataSource.warning')}</p>
