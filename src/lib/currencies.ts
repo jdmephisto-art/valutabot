@@ -56,40 +56,47 @@ async function nbrbApiFetch(endpoint: string) {
     }
 }
 
-async function currencyApiFetch(endpoint: string, params: Record<string, string> = {}) {
-    const apiKey = 'cur_live_tJgYq8LtS5b5bgeCjSg0wHsozFqfe3sR6g485f83';
+async function currencyApiNetFetch(endpoint: string, params: Record<string, string> = {}) {
+    const apiKey = '6431078d4fc8bf5d4097027ee62c2c0dc4e0';
+    const baseUrl = 'https://currencyapi.net/api/v1/';
 
-    const url = new URL(`https://api.currencyapi.com/v3/${endpoint}`);
-    url.searchParams.append('apikey', apiKey);
+    const url = new URL(`${baseUrl}${endpoint}`);
+    url.searchParams.append('key', apiKey);
+    url.searchParams.append('output', 'json');
     Object.entries(params).forEach(([key, value]) => url.searchParams.append(key, value));
 
     try {
-        const response = await fetch(url.toString());
+        const response = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
         if (!response.ok) {
             const errorBody = await response.json();
-            console.error(`CurrencyAPI request failed: ${response.status} ${response.statusText}`, errorBody);
+            console.error(`CurrencyAPI.net request failed: ${response.status} ${response.statusText}`, errorBody);
             return null;
         }
-        return response.json();
+        const data = await response.json();
+        if (data.valid === false || data.error) {
+             console.error(`CurrencyAPI.net request returned an error:`, data.error);
+             return null;
+        }
+        return data;
     } catch (error) {
-        console.error('Failed to fetch from CurrencyAPI:', error);
+        console.error('Failed to fetch from CurrencyAPI.net API:', error);
         return null;
     }
 }
 
 
-// --- CURRENCYAPI.COM PROVIDER (v3) ---
+// --- CURRENCYAPI.NET PROVIDER ---
 async function getCurrencyApiCurrencies(): Promise<Currency[]> {
     if (currencyApiCurrenciesCache) {
         return currencyApiCurrenciesCache;
     }
 
-    const data = await currencyApiFetch('currencies');
+    const data = await currencyApiNetFetch('currencies');
     
-    if (data && data.data) {
-        const result: Currency[] = Object.values(data.data).map((c: any) => ({
-            code: c.code,
-            name: c.name
+    if (data && data.currencies) {
+        const result: Currency[] = Object.entries(data.currencies).map(([code, name]: [string, any]) => ({
+            code,
+            name: name as string
         }));
         result.sort((a, b) => a.code.localeCompare(b.code));
         currencyApiCurrenciesCache = result;
@@ -100,14 +107,10 @@ async function getCurrencyApiCurrencies(): Promise<Currency[]> {
 }
 
 async function updateCurrencyApiRatesCache(baseCurrency = 'USD') {
-    const data = await currencyApiFetch('latest', { base_currency: baseCurrency });
-    if (data && data.data) {
-        const tempCache: { [key: string]: number } = {};
-        Object.values(data.data).forEach((rate: any) => {
-            tempCache[rate.code] = rate.value;
-        });
-        tempCache[baseCurrency] = 1;
-        currencyApiRatesCache = tempCache;
+    const data = await currencyApiNetFetch('rates', { base: baseCurrency });
+    if (data && data.rates) {
+        currencyApiRatesCache = data.rates;
+        currencyApiRatesCache[baseCurrency] = 1;
         lastCurrencyApiFetchTimestamp = Date.now();
     }
 }
@@ -119,6 +122,10 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
     const toRate = currencyApiRatesCache[to];   
     
     if (fromRate && toRate) {
+        // 1 USD = fromRate FROM
+        // 1 USD = toRate TO
+        // -> fromRate FROM = toRate TO
+        // -> 1 FROM = (toRate / fromRate) TO
         return toRate / fromRate;
     }
     return undefined;
@@ -141,37 +148,31 @@ async function getCurrencyApiLatestRates(): Promise<ExchangeRate[]> {
 
 async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
     const formattedDate = format(date, 'yyyy-MM-dd');
-    const data = await currencyApiFetch('historical', { date: formattedDate, base_currency: from, currencies: to });
-    if (data && data.data && data.data[to]) {
-        return data.data[to].value;
+    const data = await currencyApiNetFetch('history', { date: formattedDate, base: from });
+    if (data && data.rates && data.rates[to]) {
+        return data.rates[to];
     }
     return undefined;
 }
 
 async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string, rate: number }[]> {
-    const result: { date: string, rate: number }[] = [];
-    let currentDate = startDate;
-
-    const promises = [];
-    while (currentDate <= endDate) {
-        promises.push(getCurrencyApiHistoricalRate(from, to, currentDate));
-        currentDate = addDays(currentDate, 1);
-    }
-
-    const rates = await Promise.all(promises);
-
-    currentDate = startDate;
-    for (const rate of rates) {
-        if (rate !== undefined) {
-            result.push({
-                date: format(currentDate, 'dd.MM'),
-                rate: rate
-            });
-        }
-        currentDate = addDays(currentDate, 1);
-    }
+    const formattedStart = format(startDate, 'yyyy-MM-dd');
+    const formattedEnd = format(endDate, 'yyyy-MM-dd');
     
-    return result;
+    const data = await currencyApiNetFetch('timeseries', {
+        start_date: formattedStart,
+        end_date: formattedEnd,
+        base: from,
+    });
+
+    if (data && data.rates) {
+        return Object.entries(data.rates).map(([date, dailyRates]: [string, any]) => ({
+            date: format(parseISO(date), 'dd.MM'),
+            rate: dailyRates[to]
+        })).filter(d => d.rate !== undefined);
+    }
+
+    return [];
 }
 
 
