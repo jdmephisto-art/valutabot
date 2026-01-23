@@ -2,15 +2,18 @@
 
 import * as React from 'react';
 import { Check, ChevronsUpDown } from 'lucide-react';
-
-import { cn } from '@/lib/utils';
-import { useCurrencies } from '@/hooks/use-currencies';
 import { Button } from '@/components/ui/button';
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
+  Command,
+  CommandInput,
+  CommandList,
+  CommandItem,
+  CommandEmpty,
+  CommandGroup,
+} from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { useCurrencies } from '@/hooks/use-currencies';
+import { cn } from '@/lib/utils';
 import { ScrollArea } from './ui/scroll-area';
 
 type CurrencyComboboxProps = {
@@ -28,11 +31,27 @@ export function CurrencyCombobox({
 }: CurrencyComboboxProps) {
   const { currencies } = useCurrencies();
   const [open, setOpen] = React.useState(false);
+  const [searchTerm, setSearchTerm] = React.useState('');
+
+  const filteredCurrencies =
+    searchTerm.length === 0
+      ? currencies
+      : currencies.filter(
+          (currency) =>
+            currency.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            currency.name.toLowerCase().includes(searchTerm.toLowerCase())
+        );
 
   const selectedCurrency = React.useMemo(
     () => currencies.find((currency) => currency.code.toLowerCase() === value.toLowerCase()),
     [currencies, value]
   );
+
+  React.useEffect(() => {
+    if (!open) {
+      setSearchTerm('');
+    }
+  }, [open]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -47,38 +66,48 @@ export function CurrencyCombobox({
           <div className="whitespace-normal text-left text-xs leading-tight">
             {selectedCurrency
               ? `${selectedCurrency.code} - ${selectedCurrency.name}`
-              : (placeholder ?? 'Select currency...')}
+              : placeholder ?? 'Select currency...'}
           </div>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-0">
-         <ScrollArea className="h-72">
-            <div className="p-1">
-              {currencies.map((currency) => (
-                <Button
-                    variant="ghost"
+        <Command>
+          <CommandInput
+            placeholder="Search currency..."
+            value={searchTerm}
+            onValueChange={setSearchTerm}
+          />
+          <CommandList>
+            <ScrollArea className="h-72">
+              <CommandEmpty>No currency found.</CommandEmpty>
+              <CommandGroup>
+                {filteredCurrencies.map((currency) => (
+                  <CommandItem
                     key={currency.code}
-                    onClick={() => {
-                        onChange(currency.code);
-                        setOpen(false);
+                    onSelect={() => {
+                      onChange(currency.code);
+                      setOpen(false);
                     }}
-                    className="w-full justify-start font-normal h-auto py-2"
-                >
-                  <Check
-                    className={cn(
-                      'mr-2 h-4 w-4',
-                      value.toLowerCase() === currency.code.toLowerCase() ? 'opacity-100' : 'opacity-0'
-                    )}
-                  />
-                   <div className="flex-1 whitespace-normal text-left">
+                  >
+                    <Check
+                      className={cn(
+                        'mr-2 h-4 w-4',
+                        value.toLowerCase() === currency.code.toLowerCase()
+                          ? 'opacity-100'
+                          : 'opacity-0'
+                      )}
+                    />
+                    <div className="flex-1 whitespace-normal text-left">
                       <span className="font-semibold">{currency.code}</span>
                       <span className="text-xs"> - {currency.name}</span>
-                  </div>
-                </Button>
-              ))}
-            </div>
-        </ScrollArea>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </ScrollArea>
+          </CommandList>
+        </Command>
       </PopoverContent>
     </Popover>
   );
