@@ -61,12 +61,17 @@ export function CurrencyCombobox({
           role="combobox"
           aria-expanded={open}
           disabled={disabled || currencies.length === 0}
-          className="w-full h-auto min-h-10 justify-between"
+          className="w-full h-10 justify-between"
         >
-          <div className="flex-1 whitespace-normal text-left mr-2">
+          <div className="flex items-baseline flex-1 text-left mr-2 overflow-hidden">
             {selectedCurrency
-              ? `${selectedCurrency.code} - ${getCurrencyName(selectedCurrency.code)}`
-              : placeholder ?? t('combobox.placeholder')}
+              ? <>
+                  <span className="font-medium text-sm">{selectedCurrency.code}</span>
+                  <span className="text-muted-foreground text-xs ml-2 truncate">
+                    {getCurrencyName(selectedCurrency.code)}
+                  </span>
+                </>
+              : <span className="text-sm">{placeholder ?? t('combobox.placeholder')}</span>}
           </div>
           <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -99,8 +104,8 @@ export function CurrencyCombobox({
                             )}
                         />
                         <div className="flex-1 whitespace-normal text-left">
-                            <span className="font-semibold">{currency.code}</span>
-                            <span className="text-xs"> - {getCurrencyName(currency.code)}</span>
+                           <span className="font-semibold">{currency.code}</span>
+                           <span className="text-xs ml-1">{getCurrencyName(currency.code)}</span>
                         </div>
                     </button>
                 ))

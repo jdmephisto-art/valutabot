@@ -13,7 +13,7 @@ import { useCurrencies } from '@/hooks/use-currencies';
 import { useTranslation } from '@/hooks/use-translation';
 import { CurrencyCombobox } from './currency-combobox';
 
-const getTrackingSchema = (t: (key: string) => string) => z.object({
+const getTrackingSchema = (t: (key: string, params?: Record<string, string | number>) => string) => z.object({
     from: z.string().min(1, t('validation.selectCurrency')),
     to: z.string().min(1, t('validation.selectCurrency')),
   }).refine(data => data.from !== data.to, {
@@ -76,7 +76,7 @@ export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initial
                 control={form.control}
                 name="from"
                 render={({ field }) => (
-                  <FormItem className="flex-1">
+                  <FormItem className="flex-1 min-w-0">
                     <FormLabel>{t('tracking.from')}</FormLabel>
                     <FormControl>
                       <CurrencyCombobox
@@ -94,7 +94,7 @@ export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initial
                 control={form.control}
                 name="to"
                 render={({ field }) => (
-                  <FormItem className="flex-1">
+                  <FormItem className="flex-1 min-w-0">
                     <FormLabel>{t('tracking.to')}</FormLabel>
                     <FormControl>
                       <CurrencyCombobox

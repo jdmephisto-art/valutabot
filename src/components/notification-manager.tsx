@@ -18,7 +18,7 @@ type NotificationManagerProps = {
     onSetAlert: (data: z.infer<ReturnType<typeof getAlertSchema>>) => void;
 }
 
-const getAlertSchema = (t: (key: string) => string) => z.object({
+const getAlertSchema = (t: (key: string, params?: Record<string, string | number>) => string) => z.object({
     from: z.string().min(1, t('validation.selectCurrency')),
     to: z.string().min(1, t('validation.selectCurrency')),
     threshold: z.coerce.number().positive(t('validation.positiveThreshold')),
@@ -61,7 +61,7 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
                 control={form.control}
                 name="from"
                 render={({ field }) => (
-                  <FormItem className="flex-1">
+                  <FormItem className="flex-1 min-w-0">
                     <FormLabel>{t('notifications.from')}</FormLabel>
                     <FormControl>
                       <CurrencyCombobox
@@ -79,7 +79,7 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
                 control={form.control}
                 name="to"
                 render={({ field }) => (
-                  <FormItem className="flex-1">
+                  <FormItem className="flex-1 min-w-0">
                     <FormLabel>{t('notifications.to')}</FormLabel>
                      <FormControl>
                       <CurrencyCombobox
