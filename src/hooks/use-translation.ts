@@ -1,20 +1,46 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-
-// This is a placeholder file to prevent build errors after rolling back the localization feature.
-// It is not intended to be used.
+import { getLang, setLang as setLangInLib, subscribe, translations, getCurrencyName as getCurrencyNameFromLib } from '@/lib/localization';
+import { enUS, ru } from 'date-fns/locale';
+import type { Language } from '@/lib/types';
 
 export function useTranslation() {
+    const [lang, setLangState] = useState(getLang());
+
+    useEffect(() => {
+        const unsubscribe = subscribe(setLangState);
+        return () => unsubscribe();
+    }, []);
+    
+    const setLang = (newLang: Language) => {
+        setLangInLib(newLang);
+    };
+
     const t = useCallback((key: string, params?: Record<string, string | number>) => {
-        const keyParts = key.split('.');
-        let result = keyParts[keyParts.length - 1];
-        if (params) {
+        const keys = key.split('.');
+        let result: any = translations[lang];
+        for (const k of keys) {
+            result = result?.[k];
+            if (result === undefined) {
+                // Return last part of key as fallback
+                return keys[keys.length - 1];
+            }
+        }
+
+        if (typeof result === 'string' && params) {
             Object.keys(params).forEach(p => {
                 result = result.replace(`{${p}}`, String(params[p]));
             });
         }
-        return result;
-    }, []);
+        
+        return result ?? key;
+    }, [lang]);
 
-    return { t, lang: 'ru' };
+    const getCurrencyName = useCallback((code: string) => {
+        return getCurrencyNameFromLib(code, lang);
+    }, [lang]);
+    
+    const dateLocale = lang === 'ru' ? ru : enUS;
+
+    return { t, lang, setLang, getCurrencyName, dateLocale };
 }
