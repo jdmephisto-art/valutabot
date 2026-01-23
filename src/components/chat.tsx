@@ -17,6 +17,7 @@ import { findRate, getLatestRates, setDataSource, getDataSource, getInitialRates
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/hooks/use-translation';
 import { Card, CardContent } from './ui/card';
+import { setLang } from '@/lib/localization';
 
 type Message = {
   id: string;
@@ -42,22 +43,23 @@ export function ChatInterface() {
   const { toast } = useToast();
   const componentId = useId();
   const { t, lang } = useTranslation();
+  const isInitialMount = useRef(true);
 
   const addMessage = useCallback((message: Omit<Message, 'id'>) => {
     setMessages(prev => [...prev, { ...message, id: `${componentId}-${prev.length}` }]);
   }, [componentId]);
 
-  const handleShowRates = () => {
+  const handleShowRates = useCallback(() => {
     addMessage({ sender: 'user', text: t('chat.user.showRates') });
     setTimeout(() => addMessage({ sender: 'bot', component: <LatestRates /> }), 500);
-  };
+  }, [addMessage, t]);
 
-  const handleShowConverter = () => {
+  const handleShowConverter = useCallback(() => {
     addMessage({ sender: 'user', text: t('chat.user.showConverter') });
     setTimeout(() => addMessage({ sender: 'bot', component: <CurrencyConverter /> }), 500);
-  };
+  }, [addMessage, t]);
 
-  const handleShowAlertManager = () => {
+  const handleShowAlertManager = useCallback(() => {
     addMessage({ sender: 'user', text: t('chat.user.setAlert') });
     setTimeout(() => {
       addMessage({
@@ -65,16 +67,16 @@ export function ChatInterface() {
         component: <NotificationManager onSetAlert={handleSetAlert} />,
       });
     }, 500);
-  };
+  }, [addMessage, t]);
 
-  const handleShowHistoricalRates = () => {
+  const handleShowHistoricalRates = useCallback(() => {
     addMessage({ sender: 'user', text: t('chat.user.showHistory') });
     setTimeout(() => {
         addMessage({ sender: 'bot', component: <HistoricalRates /> });
     }, 500);
-  }
+  }, [addMessage, t]);
 
-  const handleShowTrackingManager = () => {
+  const handleShowTrackingManager = useCallback(() => {
     addMessage({ sender: 'user', text: t('chat.user.trackPair') });
     setTimeout(() => {
         addMessage({ sender: 'bot', component: <TrackingManager 
@@ -83,9 +85,9 @@ export function ChatInterface() {
             onRemovePair={handleRemoveTrackedPair}
         /> });
     }, 500);
-  }
+  }, [addMessage, t]);
   
-  const handleShowDataSourceSwitcher = () => {
+  const handleShowDataSourceSwitcher = useCallback(() => {
     addMessage({ sender: 'user', text: t('chat.user.switchSource') });
     setTimeout(() => {
       addMessage({
@@ -93,23 +95,12 @@ export function ChatInterface() {
         component: <DataSourceSwitcher currentSource={dataSource} onSourceChange={handleDataSourceChange} />,
       });
     }, 500);
-  };
+  }, [addMessage, t, dataSource]);
 
   const handleDataSourceChange = (source: DataSource) => {
     setDataSource(source);
     setDataSourceState(source);
-    setMessages([]);
-    setAlerts([]);
-    setTrackedPairs(new Map());
-
-    toast({
-        title: t('dataSource.toast'),
-        description: t('dataSource.toastDesc', { source: source.toUpperCase() }),
-    });
-
-    setTimeout(() => {
-        getInitialRates();
-    }, 100);
+    setLang(source === 'nbrb' ? 'ru' : 'en');
   };
 
   useEffect(() => {
@@ -122,16 +113,26 @@ export function ChatInterface() {
       { id: 'settings', label: t('chat.switchSource'), icon: Settings, action: handleShowDataSourceSwitcher },
     ];
     
-    // This effect runs when the language changes, resetting the chat.
+    if (isInitialMount.current) {
+        isInitialMount.current = false;
+    } else {
+        toast({
+            title: t('dataSource.toast'),
+            description: t('dataSource.toastDesc', { source: getDataSource().toUpperCase() }),
+        });
+    }
+    
     getInitialRates();
-    setMessages([]); // Clear previous messages
+    setMessages([]);
+    setAlerts([]);
+    setTrackedPairs(new Map());
+
     addMessage({
       sender: 'bot',
       text: t('chat.placeholder'),
       options: actionButtons,
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lang]);
+  }, [lang, t, addMessage, handleShowRates, handleShowConverter, handleShowAlertManager, handleShowHistoricalRates, handleShowTrackingManager, handleShowDataSourceSwitcher]);
 
 
   const handleSetAlert = (data: Omit<Alert, 'id' | 'baseRate'>) => {
