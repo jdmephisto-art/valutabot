@@ -7,7 +7,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from '@/components/ui/select';
 import { ScrollArea } from './ui/scroll-area';
 
@@ -33,8 +32,10 @@ export function CurrencyCombobox({
 
   return (
     <Select onValueChange={onChange} value={value} disabled={disabled || currencies.length === 0}>
-      <SelectTrigger className="w-full [&>span]:truncate">
-         {selectedCurrency ? `${selectedCurrency.code} - ${selectedCurrency.name}` : (placeholder ?? 'Select currency...')}
+      <SelectTrigger className="w-full h-auto min-h-10 text-left">
+         <div className="whitespace-normal flex-1 mr-2">
+            {selectedCurrency ? `${selectedCurrency.code} - ${selectedCurrency.name}` : (placeholder ?? 'Select currency...')}
+         </div>
       </SelectTrigger>
       <SelectContent className="w-[300px]">
         <ScrollArea className="h-72">
