@@ -8,10 +8,8 @@ import { ArrowRightLeft } from 'lucide-react';
 import { Button } from './ui/button';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { CurrencyCombobox } from './currency-combobox';
-import { useTranslation } from '@/hooks/use-translation';
 
 export function CurrencyConverter() {
-  const { t } = useTranslation();
   const { currencies } = useCurrencies();
   const [fromCurrency, setFromCurrency] = useState('USD');
   const [toCurrency, setToCurrency] = useState('EUR');
@@ -42,7 +40,7 @@ export function CurrencyConverter() {
   return (
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
       <CardHeader>
-        <CardTitle className="text-lg font-semibold">{t('converter.title')}</CardTitle>
+        <CardTitle className="text-lg font-semibold">Конвертер валют</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
@@ -51,12 +49,12 @@ export function CurrencyConverter() {
               <CurrencyCombobox 
                 value={fromCurrency}
                 onChange={setFromCurrency}
-                placeholder={t('converter.from')}
+                placeholder='Из'
                 disabled={currencies.length === 0}
               />
               <Input
                 type="text"
-                placeholder={t('converter.amount')}
+                placeholder='Сумма'
                 value={amount}
                 onChange={handleAmountChange}
               />
@@ -70,12 +68,12 @@ export function CurrencyConverter() {
               <CurrencyCombobox
                 value={toCurrency}
                 onChange={setToCurrency}
-                placeholder={t('converter.to')}
+                placeholder='В'
                 disabled={currencies.length === 0}
               />
               <Input
                 type="text"
-                placeholder={t('converter.converted')}
+                placeholder='Конвертировано'
                 value={convertedAmount}
                 readOnly
                 className="bg-muted/50"

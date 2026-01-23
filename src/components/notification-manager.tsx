@@ -11,30 +11,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AlertTriangle, BellPlus } from 'lucide-react';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { CurrencyCombobox } from './currency-combobox';
-import { useTranslation } from '@/hooks/use-translation';
-import { useMemo } from 'react';
 
-const createAlertSchema = (t: (key: any) => string) => z.object({
-    from: z.string().min(1, t('notification.error.selectCurrency')),
-    to: z.string().min(1, t('notification.error.selectCurrency')),
-    threshold: z.coerce.number().positive(t('notification.error.positiveThreshold')),
-    condition: z.enum(['above', 'below'], { required_error: t('notification.error.selectCondition') })
+const alertSchema = z.object({
+    from: z.string().min(1, 'Пожалуйста, выберите валюту.'),
+    to: z.string().min(1, 'Пожалуйста, выберите валюту.'),
+    threshold: z.coerce.number().positive('Порог должен быть положительным числом.'),
+    condition: z.enum(['above', 'below'], { required_error: 'Пожалуйста, выберите условие.' })
   }).refine(data => data.from !== data.to, {
-    message: t('notification.error.differentCurrencies'),
+    message: 'Валюты должны быть разными.',
     path: ["to"],
   });
 
-type AlertFormValues = z.infer<ReturnType<typeof createAlertSchema>>;
+type AlertFormValues = z.infer<typeof alertSchema>;
 
 type NotificationManagerProps = {
     onSetAlert: (data: AlertFormValues) => void;
 }
 
 export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
-  const { t } = useTranslation();
   const { currencies } = useCurrencies();
-
-  const alertSchema = useMemo(() => createAlertSchema(t), [t]);
 
   const form = useForm<AlertFormValues>({
     resolver: zodResolver(alertSchema),
@@ -50,7 +45,7 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
       <CardHeader>
         <CardTitle className="text-lg font-semibold flex items-center gap-2">
             <AlertTriangle />
-            {t('notification.title')}
+            Установить оповещение о курсе
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -62,12 +57,12 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
                 name="from"
                 render={({ field }) => (
                   <FormItem className="flex-1">
-                    <FormLabel>{t('notification.from')}</FormLabel>
+                    <FormLabel>Из</FormLabel>
                     <FormControl>
                       <CurrencyCombobox
                           value={field.value}
                           onChange={field.onChange}
-                          placeholder={t('notification.from')}
+                          placeholder='Из'
                           disabled={currencies.length === 0}
                       />
                     </FormControl>
@@ -80,12 +75,12 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
                 name="to"
                 render={({ field }) => (
                   <FormItem className="flex-1">
-                    <FormLabel>{t('notification.to')}</FormLabel>
+                    <FormLabel>В</FormLabel>
                      <FormControl>
                       <CurrencyCombobox
                           value={field.value}
                           onChange={field.onChange}
-                          placeholder={t('notification.to')}
+                          placeholder='В'
                           disabled={currencies.length === 0}
                       />
                     </FormControl>
@@ -101,14 +96,14 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
                 name="condition"
                 render={({ field }) => (
                     <FormItem className="w-1/3">
-                    <FormLabel>{t('notification.condition')}</FormLabel>
+                    <FormLabel>Условие</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                        <SelectItem value="above">{t('notification.condition.above')}</SelectItem>
-                        <SelectItem value="below">{t('notification.condition.below')}</SelectItem>
+                        <SelectItem value="above">Выше</SelectItem>
+                        <SelectItem value="below">Ниже</SelectItem>
                         </SelectContent>
                     </Select>
                     <FormMessage />
@@ -120,7 +115,7 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
                 name="threshold"
                 render={({ field }) => (
                     <FormItem className="flex-1">
-                    <FormLabel>{t('notification.threshold')}</FormLabel>
+                    <FormLabel>Порог</FormLabel>
                     <FormControl>
                         <Input type="number" step="0.0001" placeholder="e.g., 0.95" {...field} />
                     </FormControl>
@@ -132,7 +127,7 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
 
             <Button type="submit" className="w-full">
               <BellPlus className="mr-2 h-4 w-4" />
-              {t('notification.setAlert')}
+              Установить оповещение
             </Button>
           </form>
         </Form>

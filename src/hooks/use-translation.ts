@@ -1,25 +1,20 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { t as translate, getLang, Translations } from '@/lib/localization';
-import { subscribe } from '@/lib/currencies';
+
+// This is a placeholder file to prevent build errors after rolling back the localization feature.
+// It is not intended to be used.
 
 export function useTranslation() {
-    const [lang, setLang] = useState(getLang());
-
-    useEffect(() => {
-        const handleLanguageChange = () => {
-            setLang(getLang());
-        };
-        const unsubscribe = subscribe(handleLanguageChange);
-        
-        handleLanguageChange();
-
-        return () => unsubscribe();
+    const t = useCallback((key: string, params?: Record<string, string | number>) => {
+        const keyParts = key.split('.');
+        let result = keyParts[keyParts.length - 1];
+        if (params) {
+            Object.keys(params).forEach(p => {
+                result = result.replace(`{${p}}`, String(params[p]));
+            });
+        }
+        return result;
     }, []);
 
-    const t = useCallback((key: keyof Translations, params?: Record<string, string | number>) => {
-        return translate(key, params);
-    }, []);
-
-    return { t, lang };
+    return { t, lang: 'ru' };
 }

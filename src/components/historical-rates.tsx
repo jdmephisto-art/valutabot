@@ -16,11 +16,9 @@ import { DateRange } from 'react-day-picker';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useToast } from '@/hooks/use-toast';
 import { CurrencyCombobox } from './currency-combobox';
-import { useTranslation } from '@/hooks/use-translation';
 
 
 export function HistoricalRates() {
-  const { t } = useTranslation();
   const { currencies } = useCurrencies();
   const { toast } = useToast();
   const [fromCurrency, setFromCurrency] = useState('USD');
@@ -74,8 +72,8 @@ export function HistoricalRates() {
     if (getDataSource() === 'currencyapi' && range?.from && range.to && differenceInDays(range.to, range.from) > 30) {
         toast({
             variant: 'destructive',
-            title: t('historical.rangeTooLarge'),
-            description: t('historical.rangeTooLarge.description')
+            title: 'Диапазон дат слишком большой',
+            description: 'Пожалуйста, выберите диапазон 30 дней или меньше для CurrencyAPI, чтобы не превышать лимиты API.'
         });
         return;
     }
@@ -97,7 +95,7 @@ export function HistoricalRates() {
         <CurrencyCombobox
           value={fromCurrency}
           onChange={setFromCurrency}
-          placeholder={t('converter.from')}
+          placeholder='Из'
           disabled={currencies.length === 0}
         />
       </div>
@@ -105,7 +103,7 @@ export function HistoricalRates() {
         <CurrencyCombobox
           value={toCurrency}
           onChange={setToCurrency}
-          placeholder={t('converter.to')}
+          placeholder='В'
           disabled={currencies.length === 0}
         />
       </div>
@@ -119,15 +117,15 @@ export function HistoricalRates() {
   return (
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
       <CardHeader>
-        <CardTitle className="text-lg font-semibold">{t('historical.title')}</CardTitle>
-        <CardDescription>{t('historical.description', { source: getDataSource().toUpperCase() })}</CardDescription>
+        <CardTitle className="text-lg font-semibold">Исторические данные</CardTitle>
+        <CardDescription>Данные из {getDataSource().toUpperCase()}</CardDescription>
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="dynamics">
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="dynamics">{t('historical.tab.dynamics')}</TabsTrigger>
-            <TabsTrigger value="single">{t('historical.tab.single')}</TabsTrigger>
-            <TabsTrigger value="range">{t('historical.tab.range')}</TabsTrigger>
+            <TabsTrigger value="dynamics">Динамика</TabsTrigger>
+            <TabsTrigger value="single">Одна дата</TabsTrigger>
+            <TabsTrigger value="range">Диапазон</TabsTrigger>
           </TabsList>
           
           <TabsContent value="dynamics" className="space-y-4 pt-4">
@@ -136,7 +134,7 @@ export function HistoricalRates() {
               <PopoverTrigger asChild>
                 <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dynamicsRange && "text-muted-foreground")}>
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dynamicsRange?.from ? (dynamicsRange.to ? <>{format(dynamicsRange.from, "LLL dd, y")} - {format(dynamicsRange.to, "LLL dd, y")}</> : format(dynamicsRange.from, "LLL dd, y")) : <span>{t('historical.pickDateRange')}</span>}
+                  {dynamicsRange?.from ? (dynamicsRange.to ? <>{format(dynamicsRange.from, "LLL dd, y")} - {format(dynamicsRange.to, "LLL dd, y")}</> : format(dynamicsRange.from, "LLL dd, y")) : <span>Выберите диапазон дат</span>}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
@@ -152,11 +150,11 @@ export function HistoricalRates() {
               </PopoverContent>
             </Popover>
             <Button onClick={handleFetchDynamics} className="w-full" disabled={fetchingDynamics}>
-                {fetchingDynamics ? t('historical.loading') : t('historical.showDynamics')}
+                {fetchingDynamics ? 'Загрузка...' : 'Показать динамику'}
             </Button>
             {dynamicsData.length > 0 && (
                 <div className="h-[250px] w-full">
-                    <p className="text-xs text-center text-muted-foreground pb-2">{t('historical.dynamics.description', {from: fromCurrency, to: toCurrency})}</p>
+                    <p className="text-xs text-center text-muted-foreground pb-2">Динамика курса для {fromCurrency}/{toCurrency}</p>
                     <ChartContainer config={chartConfig}>
                         <AreaChart accessibilityLayer data={dynamicsData} margin={{ left: -20, right: 10, top: 10, bottom: 0 }}>
                             <CartesianGrid vertical={false} />
@@ -175,7 +173,7 @@ export function HistoricalRates() {
                     </ChartContainer>
                 </div>
             )}
-             {!fetchingDynamics && dynamicsData.length === 0 && <p className="text-xs text-center text-muted-foreground pt-2">{t('historical.dynamics.error')}</p>}
+             {!fetchingDynamics && dynamicsData.length === 0 && <p className="text-xs text-center text-muted-foreground pt-2">Не удалось получить динамику для выбранного периода. Выберите другой диапазон дат.</p>}
           </TabsContent>
 
           <TabsContent value="single" className="space-y-4 pt-4">
@@ -184,19 +182,19 @@ export function HistoricalRates() {
               <PopoverTrigger asChild>
                 <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {date ? format(date, "PPP") : <span>{t('historical.pickDate')}</span>}
+                  {date ? format(date, "PPP") : <span>Выберите дату</span>}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus disabled={getCalendarDisabledDates()} /></PopoverContent>
             </Popover>
-            <Button onClick={handleFetchSingleRate} className="w-full">{t('historical.getRate')}</Button>
+            <Button onClick={handleFetchSingleRate} className="w-full">Получить курс</Button>
             {singleRate !== null && singleRate !== undefined && (
               <div className="text-center p-4 bg-muted/50 rounded-lg">
-                <p className="text-sm text-muted-foreground">{t('historical.rateOn')} {date ? format(date, "PPP") : ''}</p>
+                <p className="text-sm text-muted-foreground">Курс на {date ? format(date, "PPP") : ''}</p>
                 <p className="text-2xl font-bold font-mono">{singleRate.toFixed(4)}</p>
               </div>
             )}
-             {(singleRate === null || singleRate === undefined) && <p className="text-xs text-center text-muted-foreground">{t('historical.rateError')}</p>}
+             {(singleRate === null || singleRate === undefined) && <p className="text-xs text-center text-muted-foreground">Не удалось получить курс для выбранной даты.</p>}
           </TabsContent>
 
           <TabsContent value="range" className="space-y-4 pt-4">
@@ -206,7 +204,7 @@ export function HistoricalRates() {
                     <PopoverTrigger asChild>
                         <Button id="start-date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !range?.from && "text-muted-foreground")}>
                             <CalendarIcon className="mr-2 h-4 w-4" />
-                            {range?.from ? format(range.from, "LLL dd, y") : <span>{t('historical.startDate')}</span>}
+                            {range?.from ? format(range.from, "LLL dd, y") : <span>Начальная дата</span>}
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
@@ -223,7 +221,7 @@ export function HistoricalRates() {
                     <PopoverTrigger asChild>
                         <Button id="end-date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !range?.to && "text-muted-foreground")}>
                             <CalendarIcon className="mr-2 h-4 w-4" />
-                            {range?.to ? format(range.to, "LLL dd, y") : <span>{t('historical.endDate')}</span>}
+                            {range?.to ? format(range.to, "LLL dd, y") : <span>Конечная дата</span>}
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
@@ -237,19 +235,19 @@ export function HistoricalRates() {
                     </PopoverContent>
                 </Popover>
              </div>
-             <Button onClick={handleFetchRangeRate} className="w-full" disabled={!range?.from || !range?.to}>{t('historical.compareRates')}</Button>
+             <Button onClick={handleFetchRangeRate} className="w-full" disabled={!range?.from || !range?.to}>Сравнить курсы</Button>
              {rangeResult && (
                 <div className="p-4 bg-muted/50 rounded-lg space-y-2">
                     <div className="flex justify-between items-center">
-                        <span className="text-sm text-muted-foreground">{t('historical.start')} ({range?.from ? format(range.from, "LLL dd") : ''}):</span>
+                        <span className="text-sm text-muted-foreground">Начало ({range?.from ? format(range.from, "LLL dd") : ''}):</span>
                         <span className="font-mono font-medium">{rangeResult.startRate.toFixed(4)}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                        <span className="text-sm text-muted-foreground">{t('historical.end')} ({range?.to ? format(range.to, "LLL dd") : ''}):</span>
+                        <span className="text-sm text-muted-foreground">Конец ({range?.to ? format(range.to, "LLL dd") : ''}):</span>
                         <span className="font-mono font-medium">{rangeResult.endRate.toFixed(4)}</span>
                     </div>
                     <div className="flex justify-between items-center pt-2 border-t">
-                        <span className="text-sm font-semibold">{t('historical.change')}:</span>
+                        <span className="text-sm font-semibold">Изменение:</span>
                         <span className={cn("font-semibold flex items-center gap-1", rangeResult.endRate >= rangeResult.startRate ? 'text-positive' : 'text-negative')}>
                             {rangeResult.endRate >= rangeResult.startRate ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
                             {(((rangeResult.endRate - rangeResult.startRate) / rangeResult.startRate) * 100).toFixed(2)}%
