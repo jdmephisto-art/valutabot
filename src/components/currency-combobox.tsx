@@ -68,13 +68,9 @@ export function CurrencyCombobox({
               {currencies.map((currency) => (
                 <CommandItem
                   key={currency.code}
-                  value={`${currency.code} ${currency.name}`}
+                  value={currency.code}
                   onSelect={(currentValue) => {
-                    // Find the currency by matching the combined `value` string.
-                    const selectedCode = currencies.find(c => `${c.code.toLowerCase()} ${c.name.toLowerCase()}` === currentValue.toLowerCase())?.code;
-                    if (selectedCode) {
-                      onChange(selectedCode);
-                    }
+                    onChange(currentValue.toUpperCase());
                     setOpen(false);
                   }}
                 >
