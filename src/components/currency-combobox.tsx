@@ -1,24 +1,14 @@
 'use client';
 
 import * as React from 'react';
-import { Check, ChevronsUpDown } from 'lucide-react';
-
-import { cn } from '@/lib/utils';
 import { useCurrencies } from '@/hooks/use-currencies';
-import { Button } from '@/components/ui/button';
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { ScrollArea } from './ui/scroll-area';
 
 type CurrencyComboboxProps = {
@@ -35,74 +25,25 @@ export function CurrencyCombobox({
   disabled,
 }: CurrencyComboboxProps) {
   const { currencies } = useCurrencies();
-  const [open, setOpen] = React.useState(false);
 
-  const selectedCurrency = React.useMemo(
-    () => currencies.find((currency) => currency.code.toLowerCase() === value?.toLowerCase()),
-    [currencies, value]
-  );
-  
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className="h-auto min-h-10 w-full justify-between font-normal"
-          disabled={disabled || currencies.length === 0}
-        >
-          <div className="whitespace-normal text-left text-xs leading-tight">
-            {selectedCurrency ? (
-              <>
-                <span className="font-semibold">{selectedCurrency.code}</span>
-                <span className="text-xs"> - {selectedCurrency.name}</span>
-              </>
-            ) : (
-              placeholder ?? 'Select currency...'
-            )}
-          </div>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-        <Command>
-          <CommandInput placeholder="Search currency..." />
-          <CommandList>
-            <ScrollArea className="h-72">
-              <CommandEmpty>No currency found.</CommandEmpty>
-              <CommandGroup>
-                {currencies.map((currency) => (
-                  <CommandItem
-                    key={currency.code}
-                    value={`${currency.code} ${currency.name}`}
-                    onSelect={() => {
-                      // This implements the user's core suggestion:
-                      // 1. Update the value
-                      onChange(currency.code); 
-                      // 2. Close the popover
-                      setOpen(false);
-                    }}
-                  >
-                    <Check
-                      className={cn(
-                        'mr-2 h-4 w-4',
-                        value?.toLowerCase() === currency.code.toLowerCase()
-                          ? 'opacity-100'
-                          : 'opacity-0'
-                      )}
-                    />
-                    <div className="flex-1 whitespace-normal text-left">
-                      <span className="font-semibold">{currency.code}</span>
-                      <span className="text-xs"> - {currency.name}</span>
-                    </div>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </ScrollArea>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+    <Select
+      onValueChange={onChange}
+      value={value}
+      disabled={disabled || currencies.length === 0}
+    >
+      <SelectTrigger className="w-full text-left [&>span]:truncate">
+        <SelectValue placeholder={placeholder ?? 'Select currency...'} />
+      </SelectTrigger>
+      <SelectContent>
+        <ScrollArea className="h-72">
+          {currencies.map((currency) => (
+            <SelectItem key={currency.code} value={currency.code}>
+              {`${currency.code} - ${currency.name}`}
+            </SelectItem>
+          ))}
+        </ScrollArea>
+      </SelectContent>
+    </Select>
   );
 }
