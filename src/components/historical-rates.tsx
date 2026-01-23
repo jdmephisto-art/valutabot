@@ -37,6 +37,16 @@ export function HistoricalRates() {
   const [dynamicsData, setDynamicsData] = useState<any[]>([]);
   const [fetchingDynamics, setFetchingDynamics] = useState(false);
 
+  const handleFetchDynamics = async () => {
+    if (dynamicsRange?.from && dynamicsRange.to) {
+        setFetchingDynamics(true);
+        setDynamicsData([]);
+        const data = await getDynamicsForPeriod(fromCurrency, toCurrency, dynamicsRange.from, dynamicsRange.to);
+        setDynamicsData(data);
+        setFetchingDynamics(false);
+    }
+  };
+
   const handleFetchSingleRate = async () => {
     if (date) {
       setSingleRate(null);
