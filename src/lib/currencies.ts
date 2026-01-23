@@ -371,7 +371,15 @@ async function getNbrbHistoricalRate(from: string, to: string, date: Date): Prom
 
 async function getNbrbDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string, rate: number }[]> {
     await ensureNbrbFullCache();
+    if (!nbrbFullCurrencyInfoCache) return [];
+
     const nbrbIdMap = buildNbrbIdMap();
+
+    const fromInfo = nbrbFullCurrencyInfoCache.find(c => c.Cur_Abbreviation === from);
+    const toInfo = nbrbFullCurrencyInfoCache.find(c => c.Cur_Abbreviation === to);
+
+    const fromScale = from === 'BYN' ? 1 : (fromInfo?.Cur_Scale ?? 1);
+    const toScale = to === 'BYN' ? 1 : (toInfo?.Cur_Scale ?? 1);
     
     const formattedStart = format(startDate, 'yyyy-MM-dd');
     const formattedEnd = format(endDate, 'yyyy-MM-dd');
@@ -379,33 +387,39 @@ async function getNbrbDynamicsForPeriod(from: string, to: string, startDate: Dat
     const getDynamicsForCode = async (code: string) => {
         if (code === 'BYN') {
             const days = differenceInDays(endDate, startDate) + 1;
-            return Array.from({ length: days }).map((_, i) => ({ date: addDays(startDate, i), rate: 1, scale: 1 }));
+            return Array.from({ length: days }).map((_, i) => ({ date: addDays(startDate, i), rate: 1 }));
         }
         const id = nbrbIdMap?.[code];
         if (!id) return [];
         const data = await nbrbApiFetch(`rates/dynamics/${id}?startdate=${formattedStart}&enddate=${formattedEnd}`);
-        return data.map((r: any) => ({ date: parseISO(r.Date), rate: r.Cur_OfficialRate, scale: r.Cur_Scale }));
+        if (!data) return [];
+        return data.map((r: any) => ({ date: parseISO(r.Date), rate: r.Cur_OfficialRate }));
     };
 
     const [fromDynamics, toDynamics] = await Promise.all([getDynamicsForCode(from), getDynamicsForCode(to)]);
+    
+    if (fromDynamics.length === 0 || toDynamics.length === 0) return [];
 
-    const toMap = new Map(toDynamics.map(d => [format(d.date, 'yyyy-MM-dd'), { rate: d.rate, scale: d.scale }]));
+    const toMap = new Map(toDynamics.map(d => [format(startOfDay(d.date), 'yyyy-MM-dd'), d.rate]));
     
     const result = fromDynamics.map(fromDay => {
-        const toDay = toMap.get(format(fromDay.date, 'yyyy-MM-dd'));
-        if (toDay) {
-            const rateToBynForFROM = fromDay.rate / fromDay.scale;
-            const rateToBynForTO = toDay.rate / toDay.scale;
+        const toDayRate = toMap.get(format(startOfDay(fromDay.date), 'yyyy-MM-dd'));
+
+        if (toDayRate !== undefined) {
+            const rateToBynForFROM = fromDay.rate / fromScale;
+            const rateToBynForTO = toDayRate / toScale;
+            if (rateToBynForTO === 0) return null;
             return {
                 date: format(fromDay.date, 'dd.MM'),
                 rate: rateToBynForFROM / rateToBynForTO,
             };
         }
         return null;
-    }).filter(d => d !== null);
+    }).filter((d): d is { date: string; rate: number } => d !== null);
 
-    return result as { date: string, rate: number }[];
+    return result;
 }
+
 
 // --- UNIFIED API ---
 export async function getCurrencies(): Promise<Currency[]> {
