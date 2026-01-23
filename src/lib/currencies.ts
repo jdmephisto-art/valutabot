@@ -1,7 +1,7 @@
 
 import type { Currency, ExchangeRate, DataSource } from '@/lib/types';
 import { format, subDays, differenceInDays, addDays, startOfDay, parseISO } from 'date-fns';
-import { getLang } from './localization';
+import { getLang, setLang as setLocalizationLang } from './localization';
 
 
 // --- Pub/Sub for State Management ---
@@ -23,6 +23,7 @@ let activeDataSource: DataSource = 'nbrb'; // Default data source
 export function setDataSource(source: DataSource) {
     if (source !== activeDataSource) {
         activeDataSource = source;
+        setLocalizationLang(source === 'nbrb' ? 'ru' : 'en');
         // Clear all caches to ensure fresh data from the new source
         nbrbCurrenciesCache = null;
         nbrbFullCurrencyInfoCache = null;

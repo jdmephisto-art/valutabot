@@ -1,15 +1,17 @@
 'use client';
 
-import { getDataSource } from '@/lib/currencies';
-
 type Language = 'en' | 'ru';
 
 export type Translations = typeof translations;
 
+let currentLang: Language = 'ru'; // Default to Russian, as 'nbrb' is the default source
 
-// getLang is now the single source of truth for the current language
+export function setLang(lang: Language) {
+    currentLang = lang;
+}
+
 export const getLang = (): Language => {
-    return getDataSource() === 'nbrb' ? 'ru' : 'en';
+    return currentLang;
 };
 
 const translations = {

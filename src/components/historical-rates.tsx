@@ -93,18 +93,22 @@ export function HistoricalRates() {
 
   const renderCurrencySelects = () => (
     <div className="flex items-center gap-2 mb-4">
-      <CurrencyCombobox
-        value={fromCurrency}
-        onChange={setFromCurrency}
-        placeholder={t('converter.from')}
-        disabled={currencies.length === 0}
-      />
-      <CurrencyCombobox
-        value={toCurrency}
-        onChange={setToCurrency}
-        placeholder={t('converter.to')}
-        disabled={currencies.length === 0}
-      />
+      <div className="flex-1 min-w-0">
+        <CurrencyCombobox
+          value={fromCurrency}
+          onChange={setFromCurrency}
+          placeholder={t('converter.from')}
+          disabled={currencies.length === 0}
+        />
+      </div>
+      <div className="flex-1 min-w-0">
+        <CurrencyCombobox
+          value={toCurrency}
+          onChange={setToCurrency}
+          placeholder={t('converter.to')}
+          disabled={currencies.length === 0}
+        />
+      </div>
     </div>
   );
   
