@@ -36,17 +36,6 @@ export function getDataSource(): DataSource {
     return activeDataSource;
 }
 
-// --- SHARED ---
-export async function getInitialRates(pairs?: string[]): Promise<ExchangeRate[]> {
-    if (activeDataSource === 'nbrb') {
-        await updateNbrbRatesCache();
-        return getNbrbLatestRates(pairs);
-    } else {
-        await updateCurrencyApiRatesCache('USD');
-        return getCurrencyApiLatestRates(pairs);
-    }
-}
-
 // --- API FETCH HELPERS ---
 async function nbrbApiFetch(endpoint: string) {
     try {
@@ -437,22 +426,22 @@ export function findRate(from: string, to: string): number | undefined {
 }
 
 export async function findRateAsync(from: string, to: string): Promise<number | undefined> {
+    // Attempt to find rate in cache first for instant response
+    const cachedRate = findRate(from, to);
+    if (cachedRate !== undefined) {
+        return cachedRate;
+    }
+
+    // If not in cache, proceed to fetch
     if (getDataSource() === 'currencyapi' && (from === 'BYN' || to === 'BYN')) {
-        if (Object.keys(nbrbRatesCache).length === 0) {
-             await updateNbrbRatesCache();
-        }
+        await updateNbrbRatesCache();
+    } else if (getDataSource() === 'currencyapi') { // for non-BYN pairs on currencyapi
+        await updateCurrencyApiRatesCache();
+    } else { // for nbrb source
+        await updateNbrbRatesCache();
     }
-    
-    if (getDataSource() === 'currencyapi' && from !== 'BYN' && to !== 'BYN') {
-        if (Object.keys(currencyApiRatesCache).length === 0) {
-            await updateCurrencyApiRatesCache();
-        }
-    } else {
-        if (Object.keys(nbrbRatesCache).length === 0) {
-            await updateNbrbRatesCache();
-        }
-    }
-    
+
+    // Try finding the rate again after fetching
     return findRate(from, to);
 }
 

@@ -18,12 +18,13 @@ export function CurrencyConverter() {
   const [amount, setAmount] = useState('1');
   const [convertedAmount, setConvertedAmount] = useState('');
   const [displayRate, setDisplayRate] = useState<number | undefined>(undefined);
+  const [isConverting, setIsConverting] = useState(false);
 
   useEffect(() => {
     const convert = async () => {
         if (!fromCurrency || !toCurrency) return;
 
-        setConvertedAmount('...'); // Show loading state
+        setIsConverting(true);
         const rate = await findRateAsync(fromCurrency, toCurrency);
         
         setDisplayRate(rate);
@@ -33,6 +34,7 @@ export function CurrencyConverter() {
         } else {
           setConvertedAmount('');
         }
+        setIsConverting(false);
     };
     convert();
   }, [fromCurrency, toCurrency, amount]);
@@ -85,14 +87,14 @@ export function CurrencyConverter() {
               />
               <Input
                 type="text"
-                placeholder={t('converter.converted')}
-                value={convertedAmount}
+                placeholder={isConverting ? t('latestRates.loading') : t('converter.converted')}
+                value={isConverting ? '' : convertedAmount}
                 readOnly
                 className="bg-muted/50"
               />
             </div>
           </div>
-          {amount && convertedAmount && convertedAmount !== '...' && displayRate && (
+          {amount && !isConverting && convertedAmount && displayRate && (
              <p className="text-center text-muted-foreground text-sm font-mono pt-2">
                 1 {fromCurrency} = {displayRate.toFixed(4)} {toCurrency}
             </p>
