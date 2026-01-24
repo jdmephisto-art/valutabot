@@ -328,8 +328,5 @@ const ruCurrencyNamesPartial = {
 
 export const currencyNames = {
   en: enCurrencyNames,
-  ru: {
-    ...enCurrencyNames,
-    ...ruCurrencyNamesPartial,
-  }
+  ru: ruCurrencyNamesPartial,
 };

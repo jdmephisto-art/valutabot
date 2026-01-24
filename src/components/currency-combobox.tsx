@@ -27,7 +27,7 @@ export function CurrencyCombobox({
   disabled,
 }: CurrencyComboboxProps) {
   const { currencies } = useCurrencies();
-  const { t, getCurrencyName } = useTranslation();
+  const { t } = useTranslation();
   const [open, setOpen] = React.useState(false);
   const [searchTerm, setSearchTerm] = React.useState('');
 
@@ -37,9 +37,9 @@ export function CurrencyCombobox({
     }
     return currencies.filter(currency =>
         currency.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        getCurrencyName(currency.code).toLowerCase().includes(searchTerm.toLowerCase())
+        currency.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
-  }, [currencies, searchTerm, getCurrencyName]);
+  }, [currencies, searchTerm]);
 
 
   const selectedCurrency = React.useMemo(
@@ -68,7 +68,7 @@ export function CurrencyCombobox({
               ? <>
                   <span className="font-medium text-sm">{selectedCurrency.code}</span>
                   <span className="text-muted-foreground text-xs ml-2 truncate">
-                    {getCurrencyName(selectedCurrency.code)}
+                    {selectedCurrency.name}
                   </span>
                 </>
               : <span className="text-sm">{placeholder ?? t('combobox.placeholder')}</span>}
@@ -105,7 +105,7 @@ export function CurrencyCombobox({
                         />
                         <div className="flex-1 whitespace-normal text-left">
                            <span className="font-semibold">{currency.code}</span>
-                           <span className="text-xs ml-1">{getCurrencyName(currency.code)}</span>
+                           <span className="text-xs ml-1">{currency.name}</span>
                         </div>
                     </button>
                 ))
