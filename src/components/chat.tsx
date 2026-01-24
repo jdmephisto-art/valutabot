@@ -168,18 +168,15 @@ export function ChatInterface() {
   useEffect(() => {
     if (isInitialMount.current) {
         isInitialMount.current = false;
-        // Pre-fetch initial rates on first load to make the UI more responsive.
         preFetchInitialRates();
     } else {
         toast({
             title: t('dataSource.toast'),
             description: t('dataSource.toastDesc', { source: getDataSource().toUpperCase() }),
         });
-        // Pre-fetch rates for the new data source.
         preFetchInitialRates();
     }
     resetChat();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lang]);
 
 
@@ -227,7 +224,7 @@ export function ChatInterface() {
       return false;
     }
     setTrackedPairs(prev => new Map(prev).set(pair, rate));
-    addMessage({ sender: 'bot', text: t('chat.bot.pairTracked', { pair }) });
+    addMessage({ sender: 'bot', text: t('chat.bot.pairTracked', { pair: pair, rate: rate.toFixed(4) }) });
     return true;
   };
 
@@ -262,7 +259,6 @@ export function ChatInterface() {
   }, [messages]);
 
   useEffect(() => {
-    // Clear any existing timeout
     if (autoClearTimeoutRef.current) {
         clearTimeout(autoClearTimeoutRef.current);
         autoClearTimeoutRef.current = null;
@@ -271,14 +267,12 @@ export function ChatInterface() {
     if (autoClearMinutes > 0) {
         const timeoutId = setTimeout(() => {
             resetChat();
-            // After clearing, also reset the timer setting itself
             setAutoClearMinutes(0);
         }, autoClearMinutes * 60 * 1000);
 
         autoClearTimeoutRef.current = timeoutId;
     }
 
-    // Cleanup function to clear timeout on component unmount
     return () => {
         if (autoClearTimeoutRef.current) {
             clearTimeout(autoClearTimeoutRef.current);
@@ -294,9 +288,8 @@ export function ChatInterface() {
         alerts.forEach(a => pairsToUpdate.add(`${a.from}/${a.to}`));
         trackedPairs.forEach((_, p) => pairsToUpdate.add(p));
         
-        await getLatestRates(Array.from(pairsToUpdate)); // to update rates
+        await getLatestRates(Array.from(pairsToUpdate));
         
-        // Check alerts
         const triggeredAlerts: Alert[] = [];
         const remainingAlerts: Alert[] = [];
         alerts.forEach(alert => {
@@ -324,14 +317,13 @@ export function ChatInterface() {
             })
         }
 
-        // Check tracked pairs
         if (trackedPairs.size > 0) {
             const newTrackedPairs = new Map(trackedPairs);
             let changed = false;
             trackedPairs.forEach((lastRate, pair) => {
                 const [from, to] = pair.split('/');
                 const currentRate = findRate(from, to);
-                if (currentRate !== undefined && Math.abs(currentRate - lastRate) > 1e-9) { // Use a small epsilon for float comparison
+                if (currentRate !== undefined && Math.abs(currentRate - lastRate) > 1e-9) {
                     addMessage({
                         sender: 'bot',
                         component: <RateUpdateCard pair={pair} oldRate={lastRate} newRate={currentRate} />
@@ -345,7 +337,7 @@ export function ChatInterface() {
             }
         }
     };
-    const interval = setInterval(checkRates, trackingInterval); // Check every 30 seconds
+    const interval = setInterval(checkRates, trackingInterval);
     return () => clearInterval(interval);
   }, [alerts, toast, addMessage, trackedPairs, t, trackingInterval]);
 
@@ -457,3 +449,5 @@ function AlertCard({ alert, currentRate }: { alert: Alert; currentRate: number }
     </Card>
   )
 }
+
+    

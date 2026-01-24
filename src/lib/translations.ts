@@ -25,7 +25,7 @@ export const translations = {
       },
       bot: {
         alertSet: 'OK! Alert is set for {from}/{to} {condition} {threshold}.',
-        pairTracked: 'OK. Now tracking {pair}. I will notify you of any changes.',
+        pairTracked: 'OK. Now tracking {pair}. The current rate is {rate}. I will notify you of any changes.',
         pairUntracked: 'I have stopped tracking {pair}.',
         sourceSwitched: 'Data source switched to {source}. How can I help you?',
         pairAddedToList: "OK. The pair {pair} has been added to the list.",
@@ -177,7 +177,7 @@ export const translations = {
       },
       bot: {
         alertSet: 'ОК! Оповещение установлено для {from}/{to} {condition} {threshold}.',
-        pairTracked: 'ОК. Теперь я отслеживаю {pair}. Я сообщу вам о любых изменениях.',
+        pairTracked: 'ОК. Теперь я отслеживаю {pair}. Текущий курс: {rate}. Я сообщу вам о любых изменениях.',
         pairUntracked: 'Я прекратил отслеживание {pair}.',
         sourceSwitched: 'Источник данных переключен на {source}. Чем могу помочь?',
         pairAddedToList: "ОК. Пара {pair} добавлена в список.",
@@ -388,3 +388,5 @@ export const currencyNames = {
   en: enCurrencyNames,
   ru: ruCurrencyNamesPartial,
 };
+
+    
