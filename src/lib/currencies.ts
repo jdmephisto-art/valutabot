@@ -18,17 +18,23 @@ let currencyApiCurrenciesCache: Currency[] | null = null;
 let currencyApiRatesCache: { [key: string]: number } = {};
 let lastCurrencyApiFetchTimestamp = 0;
 
+// Promise gates to prevent race conditions
+let nbrbUpdatePromise: Promise<void> | null = null;
+let currencyApiUpdatePromise: Promise<void> | null = null;
+
 
 export function setDataSource(source: DataSource) {
     if (source !== activeDataSource) {
         activeDataSource = source;
-        // Clear all caches to ensure fresh data from the new source
+        // Clear all caches and promises to ensure fresh data from the new source
         nbrbCurrenciesCache = null;
         nbrbFullCurrencyInfoCache = null;
         nbrbRatesCache = {};
         currencyApiCurrenciesCache = null;
         currencyApiRatesCache = {};
         lastCurrencyApiFetchTimestamp = 0;
+        nbrbUpdatePromise = null;
+        currencyApiUpdatePromise = null;
     }
 }
 
@@ -109,17 +115,36 @@ async function getCurrencyApiCurrencies(): Promise<Currency[]> {
         return result;
     }
     
-    // Fallback in case of API failure, ensuring BYN is present
     return [{ code: 'BYN', name: 'Belarusian Ruble' }];
 }
 
-async function updateCurrencyApiRatesCache(baseCurrency = 'USD') {
-    const data = await currencyApiNetFetch('rates', { base: baseCurrency });
-    if (data && data.rates) {
-        currencyApiRatesCache = data.rates;
-        currencyApiRatesCache[baseCurrency] = 1;
-        lastCurrencyApiFetchTimestamp = Date.now();
+function _updateCurrencyApiRatesCache(baseCurrency = 'USD'): Promise<void> {
+    // If a fetch is not needed (cache is fresh), return immediately.
+    if (Object.keys(currencyApiRatesCache).length > 0 && (Date.now() - lastCurrencyApiFetchTimestamp < 5 * 60 * 1000)) {
+        return Promise.resolve();
     }
+    
+    // If a fetch is needed, but one is already in progress, return the existing promise.
+    if (currencyApiUpdatePromise) {
+        return currencyApiUpdatePromise;
+    }
+    
+    // Otherwise, start a new fetch.
+    currencyApiUpdatePromise = (async () => {
+        try {
+            const data = await currencyApiNetFetch('rates', { base: baseCurrency });
+            if (data && data.rates) {
+                currencyApiRatesCache = data.rates;
+                currencyApiRatesCache[baseCurrency] = 1;
+                lastCurrencyApiFetchTimestamp = Date.now();
+            }
+        } finally {
+            // After the fetch is complete (or fails), clear the promise to allow a new one on the next stale check.
+            currencyApiUpdatePromise = null;
+        }
+    })();
+    
+    return currencyApiUpdatePromise;
 }
 
 function findCurrencyApiRate(from: string, to: string): number | undefined {
@@ -129,8 +154,6 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
     const toRate = currencyApiRatesCache[to];   
     
     if (fromRate && toRate) {
-        // All rates are against the base currency (USD) from the API
-        // So we can calculate the cross rate: (1/fromRate) * toRate
         return toRate / fromRate;
     }
     return undefined;
@@ -138,19 +161,13 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
 
 
 async function getCurrencyApiLatestRates(pairs?: string[]): Promise<ExchangeRate[]> {
-    if (Object.keys(currencyApiRatesCache).length === 0 || Date.now() - lastCurrencyApiFetchTimestamp > 5 * 60 * 1000) { // 5 min cache
-        await updateCurrencyApiRatesCache('USD');
-    }
+    await Promise.all([_updateCurrencyApiRatesCache('USD'), _updateNbrbRatesCache()]);
     
     const pairsToFetch = pairs ? pairs.map(p => {
         const [from, to] = p.split('/');
         return { from, to };
     }) : defaultPairs;
 
-    if (Object.keys(nbrbRatesCache).length === 0) {
-        await updateNbrbRatesCache();
-    }
-    
     return pairsToFetch.map(pair => {
         const rate = (pair.from === 'BYN' || pair.to === 'BYN') 
                         ? findNbrbRate(pair.from, pair.to) 
@@ -246,7 +263,7 @@ async function getNbrbCurrencies(): Promise<Currency[]> {
     if (nbrbFullCurrencyInfoCache) {
         currencies = nbrbFullCurrencyInfoCache.map((c: any) => ({
             code: c.Cur_Abbreviation,
-            name: c.Cur_Name, // This name is in Russian, which is fine as a fallback
+            name: c.Cur_Name,
         }));
     }
 
@@ -260,29 +277,38 @@ async function getNbrbCurrencies(): Promise<Currency[]> {
     return nbrbCurrenciesCache;
 }
 
-async function updateNbrbRatesCache() {
-    const dailyData = await nbrbApiFetch('rates?periodicity=0'); // 0 for daily
-    const monthlyData = await nbrbApiFetch('rates?periodicity=1'); // 1 for monthly
-
-    const tempCache: { [key: string]: { rate: number, scale: number } } = {};
-    
-    if (dailyData) {
-        dailyData.forEach((r: any) => {
-            tempCache[r.Cur_Abbreviation] = { rate: r.Cur_OfficialRate, scale: r.Cur_Scale };
-        });
+function _updateNbrbRatesCache(): Promise<void> {
+    if (Object.keys(nbrbRatesCache).length > 0) {
+        return Promise.resolve();
+    }
+    if (nbrbUpdatePromise) {
+        return nbrbUpdatePromise;
     }
 
-    if (monthlyData) {
-        monthlyData.forEach((r: any) => {
-            if (!tempCache[r.Cur_Abbreviation]) { // Don't overwrite daily rate with monthly
+    nbrbUpdatePromise = (async () => {
+        const dailyData = await nbrbApiFetch('rates?periodicity=0');
+        const monthlyData = await nbrbApiFetch('rates?periodicity=1');
+
+        const tempCache: { [key: string]: { rate: number, scale: number } } = {};
+        
+        if (dailyData) {
+            dailyData.forEach((r: any) => {
                 tempCache[r.Cur_Abbreviation] = { rate: r.Cur_OfficialRate, scale: r.Cur_Scale };
-            }
-        });
-    }
-
-    if (Object.keys(tempCache).length > 0) {
-        nbrbRatesCache = tempCache;
-    }
+            });
+        }
+        if (monthlyData) {
+            monthlyData.forEach((r: any) => {
+                if (!tempCache[r.Cur_Abbreviation]) {
+                    tempCache[r.Cur_Abbreviation] = { rate: r.Cur_OfficialRate, scale: r.Cur_Scale };
+                }
+            });
+        }
+        if (Object.keys(tempCache).length > 0) {
+            nbrbRatesCache = tempCache;
+        }
+    })();
+    
+    return nbrbUpdatePromise;
 }
 
 function findNbrbRate(from: string, to: string): number | undefined {
@@ -302,9 +328,7 @@ function findNbrbRate(from: string, to: string): number | undefined {
 }
 
 async function getNbrbLatestRates(pairs?: string[]): Promise<ExchangeRate[]> {
-    if (Object.keys(nbrbRatesCache).length === 0) {
-        await updateNbrbRatesCache();
-    }
+    await _updateNbrbRatesCache();
     
     const pairsToFetch = pairs ? pairs.map(p => {
         const [from, to] = p.split('/');
@@ -406,10 +430,8 @@ export async function getCurrencies(): Promise<Currency[]> {
 
 export async function getLatestRates(pairs?: string[]): Promise<ExchangeRate[]> {
     if (activeDataSource === 'nbrb') {
-        await updateNbrbRatesCache();
         return getNbrbLatestRates(pairs);
     } else {
-        await updateCurrencyApiRatesCache();
         return getCurrencyApiLatestRates(pairs);
     }
 }
@@ -426,22 +448,14 @@ export function findRate(from: string, to: string): number | undefined {
 }
 
 export async function findRateAsync(from: string, to: string): Promise<number | undefined> {
-    // Attempt to find rate in cache first for instant response
-    const cachedRate = findRate(from, to);
-    if (cachedRate !== undefined) {
-        return cachedRate;
-    }
-
-    // If not in cache, proceed to fetch
     if (getDataSource() === 'currencyapi' && (from === 'BYN' || to === 'BYN')) {
-        await updateNbrbRatesCache();
-    } else if (getDataSource() === 'currencyapi') { // for non-BYN pairs on currencyapi
-        await updateCurrencyApiRatesCache();
-    } else { // for nbrb source
-        await updateNbrbRatesCache();
+        await _updateNbrbRatesCache();
+    } else if (getDataSource() === 'currencyapi') {
+        await _updateCurrencyApiRatesCache();
+    } else {
+        await _updateNbrbRatesCache();
     }
 
-    // Try finding the rate again after fetching
     return findRate(from, to);
 }
 
@@ -455,12 +469,11 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
 
 export async function preFetchInitialRates() {
     if (getDataSource() === 'nbrb') {
-        await updateNbrbRatesCache();
+        await _updateNbrbRatesCache();
     } else {
-        // For currencyapi, pre-fetch both since it can use NBRB for BYN pairs.
         await Promise.all([
-            updateCurrencyApiRatesCache('USD'),
-            updateNbrbRatesCache()
+            _updateCurrencyApiRatesCache('USD'),
+            _updateNbrbRatesCache()
         ]);
     }
 }
