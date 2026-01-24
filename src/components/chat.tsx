@@ -15,7 +15,7 @@ import { DataSourceSwitcher } from '@/components/data-source-switcher';
 import { AutoClearManager } from '@/components/auto-clear-manager';
 import { DisplayedPairManager } from '@/components/displayed-pair-manager';
 import type { Alert, DataSource } from '@/lib/types';
-import { findRate, getLatestRates, setDataSource, getDataSource } from '@/lib/currencies';
+import { findRate, getLatestRates, setDataSource, getDataSource, preFetchInitialRates } from '@/lib/currencies';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/hooks/use-translation';
 import { Card, CardContent } from './ui/card';
@@ -168,11 +168,15 @@ export function ChatInterface() {
   useEffect(() => {
     if (isInitialMount.current) {
         isInitialMount.current = false;
+        // Pre-fetch initial rates on first load to make the UI more responsive.
+        preFetchInitialRates();
     } else {
         toast({
             title: t('dataSource.toast'),
             description: t('dataSource.toastDesc', { source: getDataSource().toUpperCase() }),
         });
+        // Pre-fetch rates for the new data source.
+        preFetchInitialRates();
     }
     resetChat();
     // eslint-disable-next-line react-hooks/exhaustive-deps

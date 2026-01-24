@@ -463,3 +463,15 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
     return activeDataSource === 'nbrb' ? getNbrbDynamicsForPeriod(from, to, startDate, endDate) : getCurrencyApiDynamicsForPeriod(from, to, startDate, endDate);
 }
+
+export async function preFetchInitialRates() {
+    if (getDataSource() === 'nbrb') {
+        await updateNbrbRatesCache();
+    } else {
+        // For currencyapi, pre-fetch both since it can use NBRB for BYN pairs.
+        await Promise.all([
+            updateCurrencyApiRatesCache('USD'),
+            updateNbrbRatesCache()
+        ]);
+    }
+}
