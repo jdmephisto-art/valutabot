@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import type { Currency } from '@/lib/types';
-import { getCurrencies as getCurrenciesFromLib } from '@/lib/currencies';
+import { getCurrencies as getCurrenciesFromLib, getDataSource } from '@/lib/currencies';
 import { useTranslation } from './use-translation';
+import { nbrbPreloadedCurrencies, currencyApiPreloadedCurrencies } from '@/lib/preloaded-data';
 
 export function useCurrencies() {
     const [currencies, setCurrencies] = useState<Currency[]>([]);
@@ -11,15 +12,19 @@ export function useCurrencies() {
     const { lang } = useTranslation();
 
     useEffect(() => {
-        const fetchCurrencies = () => {
-            setLoading(true);
-            getCurrenciesFromLib().then(fetchedCurrencies => {
-                setCurrencies(fetchedCurrencies);
-                setLoading(false);
-            });
-        };
+        const dataSource = getDataSource();
+        // Set preloaded data immediately to make UI responsive
+        const preloaded = dataSource === 'nbrb' ? nbrbPreloadedCurrencies : currencyApiPreloadedCurrencies;
+        setCurrencies(preloaded);
+        setLoading(false);
 
-        fetchCurrencies();
+        // Then fetch the latest list in the background
+        getCurrenciesFromLib().then(fetchedCurrencies => {
+            // Only update if the fetched data is different, to avoid unnecessary re-renders
+            if (JSON.stringify(fetchedCurrencies) !== JSON.stringify(preloaded)) {
+                setCurrencies(fetchedCurrencies);
+            }
+        });
     }, [lang]);
 
     return { currencies, loading };
