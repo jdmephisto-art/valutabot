@@ -34,7 +34,6 @@ type ActionButtonProps = {
   id: string;
   label: string;
   icon: React.ElementType;
-  action: () => void;
 };
 
 const defaultDisplayedPairs = ['USD/EUR', 'EUR/USD', 'USD/BYN', 'EUR/BYN', 'USD/RUB', 'EUR/RUB'];
@@ -59,128 +58,13 @@ export function ChatInterface() {
     setMessages(prev => [...prev, { ...message, id: `${componentId}-${prev.length}` }]);
   }, [componentId]);
 
-  const handleShowRates = useCallback(() => {
-    addMessage({ sender: 'user', text: t('chat.user.showRates') });
-    setTimeout(() => addMessage({ sender: 'bot', component: <LatestRates pairs={displayedPairs} /> }), 500);
-  }, [addMessage, t, displayedPairs]);
-
-  const handleShowConverter = useCallback(() => {
-    addMessage({ sender: 'user', text: t('chat.user.showConverter') });
-    setTimeout(() => addMessage({ sender: 'bot', component: <CurrencyConverter /> }), 500);
-  }, [addMessage, t]);
-
-  const handleShowAlertManager = useCallback(() => {
-    addMessage({ sender: 'user', text: t('chat.user.setAlert') });
-    setTimeout(() => {
-      addMessage({
-        sender: 'bot',
-        component: <NotificationManager onSetAlert={handleSetAlert} />,
-      });
-    }, 500);
-  }, [addMessage, t]);
-
-  const handleShowHistoricalRates = useCallback(() => {
-    addMessage({ sender: 'user', text: t('chat.user.showHistory') });
-    setTimeout(() => {
-        addMessage({ sender: 'bot', component: <HistoricalRates /> });
-    }, 500);
-  }, [addMessage, t]);
-
-  const handleShowTrackingManager = useCallback(() => {
-    addMessage({ sender: 'user', text: t('chat.user.trackPair') });
-    setTimeout(() => {
-        addMessage({ sender: 'bot', component: <TrackingManager 
-            trackedPairs={Array.from(trackedPairs.keys())}
-            onAddPair={handleAddTrackedPair}
-            onRemovePair={handleRemoveTrackedPair}
-            onIntervalChange={setTrackingInterval}
-            currentInterval={trackingInterval}
-        /> });
-    }, 500);
-  }, [addMessage, t, trackedPairs, trackingInterval]);
-
-  const handleShowPairManager = useCallback(() => {
-    addMessage({ sender: 'user', text: t('chat.user.showDisplayedPairManager') });
-    setTimeout(() => {
-        addMessage({ sender: 'bot', component: <DisplayedPairManager 
-            pairs={displayedPairs}
-            onAddPair={handleAddDisplayedPair}
-            onRemovePair={handleRemoveDisplayedPair}
-        /> });
-    }, 500);
-  }, [addMessage, t, displayedPairs]);
-  
-  const handleShowDataSourceSwitcher = useCallback(() => {
-    addMessage({ sender: 'user', text: t('chat.user.switchSource') });
-    setTimeout(() => {
-      addMessage({
-        sender: 'bot',
-        component: <DataSourceSwitcher currentSource={dataSource} onSourceChange={handleDataSourceChange} />,
-      });
-    }, 500);
-  }, [addMessage, t, dataSource]);
-
-  const handleSetAutoClear = (minutes: number) => {
-    setAutoClearMinutes(minutes);
-    setAutoClearPopoverOpen(false);
-
-    if (minutes > 0) {
-        toast({
-            title: t('autoClear.toast'),
-            description: t('autoClear.toastDesc', { minutes: `${minutes}` }),
-        });
-    } else {
-        toast({
-            title: t('autoClear.toastDisabled'),
-        });
-    }
-  };
-
-  const handleDataSourceChange = (source: DataSource) => {
+  const handleDataSourceChange = useCallback((source: DataSource) => {
     setDataSource(source);
     setDataSourceState(source);
     setLang(source === 'nbrb' ? 'ru' : 'en');
-  };
+  }, []);
 
-  const resetChat = useCallback(() => {
-    const actionButtons: ActionButtonProps[] = [
-      { id: 'rates', label: t('chat.showRates'), icon: LineChart, action: handleShowRates },
-      { id: 'configure_pairs', label: t('chat.showDisplayedPairManager'), icon: List, action: handleShowPairManager },
-      { id: 'convert', label: t('chat.showConverter'), icon: CircleDollarSign, action: handleShowConverter },
-      { id: 'alert', label: t('chat.setAlert'), icon: BellRing, action: handleShowAlertManager },
-      { id: 'history', label: t('chat.showHistory'), icon: History, action: handleShowHistoricalRates },
-      { id: 'track', label: t('chat.trackPair'), icon: Eye, action: handleShowTrackingManager },
-      { id: 'settings', label: t('chat.switchSource'), icon: Settings, action: handleShowDataSourceSwitcher },
-    ];
-    
-    setMessages([]);
-    setAlerts([]);
-    setTrackedPairs(new Map());
-    setDisplayedPairs(defaultDisplayedPairs);
-
-    addMessage({
-      sender: 'bot',
-      text: t('chat.placeholder'),
-      options: actionButtons,
-    });
-  }, [t, addMessage, handleShowRates, handleShowPairManager, handleShowConverter, handleShowAlertManager, handleShowHistoricalRates, handleShowTrackingManager, handleShowDataSourceSwitcher]);
-
-  useEffect(() => {
-    if (isInitialMount.current) {
-        isInitialMount.current = false;
-        preFetchInitialRates();
-    } else {
-        toast({
-            title: t('dataSource.toast'),
-            description: t('dataSource.toastDesc', { source: getDataSource().toUpperCase() }),
-        });
-        preFetchInitialRates();
-    }
-    resetChat();
-  }, [lang]);
-
-
-  const handleSetAlert = (data: Omit<Alert, 'id' | 'baseRate'>) => {
+  const handleSetAlert = useCallback((data: Omit<Alert, 'id' | 'baseRate'>) => {
     const baseRate = findRate(data.from, data.to);
     if (baseRate === undefined) {
       toast({
@@ -210,9 +94,9 @@ export function ChatInterface() {
             threshold: data.threshold,
         })
     });
-  };
+  }, [addMessage, t, toast]);
 
-  const handleAddTrackedPair = (from: string, to: string): boolean => {
+  const handleAddTrackedPair = useCallback((from: string, to: string): boolean => {
     const pair = `${from}/${to}`;
     const rate = findRate(from, to);
     if (rate === undefined) {
@@ -226,18 +110,18 @@ export function ChatInterface() {
     setTrackedPairs(prev => new Map(prev).set(pair, rate));
     addMessage({ sender: 'bot', text: t('chat.bot.pairTracked', { pair: pair, rate: rate.toFixed(4) }) });
     return true;
-  };
+  }, [addMessage, t, toast]);
 
-  const handleRemoveTrackedPair = (pair: string) => {
+  const handleRemoveTrackedPair = useCallback((pair: string) => {
     setTrackedPairs(prev => {
       const newMap = new Map(prev);
       newMap.delete(pair);
       return newMap;
     });
     addMessage({ sender: 'bot', text: t('chat.bot.pairUntracked', { pair }) });
-  };
+  }, [addMessage, t]);
   
-  const handleAddDisplayedPair = (from: string, to: string): boolean => {
+  const handleAddDisplayedPair = useCallback((from: string, to: string): boolean => {
     const pair = `${from}/${to}`;
     if (displayedPairs.includes(pair)) {
         return false;
@@ -245,12 +129,117 @@ export function ChatInterface() {
     setDisplayedPairs(prev => [...prev, pair]);
     addMessage({ sender: 'bot', text: t('chat.bot.pairAddedToList', { pair }) });
     return true;
-  };
+  }, [addMessage, t, displayedPairs]);
 
-  const handleRemoveDisplayedPair = (pair: string) => {
+  const handleRemoveDisplayedPair = useCallback((pair: string) => {
     setDisplayedPairs(prev => prev.filter(p => p !== pair));
     addMessage({ sender: 'bot', text: t('chat.bot.pairRemovedFromList', { pair }) });
+  }, [addMessage, t]);
+
+  const handleActionClick = useCallback((id: string) => {
+    let messageComponent: React.ReactNode = null;
+    let userText: string = '';
+
+    switch (id) {
+      case 'rates':
+        userText = t('chat.user.showRates');
+        messageComponent = <LatestRates pairs={displayedPairs} />;
+        break;
+      case 'configure_pairs':
+        userText = t('chat.user.showDisplayedPairManager');
+        messageComponent = <DisplayedPairManager 
+            pairs={displayedPairs}
+            onAddPair={handleAddDisplayedPair}
+            onRemovePair={handleRemoveDisplayedPair}
+        />;
+        break;
+      case 'convert':
+        userText = t('chat.user.showConverter');
+        messageComponent = <CurrencyConverter />;
+        break;
+      case 'alert':
+        userText = t('chat.user.setAlert');
+        messageComponent = <NotificationManager onSetAlert={handleSetAlert} />;
+        break;
+      case 'history':
+        userText = t('chat.user.showHistory');
+        messageComponent = <HistoricalRates />;
+        break;
+      case 'track':
+        userText = t('chat.user.trackPair');
+        messageComponent = <TrackingManager 
+            trackedPairs={Array.from(trackedPairs.keys())}
+            onAddPair={handleAddTrackedPair}
+            onRemovePair={handleRemoveTrackedPair}
+            onIntervalChange={setTrackingInterval}
+            currentInterval={trackingInterval}
+        />;
+        break;
+      case 'settings':
+        userText = t('chat.user.switchSource');
+        messageComponent = <DataSourceSwitcher currentSource={dataSource} onSourceChange={handleDataSourceChange} />;
+        break;
+    }
+
+    if (userText && messageComponent) {
+      addMessage({ sender: 'user', text: userText });
+      setTimeout(() => addMessage({ sender: 'bot', component: messageComponent }), 500);
+    }
+  }, [t, addMessage, displayedPairs, handleAddDisplayedPair, handleRemoveDisplayedPair, handleSetAlert, trackedPairs, handleAddTrackedPair, handleRemoveTrackedPair, trackingInterval, dataSource, handleDataSourceChange]);
+
+
+  const handleSetAutoClear = (minutes: number) => {
+    setAutoClearMinutes(minutes);
+    setAutoClearPopoverOpen(false);
+
+    if (minutes > 0) {
+        toast({
+            title: t('autoClear.toast'),
+            description: t('autoClear.toastDesc', { minutes: `${minutes}` }),
+        });
+    } else {
+        toast({
+            title: t('autoClear.toastDisabled'),
+        });
+    }
   };
+
+  const resetChat = useCallback(() => {
+    const actionButtons: ActionButtonProps[] = [
+      { id: 'rates', label: t('chat.showRates'), icon: LineChart },
+      { id: 'configure_pairs', label: t('chat.showDisplayedPairManager'), icon: List },
+      { id: 'convert', label: t('chat.showConverter'), icon: CircleDollarSign },
+      { id: 'alert', label: t('chat.setAlert'), icon: BellRing },
+      { id: 'history', label: t('chat.showHistory'), icon: History },
+      { id: 'track', label: t('chat.trackPair'), icon: Eye },
+      { id: 'settings', label: t('chat.switchSource'), icon: Settings },
+    ];
+    
+    setMessages([]);
+    setAlerts([]);
+    setTrackedPairs(new Map());
+    setDisplayedPairs(defaultDisplayedPairs);
+
+    addMessage({
+      sender: 'bot',
+      text: t('chat.placeholder'),
+      options: actionButtons,
+    });
+  }, [t, addMessage]);
+
+  useEffect(() => {
+    if (isInitialMount.current) {
+        isInitialMount.current = false;
+        preFetchInitialRates();
+    } else {
+        toast({
+            title: t('dataSource.toast'),
+            description: t('dataSource.toastDesc', { source: getDataSource().toUpperCase() }),
+        });
+        preFetchInitialRates();
+    }
+    resetChat();
+  }, [lang, resetChat, toast]);
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -404,7 +393,7 @@ export function ChatInterface() {
                 {message.options && (
                   <div className="flex flex-col sm:flex-row gap-2 mt-3 flex-wrap">
                     {message.options.map(option => (
-                      <Button key={option.id} variant="outline" size="sm" onClick={option.action} className="bg-background/70">
+                      <Button key={option.id} variant="outline" size="sm" onClick={() => handleActionClick(option.id)} className="bg-background/70">
                         <option.icon className="mr-2 h-4 w-4" />
                         {option.label}
                       </Button>
@@ -449,5 +438,3 @@ function AlertCard({ alert, currentRate }: { alert: Alert; currentRate: number }
     </Card>
   )
 }
-
-    
