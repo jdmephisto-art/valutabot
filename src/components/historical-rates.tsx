@@ -32,16 +32,22 @@ export function HistoricalRates() {
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [singleRate, setSingleRate] = useState<number | null | undefined>(undefined);
   const [fetchingSingle, setFetchingSingle] = useState(false);
+  const [singleDatePopoverOpen, setSingleDatePopoverOpen] = useState(false);
 
   // State for date range
   const [range, setRange] = useState<DateRange | undefined>();
   const [rangeResult, setRangeResult] = useState<{ startRate: number; endRate: number } | null | undefined>(undefined);
   const [fetchingRange, setFetchingRange] = useState(false);
+  const [rangeStartPopoverOpen, setRangeStartPopoverOpen] = useState(false);
+  const [rangeEndPopoverOpen, setRangeEndPopoverOpen] = useState(false);
 
   // State for historical dynamics
   const [dynamicsRange, setDynamicsRange] = useState<DateRange | undefined>({ from: subDays(new Date(), 29), to: new Date() });
   const [dynamicsData, setDynamicsData] = useState<any[]>([]);
   const [fetchingDynamics, setFetchingDynamics] = useState(false);
+  const [dynamicsStartPopoverOpen, setDynamicsStartPopoverOpen] = useState(false);
+  const [dynamicsEndPopoverOpen, setDynamicsEndPopoverOpen] = useState(false);
+
 
   const handleFetchDynamics = async () => {
     if (dynamicsRange?.from && dynamicsRange.to) {
@@ -148,7 +154,7 @@ export function HistoricalRates() {
           <TabsContent value="dynamics" className="space-y-4 pt-4">
             {renderCurrencySelects()}
             <div className="grid grid-cols-2 gap-2">
-                <Popover>
+                <Popover open={dynamicsStartPopoverOpen} onOpenChange={setDynamicsStartPopoverOpen}>
                     <PopoverTrigger asChild>
                         <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dynamicsRange?.from && "text-muted-foreground")}>
                             <CalendarIcon className="mr-2 h-4 w-4" />
@@ -160,13 +166,16 @@ export function HistoricalRates() {
                             initialFocus
                             mode="single"
                             selected={dynamicsRange?.from}
-                            onSelect={(day) => handleDynamicsRangeSelect({ ...dynamicsRange, from: day })}
+                            onSelect={(day) => {
+                                handleDynamicsRangeSelect({ ...dynamicsRange, from: day });
+                                setDynamicsStartPopoverOpen(false);
+                            }}
                             disabled={(date) => (dynamicsRange?.to ? date > dynamicsRange.to : false) || (getCalendarDisabledDates().before ? date < getCalendarDisabledDates().before! : false) || (getCalendarDisabledDates().after ? date > getCalendarDisabledDates().after! : false)}
                             locale={dateLocale}
                         />
                     </PopoverContent>
                 </Popover>
-                <Popover>
+                <Popover open={dynamicsEndPopoverOpen} onOpenChange={setDynamicsEndPopoverOpen}>
                     <PopoverTrigger asChild>
                         <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dynamicsRange?.to && "text-muted-foreground")}>
                             <CalendarIcon className="mr-2 h-4 w-4" />
@@ -178,7 +187,10 @@ export function HistoricalRates() {
                             initialFocus
                             mode="single"
                             selected={dynamicsRange?.to}
-                            onSelect={(day) => handleDynamicsRangeSelect({ ...dynamicsRange, to: day })}
+                            onSelect={(day) => {
+                                handleDynamicsRangeSelect({ ...dynamicsRange, to: day });
+                                setDynamicsEndPopoverOpen(false);
+                            }}
                             disabled={(date) => (dynamicsRange?.from ? date < dynamicsRange.from : false) || (getCalendarDisabledDates().before ? date < getCalendarDisabledDates().before! : false) || (getCalendarDisabledDates().after ? date > getCalendarDisabledDates().after! : false)}
                             locale={dateLocale}
                         />
@@ -214,14 +226,26 @@ export function HistoricalRates() {
 
           <TabsContent value="single" className="space-y-4 pt-4">
             {renderCurrencySelects()}
-            <Popover>
+            <Popover open={singleDatePopoverOpen} onOpenChange={setSingleDatePopoverOpen}>
               <PopoverTrigger asChild>
                 <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
                   <CalendarIcon className="mr-2 h-4 w-4" />
                   {date ? format(date, "PPP", { locale: dateLocale }) : <span>{t('history.selectDate')}</span>}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus disabled={getCalendarDisabledDates()} locale={dateLocale} /></PopoverContent>
+              <PopoverContent className="w-auto p-0">
+                  <Calendar 
+                    mode="single" 
+                    selected={date} 
+                    onSelect={(day) => {
+                        setDate(day);
+                        setSingleDatePopoverOpen(false);
+                    }} 
+                    initialFocus 
+                    disabled={getCalendarDisabledDates()} 
+                    locale={dateLocale} 
+                 />
+              </PopoverContent>
             </Popover>
             <Button onClick={handleFetchSingleRate} className="w-full" disabled={fetchingSingle || !date}>
                 {fetchingSingle ? t('latestRates.loading') : t('history.getRate')}
@@ -238,7 +262,7 @@ export function HistoricalRates() {
           <TabsContent value="range" className="space-y-4 pt-4">
              {renderCurrencySelects()}
              <div className="grid grid-cols-2 gap-2">
-                <Popover>
+                <Popover open={rangeStartPopoverOpen} onOpenChange={setRangeStartPopoverOpen}>
                     <PopoverTrigger asChild>
                         <Button id="start-date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !range?.from && "text-muted-foreground")}>
                             <CalendarIcon className="mr-2 h-4 w-4" />
@@ -250,13 +274,16 @@ export function HistoricalRates() {
                             initialFocus 
                             mode="single" 
                             selected={range?.from} 
-                            onSelect={(day) => setRange(prev => ({ ...prev, from: day }))}
+                            onSelect={(day) => {
+                                setRange(prev => ({ ...prev, from: day }));
+                                setRangeStartPopoverOpen(false);
+                            }}
                             disabled={(date) => (range?.to ? date > range.to : false) || (getCalendarDisabledDates().before ? date < getCalendarDisabledDates().before! : false) || (getCalendarDisabledDates().after ? date > getCalendarDisabledDates().after! : false)}
                             locale={dateLocale}
                         />
                     </PopoverContent>
                 </Popover>
-                 <Popover>
+                 <Popover open={rangeEndPopoverOpen} onOpenChange={setRangeEndPopoverOpen}>
                     <PopoverTrigger asChild>
                         <Button id="end-date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !range?.to && "text-muted-foreground")}>
                             <CalendarIcon className="mr-2 h-4 w-4" />
@@ -268,7 +295,10 @@ export function HistoricalRates() {
                             initialFocus 
                             mode="single" 
                             selected={range?.to} 
-                            onSelect={(day) => setRange(prev => ({ ...prev, to: day }))}
+                            onSelect={(day) => {
+                                setRange(prev => ({ ...prev, to: day }));
+                                setRangeEndPopoverOpen(false);
+                            }}
                             disabled={(date) => (range?.from ? date < range.from : false) || (getCalendarDisabledDates().before ? date < getCalendarDisabledDates().before! : false) || (getCalendarDisabledDates().after ? date > getCalendarDisabledDates().after! : false)}
                             locale={dateLocale}
                         />
