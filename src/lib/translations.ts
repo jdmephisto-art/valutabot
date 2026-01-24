@@ -149,6 +149,8 @@ export const translations = {
       placeholder: 'Select a currency...',
       searchPlaceholder: 'Search currency...',
       notFound: 'Currency not found.',
+      fiat: 'Fiat currencies',
+      crypto: 'Crypto & Assets',
     }
   },
   ru: {
@@ -301,6 +303,8 @@ export const translations = {
       placeholder: 'Выберите валюту...',
       searchPlaceholder: 'Поиск валюты...',
       notFound: 'Валюта не найдена.',
+      fiat: 'Фиатные валюты',
+      crypto: 'Криптовалюты и активы',
     }
   }
 };
@@ -363,7 +367,7 @@ const enCurrencyNames = {
   "XCD": "East Caribbean Dollar", "XDR": "Special Drawing Rights", "XOF": "CFA Franc BCEAO",
   "XPD": "Palladium Ounce", "XPF": "CFP Franc", "XPT": "Platinum Ounce",
   "YER": "Yemeni Rial", "ZAR": "South African Rand", "ZMW": "Zambian Kwacha",
-  "ZWL": "Zimbabwean Dollar"
+  "ZWL": "Zimbabwean Dollar", "ETH": "Ethereum", "LTC": "Litecoin", "XRP": "Ripple",
 };
 
 const ruCurrencyNamesPartial = {
@@ -382,11 +386,11 @@ const ruCurrencyNamesPartial = {
   "TMT": "Новый туркменский манат", "UZS": "Узбекский сум", "UAH": "Украинская гривна",
   "CZK": "Чешская крона", "SEK": "Шведская крона", "CHF": "Швейцарский франк",
   "RSD": "Сербский динар", "ZAR": "Южноафриканский рэнд", "KRW": "Вон Республики Корея",
+  "BTC": "Биткоин", "ETH": "Эфириум", "LTC": "Лайткоин", "XRP": "Риппл", 
+  "XAU": "Золото (унция)", "XAG": "Серебро (унция)",
 };
 
 export const currencyNames = {
   en: enCurrencyNames,
   ru: ruCurrencyNamesPartial,
 };
-
-    

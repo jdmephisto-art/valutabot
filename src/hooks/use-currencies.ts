@@ -2,30 +2,35 @@
 
 import { useState, useEffect } from 'react';
 import type { Currency } from '@/lib/types';
-import { getCurrencies as getCurrenciesFromLib, getDataSource } from '@/lib/currencies';
+import { getCurrencies as getCurrenciesFromLib, cryptoCodes } from '@/lib/currencies';
 import { useTranslation } from './use-translation';
-import { nbrbPreloadedCurrencies, currencyApiPreloadedCurrencies } from '@/lib/preloaded-data';
+import { currencyApiPreloadedCurrencies } from '@/lib/preloaded-data';
 
 export function useCurrencies() {
     const [currencies, setCurrencies] = useState<Currency[]>([]);
+    const [fiatCurrencies, setFiatCurrencies] = useState<Currency[]>([]);
+    const [cryptoCurrencies, setCryptoCurrencies] = useState<Currency[]>([]);
     const [loading, setLoading] = useState(true);
     const { lang } = useTranslation();
 
     useEffect(() => {
-        const dataSource = getDataSource();
-        // Set preloaded data immediately to make UI responsive
-        const preloaded = dataSource === 'nbrb' ? nbrbPreloadedCurrencies : currencyApiPreloadedCurrencies;
-        setCurrencies(preloaded);
+        const filterAndSetCurrencies = (allCurrencies: Currency[]) => {
+            const fiat = allCurrencies.filter(c => !cryptoCodes.includes(c.code));
+            const crypto = allCurrencies.filter(c => cryptoCodes.includes(c.code));
+            setCurrencies(allCurrencies);
+            setFiatCurrencies(fiat);
+            setCryptoCurrencies(crypto);
+        };
+        
+        // Use the most comprehensive list for a fast initial render.
+        filterAndSetCurrencies(currencyApiPreloadedCurrencies);
         setLoading(false);
 
-        // Then fetch the latest list in the background
-        getCurrenciesFromLib().then(fetchedCurrencies => {
-            // Only update if the fetched data is different, to avoid unnecessary re-renders
-            if (JSON.stringify(fetchedCurrencies) !== JSON.stringify(preloaded)) {
-                setCurrencies(fetchedCurrencies);
-            }
+        // Then fetch the actual, source-dependent list in the background.
+        getCurrenciesFromLib().then(freshCurrencies => {
+            filterAndSetCurrencies(freshCurrencies);
         });
     }, [lang]);
 
-    return { currencies, loading };
+    return { currencies, loading, fiatCurrencies, cryptoCurrencies };
 }

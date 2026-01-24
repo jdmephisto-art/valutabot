@@ -9,6 +9,8 @@ const defaultPairs = [
     { from: 'EUR', to: 'BYN' }, { from: 'USD', to: 'RUB' }, { from: 'EUR', to: 'RUB' },
 ];
 
+export const cryptoCodes = ['BTC', 'ETH', 'LTC', 'XRP', 'XAU', 'XAG'];
+
 // Caches
 let nbrbCurrenciesCache: Currency[] | null = null;
 let nbrbFullCurrencyInfoCache: any[] | null = null;
@@ -110,6 +112,17 @@ async function getCurrencyApiCurrencies(): Promise<Currency[]> {
              result.push({ code: 'BYN', name: 'Belarusian Ruble' });
         }
         
+        const extraAssets: Record<string, string> = {
+            'ETH': 'Ethereum', 'LTC': 'Litecoin', 'XRP': 'Ripple',
+            'XAU': 'Gold Ounce', 'XAG': 'Silver Ounce'
+        };
+
+        for (const code in extraAssets) {
+            if (!result.some(c => c.code === code)) {
+                result.push({ code, name: extraAssets[code] });
+            }
+        }
+        
         result.sort((a, b) => a.code.localeCompare(b.code));
         currencyApiCurrenciesCache = result;
         return result;
@@ -119,17 +132,14 @@ async function getCurrencyApiCurrencies(): Promise<Currency[]> {
 }
 
 function _updateCurrencyApiRatesCache(baseCurrency = 'USD'): Promise<void> {
-    // If a fetch is not needed (cache is fresh), return immediately.
     if (Object.keys(currencyApiRatesCache).length > 0 && (Date.now() - lastCurrencyApiFetchTimestamp < 5 * 60 * 1000)) {
         return Promise.resolve();
     }
     
-    // If a fetch is needed, but one is already in progress, return the existing promise.
     if (currencyApiUpdatePromise) {
         return currencyApiUpdatePromise;
     }
     
-    // Otherwise, start a new fetch.
     currencyApiUpdatePromise = (async () => {
         try {
             const data = await currencyApiNetFetch('rates', { base: baseCurrency });
@@ -139,7 +149,6 @@ function _updateCurrencyApiRatesCache(baseCurrency = 'USD'): Promise<void> {
                 lastCurrencyApiFetchTimestamp = Date.now();
             }
         } finally {
-            // After the fetch is complete (or fails), clear the promise to allow a new one on the next stale check.
             currencyApiUpdatePromise = null;
         }
     })();
@@ -159,29 +168,10 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
     return undefined;
 }
 
-
-async function getCurrencyApiLatestRates(pairs?: string[]): Promise<ExchangeRate[]> {
-    await Promise.all([_updateCurrencyApiRatesCache('USD'), _updateNbrbRatesCache()]);
-    
-    const pairsToFetch = pairs ? pairs.map(p => {
-        const [from, to] = p.split('/');
-        return { from, to };
-    }) : defaultPairs;
-
-    return pairsToFetch.map(pair => {
-        const rate = (pair.from === 'BYN' || pair.to === 'BYN') 
-                        ? findNbrbRate(pair.from, pair.to) 
-                        : findCurrencyApiRate(pair.from, pair.to);
-        return {
-            ...pair,
-            rate: rate ?? 0,
-        };
-    }).filter(r => r.rate !== 0);
-}
-
 async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
     if (from === to) return 1;
 
+    // CurrencyAPI free plan doesn't support BYN, so we use NBRB for it.
     if (from === 'BYN' || to === 'BYN') {
         return getNbrbHistoricalRate(from, to, date);
     }
@@ -286,25 +276,29 @@ function _updateNbrbRatesCache(): Promise<void> {
     }
 
     nbrbUpdatePromise = (async () => {
-        const dailyData = await nbrbApiFetch('rates?periodicity=0');
-        const monthlyData = await nbrbApiFetch('rates?periodicity=1');
+        try {
+            const dailyData = await nbrbApiFetch('rates?periodicity=0');
+            const monthlyData = await nbrbApiFetch('rates?periodicity=1');
 
-        const tempCache: { [key: string]: { rate: number, scale: number } } = {};
-        
-        if (dailyData) {
-            dailyData.forEach((r: any) => {
-                tempCache[r.Cur_Abbreviation] = { rate: r.Cur_OfficialRate, scale: r.Cur_Scale };
-            });
-        }
-        if (monthlyData) {
-            monthlyData.forEach((r: any) => {
-                if (!tempCache[r.Cur_Abbreviation]) {
+            const tempCache: { [key: string]: { rate: number, scale: number } } = {};
+            
+            if (dailyData) {
+                dailyData.forEach((r: any) => {
                     tempCache[r.Cur_Abbreviation] = { rate: r.Cur_OfficialRate, scale: r.Cur_Scale };
-                }
-            });
-        }
-        if (Object.keys(tempCache).length > 0) {
-            nbrbRatesCache = tempCache;
+                });
+            }
+            if (monthlyData) {
+                monthlyData.forEach((r: any) => {
+                    if (!tempCache[r.Cur_Abbreviation]) {
+                        tempCache[r.Cur_Abbreviation] = { rate: r.Cur_OfficialRate, scale: r.Cur_Scale };
+                    }
+                });
+            }
+            if (Object.keys(tempCache).length > 0) {
+                nbrbRatesCache = tempCache;
+            }
+        } finally {
+            nbrbUpdatePromise = null;
         }
     })();
     
@@ -325,20 +319,6 @@ function findNbrbRate(from: string, to: string): number | undefined {
         return rateToBynForFROM / rateToBynForTO;
     }
     return undefined;
-}
-
-async function getNbrbLatestRates(pairs?: string[]): Promise<ExchangeRate[]> {
-    await _updateNbrbRatesCache();
-    
-    const pairsToFetch = pairs ? pairs.map(p => {
-        const [from, to] = p.split('/');
-        return { from, to };
-    }) : defaultPairs;
-
-     return pairsToFetch.map(pair => ({
-        ...pair,
-        rate: findNbrbRate(pair.from, pair.to) ?? 0,
-    })).filter(r => r.rate !== 0);
 }
 
 async function getNbrbHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
@@ -422,58 +402,165 @@ async function getNbrbDynamicsForPeriod(from: string, to: string, startDate: Dat
 // --- UNIFIED API ---
 export async function getCurrencies(): Promise<Currency[]> {
     if (activeDataSource === 'nbrb') {
-        return getNbrbCurrencies();
+        const [nbrbFiat, allApiCurrencies] = await Promise.all([
+            getNbrbCurrencies(),
+            getCurrencyApiCurrencies()
+        ]);
+        const cryptoFromApi = allApiCurrencies.filter(c => cryptoCodes.includes(c.code));
+        const combined = [...nbrbFiat, ...cryptoFromApi];
+        const unique = Array.from(new Map(combined.map(item => [item.code, item])).values());
+        unique.sort((a, b) => a.code.localeCompare(b.code));
+        return unique;
     } else {
         return getCurrencyApiCurrencies();
     }
 }
 
 export async function getLatestRates(pairs?: string[]): Promise<ExchangeRate[]> {
-    if (activeDataSource === 'nbrb') {
-        return getNbrbLatestRates(pairs);
-    } else {
-        return getCurrencyApiLatestRates(pairs);
-    }
+    await preFetchInitialRates();
+    
+    const pairsToFetch = pairs ? pairs.map(p => {
+        const [from, to] = p.split('/');
+        return { from, to };
+    }) : defaultPairs;
+
+    return pairsToFetch.map(pair => ({
+        ...pair,
+        rate: findRate(pair.from, pair.to) ?? 0,
+    })).filter(r => r.rate !== 0);
 }
 
 export function findRate(from: string, to: string): number | undefined {
+    const fromIsCrypto = cryptoCodes.includes(from);
+    const toIsCrypto = cryptoCodes.includes(to);
+
+    if (from === to) return 1;
+
+    // Case 1: Crypto involved, but no BYN. Always use CurrencyAPI.
+    if ((fromIsCrypto || toIsCrypto) && from !== 'BYN' && to !== 'BYN') {
+        return findCurrencyApiRate(from, to);
+    }
+
+    // Case 2: BYN is involved.
+    if (from === 'BYN' || to === 'BYN') {
+        const otherCode = from === 'BYN' ? to : from;
+        const otherIsCrypto = cryptoCodes.includes(otherCode);
+
+        if (otherIsCrypto) {
+            // Bridge Crypto to BYN via USD
+            const usdToBynRate = findNbrbRate('USD', 'BYN');
+            const usdToCryptoRate = findCurrencyApiRate('USD', otherCode);
+            
+            if (usdToBynRate && usdToCryptoRate) {
+                const bynToCryptoRate = usdToCryptoRate / usdToBynRate;
+                return from === 'BYN' ? bynToCryptoRate : 1 / bynToCryptoRate;
+            }
+            return undefined;
+        } else {
+            // Standard BYN-fiat pair is always handled by NBRB
+            return findNbrbRate(from, to);
+        }
+    }
+
+    // Case 3: Standard fiat-fiat pair (non-BYN)
     if (activeDataSource === 'nbrb') {
         return findNbrbRate(from, to);
-    } 
-    // currencyapi
-    if (from === 'BYN' || to === 'BYN') {
-        return findNbrbRate(from, to);
+    } else { // currencyapi
+        return findCurrencyApiRate(from, to);
     }
-    return findCurrencyApiRate(from, to);
 }
 
 export async function findRateAsync(from: string, to: string): Promise<number | undefined> {
-    if (getDataSource() === 'currencyapi' && (from === 'BYN' || to === 'BYN')) {
-        await _updateNbrbRatesCache();
-    } else if (getDataSource() === 'currencyapi') {
-        await _updateCurrencyApiRatesCache();
-    } else {
-        await _updateNbrbRatesCache();
-    }
-
+    await preFetchInitialRates();
     return findRate(from, to);
 }
 
 export async function getHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
-    return activeDataSource === 'nbrb' ? getNbrbHistoricalRate(from, to, date) : getCurrencyApiHistoricalRate(from, to, date);
+    const fromIsCrypto = cryptoCodes.includes(from);
+    const toIsCrypto = cryptoCodes.includes(to);
+
+    if (from === to) return 1;
+
+    if ((fromIsCrypto || toIsCrypto) && from !== 'BYN' && to !== 'BYN') {
+        return getCurrencyApiHistoricalRate(from, to, date);
+    }
+
+    if (from === 'BYN' || to === 'BYN') {
+        const otherCode = from === 'BYN' ? to : from;
+        const otherIsCrypto = cryptoCodes.includes(otherCode);
+
+        if (otherIsCrypto) {
+            const [usdToBynRate, usdToCryptoRate] = await Promise.all([
+                getNbrbHistoricalRate('USD', 'BYN', date),
+                getCurrencyApiHistoricalRate('USD', otherCode, date)
+            ]);
+            
+            if (usdToBynRate && usdToCryptoRate) {
+                const bynToCryptoRate = usdToCryptoRate / usdToBynRate;
+                return from === 'BYN' ? bynToCryptoRate : 1 / bynToCryptoRate;
+            }
+            return undefined;
+        } else {
+            return getNbrbHistoricalRate(from, to, date);
+        }
+    }
+
+    if (activeDataSource === 'nbrb') {
+        return getNbrbHistoricalRate(from, to, date);
+    } else {
+        return getCurrencyApiHistoricalRate(from, to, date);
+    }
 }
 
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
-    return activeDataSource === 'nbrb' ? getNbrbDynamicsForPeriod(from, to, startDate, endDate) : getCurrencyApiDynamicsForPeriod(from, to, startDate, endDate);
+    const fromIsCrypto = cryptoCodes.includes(from);
+    const toIsCrypto = cryptoCodes.includes(to);
+
+    if ((fromIsCrypto || toIsCrypto) && from !== 'BYN' && to !== 'BYN') {
+        return getCurrencyApiDynamicsForPeriod(from, to, startDate, endDate);
+    }
+
+    if (from === 'BYN' || to === 'BYN') {
+        const otherCode = from === 'BYN' ? to : from;
+        const otherIsCrypto = cryptoCodes.includes(otherCode);
+
+        if (otherIsCrypto) {
+            const [usdToBynDynamics, usdToCryptoDynamics] = await Promise.all([
+                getNbrbDynamicsForPeriod('USD', 'BYN', startDate, endDate),
+                getCurrencyApiDynamicsForPeriod('USD', otherCode, startDate, endDate)
+            ]);
+
+            const bynMap = new Map(usdToBynDynamics.map(d => [d.date, d.rate]));
+            const cryptoMap = new Map(usdToCryptoDynamics.map(d => [d.date, d.rate]));
+            
+            const result: { date: string; rate: number }[] = [];
+            const commonDates = new Set([...bynMap.keys()].filter(k => cryptoMap.has(k)));
+
+            for (const date of commonDates) {
+                const bynRate = bynMap.get(date)!;
+                const cryptoRate = cryptoMap.get(date)!;
+                if (bynRate === 0) continue;
+                const bynToCryptoRate = cryptoRate / bynRate;
+                result.push({ date, rate: from === 'BYN' ? bynToCryptoRate : 1 / bynToCryptoRate });
+            }
+            result.sort((a, b) => a.date.localeCompare(b.date, undefined, { numeric: true }));
+            return result;
+
+        } else {
+            return getNbrbDynamicsForPeriod(from, to, startDate, endDate);
+        }
+    }
+    
+    if (activeDataSource === 'nbrb') {
+        return getNbrbDynamicsForPeriod(from, to, startDate, endDate);
+    } else {
+        return getCurrencyApiDynamicsForPeriod(from, to, startDate, endDate);
+    }
 }
 
 export async function preFetchInitialRates() {
-    if (getDataSource() === 'nbrb') {
-        await _updateNbrbRatesCache();
-    } else {
-        await Promise.all([
-            _updateCurrencyApiRatesCache('USD'),
-            _updateNbrbRatesCache()
-        ]);
-    }
+    await Promise.all([
+        _updateCurrencyApiRatesCache('USD'),
+        _updateNbrbRatesCache()
+    ]);
 }
