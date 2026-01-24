@@ -155,7 +155,6 @@ export function ChatInterface() {
     setTrackedPairs(new Map());
     setDisplayedPairs(defaultDisplayedPairs);
 
-    addMessage({ sender: 'bot', component: <LatestRates pairs={defaultDisplayedPairs} /> });
     addMessage({
       sender: 'bot',
       text: t('chat.placeholder'),
@@ -451,3 +450,5 @@ function AlertCard({ alert, currentRate }: { alert: Alert; currentRate: number }
     </Card>
   )
 }
+
+    
