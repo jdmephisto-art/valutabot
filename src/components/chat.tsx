@@ -43,6 +43,7 @@ export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [trackedPairs, setTrackedPairs] = useState<Map<string, number>>(new Map());
+  const [trackingInterval, setTrackingInterval] = useState(30000);
   const [displayedPairs, setDisplayedPairs] = useState<string[]>(defaultDisplayedPairs);
   const [dataSource, setDataSourceState] = useState<DataSource>(getDataSource());
   const [autoClearMinutes, setAutoClearMinutes] = useState(0);
@@ -92,9 +93,11 @@ export function ChatInterface() {
             trackedPairs={Array.from(trackedPairs.keys())}
             onAddPair={handleAddTrackedPair}
             onRemovePair={handleRemoveTrackedPair}
+            onIntervalChange={setTrackingInterval}
+            currentInterval={trackingInterval}
         /> });
     }, 500);
-  }, [addMessage, t, trackedPairs]);
+  }, [addMessage, t, trackedPairs, trackingInterval]);
 
   const handleShowPairManager = useCallback(() => {
     addMessage({ sender: 'user', text: t('chat.user.showDisplayedPairManager') });
@@ -338,9 +341,9 @@ export function ChatInterface() {
             }
         }
     };
-    const interval = setInterval(checkRates, 30000); // Check every 30 seconds
+    const interval = setInterval(checkRates, trackingInterval); // Check every 30 seconds
     return () => clearInterval(interval);
-  }, [alerts, toast, addMessage, trackedPairs, t]);
+  }, [alerts, toast, addMessage, trackedPairs, t, trackingInterval]);
 
   return (
     <div className="w-full max-w-md h-[85vh] max-h-[900px] flex flex-col bg-card rounded-2xl shadow-2xl overflow-hidden border">
@@ -450,5 +453,3 @@ function AlertCard({ alert, currentRate }: { alert: Alert; currentRate: number }
     </Card>
   )
 }
-
-    

@@ -12,6 +12,9 @@ import { useState, useMemo } from 'react';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useTranslation } from '@/hooks/use-translation';
 import { CurrencyCombobox } from './currency-combobox';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
 
 const getTrackingSchema = (t: (key: string, params?: Record<string, string | number>) => string) => z.object({
     from: z.string().min(1, t('validation.selectCurrency')),
@@ -25,12 +28,16 @@ type TrackingManagerProps = {
     onAddPair: (from: string, to: string) => boolean;
     onRemovePair: (pair: string) => void;
     trackedPairs: string[];
+    onIntervalChange: (seconds: number) => void;
+    currentInterval: number;
 }
 
-export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initialTrackedPairs }: TrackingManagerProps) {
+export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initialTrackedPairs, onIntervalChange, currentInterval }: TrackingManagerProps) {
   const { currencies } = useCurrencies();
   const { t } = useTranslation();
+  const { toast } = useToast();
   const [localTrackedPairs, setLocalTrackedPairs] = useState(initialTrackedPairs);
+  const [localInterval, setLocalInterval] = useState(currentInterval / 1000);
 
   const trackingSchema = useMemo(() => getTrackingSchema(t), [t]);
   type TrackingFormValues = z.infer<typeof trackingSchema>;
@@ -57,6 +64,19 @@ export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initial
   const handleRemove = (pair: string) => {
     onRemovePair(pair);
     setLocalTrackedPairs(prev => prev.filter(p => p !== pair));
+  }
+
+  const handleSetInterval = () => {
+      onIntervalChange(localInterval * 1000);
+      toast({
+          title: t('tracking.intervalSet'),
+          description: t('tracking.intervalSetDesc', { seconds: `${localInterval}` }),
+      });
+  }
+
+  const handleIntervalInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = parseInt(e.target.value, 10);
+      setLocalInterval(Math.max(10, isNaN(value) ? 10 : value));
   }
 
   return (
@@ -131,6 +151,22 @@ export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initial
                 </div>
             </>
         )}
+        <Separator className="my-6" />
+        <div className="space-y-4">
+            <div className="space-y-2">
+                <Label htmlFor="interval-input">{t('tracking.updateInterval')}</Label>
+                <Input
+                    id="interval-input"
+                    type="number"
+                    value={localInterval}
+                    onChange={handleIntervalInputChange}
+                    min="10"
+                    step="1"
+                />
+                <p className="text-xs text-muted-foreground">{t('tracking.intervalWarning')}</p>
+            </div>
+            <Button onClick={handleSetInterval} className="w-full">{t('tracking.setInterval')}</Button>
+        </div>
       </CardContent>
     </Card>
   );

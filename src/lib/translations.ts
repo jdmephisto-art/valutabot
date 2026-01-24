@@ -91,6 +91,11 @@ export const translations = {
       to: 'To',
       addPair: 'Add Pair',
       currentlyTracking: 'Currently tracking',
+      updateInterval: 'Update interval (sec)',
+      intervalWarning: 'Minimum interval is 10 seconds.',
+      setInterval: 'Set Interval',
+      intervalSet: 'Interval updated!',
+      intervalSetDesc: 'Tracking interval is now {seconds} seconds.',
       toast: {
         errorTitle: 'Error tracking pair',
         errorDescription: 'Could not find the exchange rate for the selected pair. Rates might still be loading.',
@@ -238,6 +243,11 @@ export const translations = {
       to: 'В',
       addPair: 'Добавить пару',
       currentlyTracking: 'Сейчас отслеживается',
+      updateInterval: 'Интервал обновления (сек)',
+      intervalWarning: 'Минимальный интервал - 10 секунд.',
+      setInterval: 'Установить интервал',
+      intervalSet: 'Интервал обновлен!',
+      intervalSetDesc: 'Интервал отслеживания теперь {seconds} секунд.',
       toast: {
         errorTitle: 'Ошибка отслеживания пары',
         errorDescription: 'Не удалось найти обменный курс для выбранной пары. Возможно, курсы еще загружаются.',
