@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings } from 'lucide-react';
+import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LatestRates } from '@/components/latest-rates';
@@ -103,7 +103,7 @@ export function ChatInterface() {
     setLang(source === 'nbrb' ? 'ru' : 'en');
   };
 
-  useEffect(() => {
+  const resetChat = useCallback(() => {
     const actionButtons: ActionButtonProps[] = [
       { id: 'rates', label: t('chat.showRates'), icon: LineChart, action: handleShowRates },
       { id: 'convert', label: t('chat.showConverter'), icon: CircleDollarSign, action: handleShowConverter },
@@ -112,15 +112,6 @@ export function ChatInterface() {
       { id: 'track', label: t('chat.trackPair'), icon: Eye, action: handleShowTrackingManager },
       { id: 'settings', label: t('chat.switchSource'), icon: Settings, action: handleShowDataSourceSwitcher },
     ];
-    
-    if (isInitialMount.current) {
-        isInitialMount.current = false;
-    } else {
-        toast({
-            title: t('dataSource.toast'),
-            description: t('dataSource.toastDesc', { source: getDataSource().toUpperCase() }),
-        });
-    }
     
     getInitialRates();
     setMessages([]);
@@ -132,7 +123,19 @@ export function ChatInterface() {
       text: t('chat.placeholder'),
       options: actionButtons,
     });
-  }, [lang, t, addMessage, handleShowRates, handleShowConverter, handleShowAlertManager, handleShowHistoricalRates, handleShowTrackingManager, handleShowDataSourceSwitcher]);
+  }, [t, addMessage, handleShowRates, handleShowConverter, handleShowAlertManager, handleShowHistoricalRates, handleShowTrackingManager, handleShowDataSourceSwitcher]);
+
+  useEffect(() => {
+    if (isInitialMount.current) {
+        isInitialMount.current = false;
+    } else {
+        toast({
+            title: t('dataSource.toast'),
+            description: t('dataSource.toastDesc', { source: getDataSource().toUpperCase() }),
+        });
+    }
+    resetChat();
+  }, [lang, t, resetChat]);
 
 
   const handleSetAlert = (data: Omit<Alert, 'id' | 'baseRate'>) => {
@@ -259,7 +262,7 @@ export function ChatInterface() {
 
   return (
     <div className="w-full max-w-md h-[85vh] max-h-[900px] flex flex-col bg-card rounded-2xl shadow-2xl overflow-hidden border">
-      <header className="flex items-center p-4 border-b">
+      <header className="flex items-center justify-between p-4 border-b">
         <div className="flex items-center gap-3">
             <div className="relative">
                  <Bot className="h-10 w-10 text-primary" />
@@ -270,6 +273,9 @@ export function ChatInterface() {
             <p className="text-sm text-positive">{t('chat.online')}</p>
           </div>
         </div>
+        <Button variant="ghost" size="icon" onClick={resetChat} aria-label={t('chat.clear')}>
+            <Eraser className="h-5 w-5 text-muted-foreground" />
+        </Button>
       </header>
 
       <div ref={scrollAreaRef} className="flex-1 overflow-y-auto p-4 space-y-6">

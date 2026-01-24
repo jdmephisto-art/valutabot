@@ -10,6 +10,7 @@ export const translations = {
       showHistory: 'History',
       trackPair: 'Track pair',
       switchSource: 'Data source',
+      clear: 'Clear chat',
       user: {
         showRates: 'Show latest rates',
         showConverter: 'I want to convert currency',
@@ -133,6 +134,7 @@ export const translations = {
       showHistory: 'История',
       trackPair: 'Отслеживать',
       switchSource: 'Источник данных',
+      clear: 'Очистить чат',
       user: {
         showRates: 'Показать последние курсы',
         showConverter: 'Я хочу конвертировать валюту',
