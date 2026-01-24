@@ -44,7 +44,7 @@ export async function getInitialRates(): Promise<ExchangeRate[]> {
 // --- API FETCH HELPERS ---
 async function nbrbApiFetch(endpoint: string) {
     try {
-        const response = await fetch(`https://api.nbrb.by/exrates/${endpoint}`);
+        const response = await fetch(`https://api.nbrb.by/exrates/${endpoint}`, { cache: 'no-store' });
         if (!response.ok) {
             console.error(`NBRB request failed: ${response.status} ${response.statusText}`);
             return null;
@@ -66,7 +66,10 @@ async function currencyApiNetFetch(endpoint: string, params: Record<string, stri
     Object.entries(params).forEach(([key, value]) => url.searchParams.append(key, value));
 
     try {
-        const response = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
+        const response = await fetch(url.toString(), { 
+            headers: { 'Accept': 'application/json' },
+            cache: 'no-store' 
+        });
         if (!response.ok) {
             const errorBody = await response.json();
             console.error(`CurrencyAPI.net request failed: ${response.status} ${response.statusText}`, errorBody);
@@ -94,16 +97,22 @@ async function getCurrencyApiCurrencies(): Promise<Currency[]> {
     const data = await currencyApiNetFetch('currencies');
     
     if (data && data.currencies) {
-        const result: Currency[] = Object.entries(data.currencies).map(([code, name]: [string, any]) => ({
+        let result: Currency[] = Object.entries(data.currencies).map(([code, name]: [string, any]) => ({
             code,
             name: name as string
         }));
+        
+        if (!result.some(c => c.code === 'BYN')) {
+             result.push({ code: 'BYN', name: 'Belarusian Ruble' });
+        }
+        
         result.sort((a, b) => a.code.localeCompare(b.code));
         currencyApiCurrenciesCache = result;
         return result;
     }
-
-    return [];
+    
+    // Fallback in case of API failure
+    return [{ code: 'BYN', name: 'Belarusian Ruble' }];
 }
 
 async function updateCurrencyApiRatesCache(baseCurrency = 'USD') {
@@ -124,10 +133,6 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
     if (fromRate && toRate) {
         // All rates are against the base currency (USD) from the API
         // So we can calculate the cross rate.
-        // 1 BASE = fromRate FROM
-        // 1 BASE = toRate TO
-        // -> fromRate FROM = toRate TO
-        // -> 1 FROM = (toRate / fromRate) TO
         return toRate / fromRate;
     }
     return undefined;
@@ -142,17 +147,31 @@ async function getCurrencyApiLatestRates(): Promise<ExchangeRate[]> {
         { from: 'USD', to: 'EUR' }, { from: 'EUR', to: 'USD' }, { from: 'USD', to: 'BYN' },
         { from: 'EUR', to: 'BYN' }, { from: 'USD', to: 'RUB' }, { from: 'EUR', to: 'RUB' },
     ];
-    return displayedPairs.map(pair => ({
-        ...pair,
-        rate: findCurrencyApiRate(pair.from, pair.to) ?? 0,
-    })).filter(r => r.rate !== 0);
+    // For BYN, we need NBRB data
+    if (Object.keys(nbrbRatesCache).length === 0) {
+        await updateNbrbRatesCache();
+    }
+    
+    return displayedPairs.map(pair => {
+        const rate = (pair.from === 'BYN' || pair.to === 'BYN') 
+                        ? findNbrbRate(pair.from, pair.to) 
+                        : findCurrencyApiRate(pair.from, pair.to);
+        return {
+            ...pair,
+            rate: rate ?? 0,
+        };
+    }).filter(r => r.rate !== 0);
 }
 
 async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
     if (from === to) return 1;
+
+    if (from === 'BYN' || to === 'BYN') {
+        return getNbrbHistoricalRate(from, to, date);
+    }
+    
     const formattedDate = format(date, 'yyyy-MM-dd');
-    // Base currency for historical data is USD on the free plan.
-    const data = await currencyApiNetFetch('historical', { date: formattedDate });
+    const data = await currencyApiNetFetch('history', { date: formattedDate, base: 'USD' });
     if (data && data.rates) {
         const fromRate = from === 'USD' ? 1 : data.rates[from];
         const toRate = to === 'USD' ? 1 : data.rates[to];
@@ -164,13 +183,17 @@ async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date
 }
 
 async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string, rate: number }[]> {
+     if (from === 'BYN' || to === 'BYN') {
+        return getNbrbDynamicsForPeriod(from, to, startDate, endDate);
+    }
+
     const formattedStart = format(startDate, 'yyyy-MM-dd');
     const formattedEnd = format(endDate, 'yyyy-MM-dd');
 
-    // The base currency for timeseries is USD on the free plan.
-    const data = await currencyApiNetFetch('timeseries', {
+    const data = await currencyApiNetFetch('timeframe', {
         start_date: formattedStart,
         end_date: formattedEnd,
+        base: 'USD'
     });
 
     if (data && data.rates) {
@@ -391,8 +414,35 @@ export async function getLatestRates(): Promise<ExchangeRate[]> {
 }
 
 export function findRate(from: string, to: string): number | undefined {
-    return activeDataSource === 'nbrb' ? findNbrbRate(from, to) : findCurrencyApiRate(from, to);
+    if (activeDataSource === 'nbrb') {
+        return findNbrbRate(from, to);
+    } 
+    // currencyapi
+    if (from === 'BYN' || to === 'BYN') {
+        // For BYN, we must use NBRB rates, which might not be in cache if called synchronously.
+        return findNbrbRate(from, to);
+    }
+    return findCurrencyApiRate(from, to);
 }
+
+export async function findRateAsync(from: string, to: string): Promise<number | undefined> {
+    // If using CurrencyAPI and BYN is involved, we need to ensure NBRB cache is populated
+    if (getDataSource() === 'currencyapi' && (from === 'BYN' || to === 'BYN')) {
+        if (Object.keys(nbrbRatesCache).length === 0) {
+             await updateNbrbRatesCache();
+        }
+    }
+
+    // For CurrencyAPI conversions that DON'T involve BYN, ensure that cache is populated
+    if (getDataSource() === 'currencyapi' && from !== 'BYN' && to !== 'BYN') {
+        if (Object.keys(currencyApiRatesCache).length === 0) {
+            await updateCurrencyApiRatesCache();
+        }
+    }
+    
+    return findRate(from, to);
+}
+
 
 export async function getHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
     return activeDataSource === 'nbrb' ? getNbrbHistoricalRate(from, to, date) : getCurrencyApiHistoricalRate(from, to, date);

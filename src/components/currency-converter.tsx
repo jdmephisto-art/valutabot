@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { findRate } from '@/lib/currencies';
+import { findRateAsync } from '@/lib/currencies';
 import { ArrowRightLeft } from 'lucide-react';
 import { Button } from './ui/button';
 import { useCurrencies } from '@/hooks/use-currencies';
@@ -17,14 +17,24 @@ export function CurrencyConverter() {
   const [toCurrency, setToCurrency] = useState('EUR');
   const [amount, setAmount] = useState('1');
   const [convertedAmount, setConvertedAmount] = useState('');
+  const [displayRate, setDisplayRate] = useState<number | undefined>(undefined);
 
   useEffect(() => {
-    const rate = findRate(fromCurrency, toCurrency);
-    if (rate && amount) {
-      setConvertedAmount((parseFloat(amount) * rate).toFixed(4));
-    } else {
-      setConvertedAmount('');
-    }
+    const convert = async () => {
+        if (!fromCurrency || !toCurrency) return;
+
+        setConvertedAmount('...'); // Show loading state
+        const rate = await findRateAsync(fromCurrency, toCurrency);
+        
+        setDisplayRate(rate);
+
+        if (rate && amount) {
+          setConvertedAmount((parseFloat(amount) * rate).toFixed(4));
+        } else {
+          setConvertedAmount('');
+        }
+    };
+    convert();
   }, [fromCurrency, toCurrency, amount]);
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -82,9 +92,9 @@ export function CurrencyConverter() {
               />
             </div>
           </div>
-          {amount && convertedAmount && (
+          {amount && convertedAmount && convertedAmount !== '...' && displayRate && (
              <p className="text-center text-muted-foreground text-sm font-mono pt-2">
-                1 {fromCurrency} = {findRate(fromCurrency, toCurrency)?.toFixed(4)} {toCurrency}
+                1 {fromCurrency} = {displayRate.toFixed(4)} {toCurrency}
             </p>
           )}
         </div>
