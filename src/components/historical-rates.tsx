@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -25,14 +26,17 @@ export function HistoricalRates() {
   const { t, lang, dateLocale } = useTranslation();
   const [fromCurrency, setFromCurrency] = useState('USD');
   const [toCurrency, setToCurrency] = useState('EUR');
+  const [activeTab, setActiveTab] = useState('dynamics');
 
   // State for single date
   const [date, setDate] = useState<Date | undefined>(new Date());
-  const [singleRate, setSingleRate] = useState<number | null>(null);
+  const [singleRate, setSingleRate] = useState<number | null | undefined>(undefined);
+  const [fetchingSingle, setFetchingSingle] = useState(false);
 
   // State for date range
   const [range, setRange] = useState<DateRange | undefined>();
-  const [rangeResult, setRangeResult] = useState<{ startRate: number; endRate: number } | null>(null);
+  const [rangeResult, setRangeResult] = useState<{ startRate: number; endRate: number } | null | undefined>(undefined);
+  const [fetchingRange, setFetchingRange] = useState(false);
 
   // State for historical dynamics
   const [dynamicsRange, setDynamicsRange] = useState<DateRange | undefined>({ from: subDays(new Date(), 29), to: new Date() });
@@ -51,15 +55,18 @@ export function HistoricalRates() {
 
   const handleFetchSingleRate = async () => {
     if (date) {
-      setSingleRate(null);
+      setFetchingSingle(true);
+      setSingleRate(undefined);
       const rate = await getHistoricalRate(fromCurrency, toCurrency, date);
       setSingleRate(rate === undefined ? null : rate);
+      setFetchingSingle(false);
     }
   };
 
   const handleFetchRangeRate = async () => {
     if (range?.from && range.to) {
-      setRangeResult(null);
+      setFetchingRange(true);
+      setRangeResult(undefined);
       const startRate = await getHistoricalRate(fromCurrency, toCurrency, range.from);
       const endRate = await getHistoricalRate(fromCurrency, toCurrency, range.to);
       if (startRate !== undefined && endRate !== undefined) {
@@ -67,8 +74,16 @@ export function HistoricalRates() {
       } else {
         setRangeResult(null);
       }
+      setFetchingRange(false);
     }
   };
+  
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    setSingleRate(undefined);
+    setRangeResult(undefined);
+    setDynamicsData([]);
+  }
 
   const handleDynamicsRangeSelect = (range: DateRange | undefined) => {
     if (getDataSource() === 'currencyapi' && range?.from && range.to && differenceInDays(range.to, range.from) > 30) {
@@ -123,7 +138,7 @@ export function HistoricalRates() {
         <CardDescription>{t('history.description', { source: getDataSource().toUpperCase() })}</CardDescription>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="dynamics">
+        <Tabs defaultValue="dynamics" onValueChange={handleTabChange}>
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="dynamics">{t('history.tabDynamics')}</TabsTrigger>
             <TabsTrigger value="single">{t('history.tabSingle')}</TabsTrigger>
@@ -145,7 +160,7 @@ export function HistoricalRates() {
                             initialFocus
                             mode="single"
                             selected={dynamicsRange?.from}
-                            onSelect={(day) => handleDynamicsRangeSelect({ from: day, to: dynamicsRange?.to })}
+                            onSelect={(day) => handleDynamicsRangeSelect({ ...dynamicsRange, from: day })}
                             disabled={(date) => (dynamicsRange?.to ? date > dynamicsRange.to : false) || (getCalendarDisabledDates().before ? date < getCalendarDisabledDates().before! : false) || (getCalendarDisabledDates().after ? date > getCalendarDisabledDates().after! : false)}
                             locale={dateLocale}
                         />
@@ -163,7 +178,7 @@ export function HistoricalRates() {
                             initialFocus
                             mode="single"
                             selected={dynamicsRange?.to}
-                            onSelect={(day) => handleDynamicsRangeSelect({ from: dynamicsRange?.from, to: day })}
+                            onSelect={(day) => handleDynamicsRangeSelect({ ...dynamicsRange, to: day })}
                             disabled={(date) => (dynamicsRange?.from ? date < dynamicsRange.from : false) || (getCalendarDisabledDates().before ? date < getCalendarDisabledDates().before! : false) || (getCalendarDisabledDates().after ? date > getCalendarDisabledDates().after! : false)}
                             locale={dateLocale}
                         />
@@ -194,7 +209,7 @@ export function HistoricalRates() {
                     </ChartContainer>
                 </div>
             )}
-             {!fetchingDynamics && dynamicsData.length === 0 && <p className="text-xs text-center text-muted-foreground pt-2">{t('history.noDynamics')}</p>}
+             {!fetchingDynamics && dynamicsData.length === 0 && activeTab === 'dynamics' && <p className="text-xs text-center text-muted-foreground pt-2">{t('history.noDynamics')}</p>}
           </TabsContent>
 
           <TabsContent value="single" className="space-y-4 pt-4">
@@ -208,14 +223,16 @@ export function HistoricalRates() {
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus disabled={getCalendarDisabledDates()} locale={dateLocale} /></PopoverContent>
             </Popover>
-            <Button onClick={handleFetchSingleRate} className="w-full">{t('history.getRate')}</Button>
+            <Button onClick={handleFetchSingleRate} className="w-full" disabled={fetchingSingle || !date}>
+                {fetchingSingle ? t('latestRates.loading') : t('history.getRate')}
+            </Button>
             {singleRate !== null && singleRate !== undefined && (
               <div className="text-center p-4 bg-muted/50 rounded-lg">
                 <p className="text-sm text-muted-foreground">{t('history.rateOn', { date: date ? format(date, "PPP", { locale: dateLocale }) : '' })}</p>
                 <p className="text-2xl font-bold font-mono">{singleRate.toFixed(4)}</p>
               </div>
             )}
-             {(singleRate === null || singleRate === undefined) && <p className="text-xs text-center text-muted-foreground">{t('history.noRate')}</p>}
+             {singleRate === null && <p className="text-xs text-center text-muted-foreground pt-2">{t('history.noRate')}</p>}
           </TabsContent>
 
           <TabsContent value="range" className="space-y-4 pt-4">
@@ -233,7 +250,7 @@ export function HistoricalRates() {
                             initialFocus 
                             mode="single" 
                             selected={range?.from} 
-                            onSelect={(day) => setRange(currentRange => ({ from: day, to: currentRange?.to }))}
+                            onSelect={(day) => setRange(prev => ({ ...prev, from: day }))}
                             disabled={(date) => (range?.to ? date > range.to : false) || (getCalendarDisabledDates().before ? date < getCalendarDisabledDates().before! : false) || (getCalendarDisabledDates().after ? date > getCalendarDisabledDates().after! : false)}
                             locale={dateLocale}
                         />
@@ -251,14 +268,16 @@ export function HistoricalRates() {
                             initialFocus 
                             mode="single" 
                             selected={range?.to} 
-                            onSelect={(day) => setRange(currentRange => ({ from: currentRange?.from, to: day }))}
+                            onSelect={(day) => setRange(prev => ({ ...prev, to: day }))}
                             disabled={(date) => (range?.from ? date < range.from : false) || (getCalendarDisabledDates().before ? date < getCalendarDisabledDates().before! : false) || (getCalendarDisabledDates().after ? date > getCalendarDisabledDates().after! : false)}
                             locale={dateLocale}
                         />
                     </PopoverContent>
                 </Popover>
              </div>
-             <Button onClick={handleFetchRangeRate} className="w-full" disabled={!range?.from || !range?.to}>{t('history.compareRates')}</Button>
+             <Button onClick={handleFetchRangeRate} className="w-full" disabled={fetchingRange || !range?.from || !range?.to}>
+                {fetchingRange ? t('latestRates.loading') : t('history.compareRates')}
+            </Button>
              {rangeResult && (
                 <div className="p-4 bg-muted/50 rounded-lg space-y-2">
                     <div className="flex justify-between items-center">
@@ -278,6 +297,7 @@ export function HistoricalRates() {
                     </div>
                 </div>
              )}
+             {rangeResult === null && <p className="text-xs text-center text-muted-foreground pt-2">{t('history.noRate')}</p>}
           </TabsContent>
         </Tabs>
       </CardContent>

@@ -1,3 +1,4 @@
+
 import type { Currency, ExchangeRate, DataSource } from '@/lib/types';
 import { format, subDays, differenceInDays, addDays, startOfDay, parseISO } from 'date-fns';
 
@@ -60,24 +61,27 @@ async function currencyApiNetFetch(endpoint: string, params: Record<string, stri
     const apiKey = '6431078d4fc8bf5d4097027ee62c2c0dc4e0';
     const baseUrl = 'https://currencyapi.net/api/v1/';
 
-    const url = new URL(`${baseUrl}${endpoint}`);
-    url.searchParams.append('key', apiKey);
-    url.searchParams.append('output', 'json');
-    Object.entries(params).forEach(([key, value]) => url.searchParams.append(key, value));
+    const queryParams = new URLSearchParams({
+        key: apiKey,
+        output: 'json',
+        ...params
+    });
+
+    const url = `${baseUrl}${endpoint}?${queryParams.toString()}`;
 
     try {
-        const response = await fetch(url.toString(), { 
+        const response = await fetch(url, { 
             headers: { 'Accept': 'application/json' },
             cache: 'no-store' 
         });
         if (!response.ok) {
-            const errorBody = await response.json();
+            const errorBody = await response.json().catch(() => ({}));
             console.error(`CurrencyAPI.net request failed: ${response.status} ${response.statusText}`, errorBody);
             return null;
         }
         const data = await response.json();
         if (data.valid === false || data.error) {
-             console.error(`CurrencyAPI.net request returned an error:`, data.error);
+             console.error(`CurrencyAPI.net request returned an error:`, data.error || 'Unknown error');
              return null;
         }
         return data;
@@ -111,7 +115,7 @@ async function getCurrencyApiCurrencies(): Promise<Currency[]> {
         return result;
     }
     
-    // Fallback in case of API failure
+    // Fallback in case of API failure, ensuring BYN is present
     return [{ code: 'BYN', name: 'Belarusian Ruble' }];
 }
 
@@ -132,7 +136,7 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
     
     if (fromRate && toRate) {
         // All rates are against the base currency (USD) from the API
-        // So we can calculate the cross rate.
+        // So we can calculate the cross rate: (1/fromRate) * toRate
         return toRate / fromRate;
     }
     return undefined;
@@ -147,7 +151,7 @@ async function getCurrencyApiLatestRates(): Promise<ExchangeRate[]> {
         { from: 'USD', to: 'EUR' }, { from: 'EUR', to: 'USD' }, { from: 'USD', to: 'BYN' },
         { from: 'EUR', to: 'BYN' }, { from: 'USD', to: 'RUB' }, { from: 'EUR', to: 'RUB' },
     ];
-    // For BYN, we need NBRB data
+
     if (Object.keys(nbrbRatesCache).length === 0) {
         await updateNbrbRatesCache();
     }
@@ -419,30 +423,30 @@ export function findRate(from: string, to: string): number | undefined {
     } 
     // currencyapi
     if (from === 'BYN' || to === 'BYN') {
-        // For BYN, we must use NBRB rates, which might not be in cache if called synchronously.
         return findNbrbRate(from, to);
     }
     return findCurrencyApiRate(from, to);
 }
 
 export async function findRateAsync(from: string, to: string): Promise<number | undefined> {
-    // If using CurrencyAPI and BYN is involved, we need to ensure NBRB cache is populated
     if (getDataSource() === 'currencyapi' && (from === 'BYN' || to === 'BYN')) {
         if (Object.keys(nbrbRatesCache).length === 0) {
              await updateNbrbRatesCache();
         }
     }
-
-    // For CurrencyAPI conversions that DON'T involve BYN, ensure that cache is populated
+    
     if (getDataSource() === 'currencyapi' && from !== 'BYN' && to !== 'BYN') {
         if (Object.keys(currencyApiRatesCache).length === 0) {
             await updateCurrencyApiRatesCache();
+        }
+    } else {
+        if (Object.keys(nbrbRatesCache).length === 0) {
+            await updateNbrbRatesCache();
         }
     }
     
     return findRate(from, to);
 }
-
 
 export async function getHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
     return activeDataSource === 'nbrb' ? getNbrbHistoricalRate(from, to, date) : getCurrencyApiHistoricalRate(from, to, date);
