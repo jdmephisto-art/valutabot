@@ -8,22 +8,36 @@ import { cn } from '@/lib/utils';
 import { ArrowRight } from 'lucide-react';
 import { useTranslation } from '@/hooks/use-translation';
 
-export function LatestRates() {
+type LatestRatesProps = {
+    pairs: string[];
+}
+
+export function LatestRates({ pairs }: LatestRatesProps) {
   const [rates, setRates] = useState<ExchangeRate[]>([]);
+  const [loading, setLoading] = useState(true);
   const [changedRates, setChangedRates] = useState<Map<string, 'up' | 'down'>>(new Map());
   const { t } = useTranslation();
   const dataSource = getDataSource();
 
   useEffect(() => {
-    getInitialRates().then(initialRates => {
-      setRates(initialRates);
-    });
-  }, [dataSource]); // Re-fetch when data source changes
+    if (pairs.length > 0) {
+      setLoading(true);
+      getInitialRates(pairs).then(initialRates => {
+        setRates(initialRates);
+        setLoading(false);
+      });
+    } else {
+      setRates([]);
+      setLoading(false);
+    }
+  }, [dataSource, pairs]); // Re-fetch when data source or pairs change
 
   useEffect(() => {
+    if (pairs.length === 0) return;
+
     const interval = setInterval(async () => {
       const oldRates = new Map(rates.map(r => [`${r.from}-${r.to}`, r.rate]));
-      const newRates = await getLatestRates();
+      const newRates = await getLatestRates(pairs);
       const changed = new Map<string, 'up' | 'down'>();
 
       for (const newRate of newRates) {
@@ -43,7 +57,7 @@ export function LatestRates() {
     }, 60000); // Check for new rates every minute
 
     return () => clearInterval(interval);
-  }, [rates]);
+  }, [rates, pairs]);
 
   return (
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
@@ -52,7 +66,8 @@ export function LatestRates() {
         <CardDescription>{t('latestRates.description', { source: dataSource.toUpperCase() })}</CardDescription>
       </CardHeader>
       <CardContent>
-        {rates.length === 0 && <p className="text-sm text-muted-foreground">{t('latestRates.loading')}</p>}
+        {loading && <p className="text-sm text-muted-foreground">{t('latestRates.loading')}</p>}
+        {!loading && rates.length === 0 && <p className="text-sm text-muted-foreground">{t('latestRates.noPairs')}</p>}
         <div className="space-y-4">
           {rates.map(({ from, to, rate }) => {
             const changeDirection = changedRates.get(`${from}-${to}`);

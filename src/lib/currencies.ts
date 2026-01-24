@@ -4,6 +4,11 @@ import { format, subDays, differenceInDays, addDays, startOfDay, parseISO } from
 
 let activeDataSource: DataSource = 'nbrb'; // Default data source
 
+const defaultPairs = [
+    { from: 'USD', to: 'EUR' }, { from: 'EUR', to: 'USD' }, { from: 'USD', to: 'BYN' },
+    { from: 'EUR', to: 'BYN' }, { from: 'USD', to: 'RUB' }, { from: 'EUR', to: 'RUB' },
+];
+
 // Caches
 let nbrbCurrenciesCache: Currency[] | null = null;
 let nbrbFullCurrencyInfoCache: any[] | null = null;
@@ -32,13 +37,13 @@ export function getDataSource(): DataSource {
 }
 
 // --- SHARED ---
-export async function getInitialRates(): Promise<ExchangeRate[]> {
+export async function getInitialRates(pairs?: string[]): Promise<ExchangeRate[]> {
     if (activeDataSource === 'nbrb') {
         await updateNbrbRatesCache();
-        return getNbrbLatestRates();
+        return getNbrbLatestRates(pairs);
     } else {
         await updateCurrencyApiRatesCache('USD');
-        return getCurrencyApiLatestRates();
+        return getCurrencyApiLatestRates(pairs);
     }
 }
 
@@ -143,20 +148,21 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
 }
 
 
-async function getCurrencyApiLatestRates(): Promise<ExchangeRate[]> {
+async function getCurrencyApiLatestRates(pairs?: string[]): Promise<ExchangeRate[]> {
     if (Object.keys(currencyApiRatesCache).length === 0 || Date.now() - lastCurrencyApiFetchTimestamp > 5 * 60 * 1000) { // 5 min cache
         await updateCurrencyApiRatesCache('USD');
     }
-    const displayedPairs = [
-        { from: 'USD', to: 'EUR' }, { from: 'EUR', to: 'USD' }, { from: 'USD', to: 'BYN' },
-        { from: 'EUR', to: 'BYN' }, { from: 'USD', to: 'RUB' }, { from: 'EUR', to: 'RUB' },
-    ];
+    
+    const pairsToFetch = pairs ? pairs.map(p => {
+        const [from, to] = p.split('/');
+        return { from, to };
+    }) : defaultPairs;
 
     if (Object.keys(nbrbRatesCache).length === 0) {
         await updateNbrbRatesCache();
     }
     
-    return displayedPairs.map(pair => {
+    return pairsToFetch.map(pair => {
         const rate = (pair.from === 'BYN' || pair.to === 'BYN') 
                         ? findNbrbRate(pair.from, pair.to) 
                         : findCurrencyApiRate(pair.from, pair.to);
@@ -306,15 +312,17 @@ function findNbrbRate(from: string, to: string): number | undefined {
     return undefined;
 }
 
-async function getNbrbLatestRates(): Promise<ExchangeRate[]> {
+async function getNbrbLatestRates(pairs?: string[]): Promise<ExchangeRate[]> {
     if (Object.keys(nbrbRatesCache).length === 0) {
         await updateNbrbRatesCache();
     }
-    const displayedPairs = [
-        { from: 'USD', to: 'EUR' }, { from: 'EUR', to: 'USD' }, { from: 'USD', to: 'BYN' },
-        { from: 'EUR', to: 'BYN' }, { from: 'USD', to: 'RUB' }, { from: 'EUR', to: 'RUB' },
-    ];
-     return displayedPairs.map(pair => ({
+    
+    const pairsToFetch = pairs ? pairs.map(p => {
+        const [from, to] = p.split('/');
+        return { from, to };
+    }) : defaultPairs;
+
+     return pairsToFetch.map(pair => ({
         ...pair,
         rate: findNbrbRate(pair.from, pair.to) ?? 0,
     })).filter(r => r.rate !== 0);
@@ -407,13 +415,13 @@ export async function getCurrencies(): Promise<Currency[]> {
     }
 }
 
-export async function getLatestRates(): Promise<ExchangeRate[]> {
+export async function getLatestRates(pairs?: string[]): Promise<ExchangeRate[]> {
     if (activeDataSource === 'nbrb') {
         await updateNbrbRatesCache();
-        return getNbrbLatestRates();
+        return getNbrbLatestRates(pairs);
     } else {
         await updateCurrencyApiRatesCache();
-        return getCurrencyApiLatestRates();
+        return getCurrencyApiLatestRates(pairs);
     }
 }
 

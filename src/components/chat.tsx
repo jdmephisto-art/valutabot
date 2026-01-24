@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer } from 'lucide-react';
+import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LatestRates } from '@/components/latest-rates';
@@ -13,8 +13,9 @@ import { TrackingManager } from '@/components/tracking-manager';
 import { RateUpdateCard } from '@/components/rate-update-card';
 import { DataSourceSwitcher } from '@/components/data-source-switcher';
 import { AutoClearManager } from '@/components/auto-clear-manager';
+import { DisplayedPairManager } from '@/components/displayed-pair-manager';
 import type { Alert, DataSource } from '@/lib/types';
-import { findRate, getLatestRates, setDataSource, getDataSource, getInitialRates } from '@/lib/currencies';
+import { findRate, getLatestRates, setDataSource, getDataSource } from '@/lib/currencies';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/hooks/use-translation';
 import { Card, CardContent } from './ui/card';
@@ -36,10 +37,13 @@ type ActionButtonProps = {
   action: () => void;
 };
 
+const defaultDisplayedPairs = ['USD/EUR', 'EUR/USD', 'USD/BYN', 'EUR/BYN', 'USD/RUB', 'EUR/RUB'];
+
 export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [trackedPairs, setTrackedPairs] = useState<Map<string, number>>(new Map());
+  const [displayedPairs, setDisplayedPairs] = useState<string[]>(defaultDisplayedPairs);
   const [dataSource, setDataSourceState] = useState<DataSource>(getDataSource());
   const [autoClearMinutes, setAutoClearMinutes] = useState(0);
   const [autoClearPopoverOpen, setAutoClearPopoverOpen] = useState(false);
@@ -56,8 +60,8 @@ export function ChatInterface() {
 
   const handleShowRates = useCallback(() => {
     addMessage({ sender: 'user', text: t('chat.user.showRates') });
-    setTimeout(() => addMessage({ sender: 'bot', component: <LatestRates /> }), 500);
-  }, [addMessage, t]);
+    setTimeout(() => addMessage({ sender: 'bot', component: <LatestRates pairs={displayedPairs} /> }), 500);
+  }, [addMessage, t, displayedPairs]);
 
   const handleShowConverter = useCallback(() => {
     addMessage({ sender: 'user', text: t('chat.user.showConverter') });
@@ -90,7 +94,18 @@ export function ChatInterface() {
             onRemovePair={handleRemoveTrackedPair}
         /> });
     }, 500);
-  }, [addMessage, t]);
+  }, [addMessage, t, trackedPairs]);
+
+  const handleShowPairManager = useCallback(() => {
+    addMessage({ sender: 'user', text: t('chat.user.showDisplayedPairManager') });
+    setTimeout(() => {
+        addMessage({ sender: 'bot', component: <DisplayedPairManager 
+            pairs={displayedPairs}
+            onAddPair={handleAddDisplayedPair}
+            onRemovePair={handleRemoveDisplayedPair}
+        /> });
+    }, 500);
+  }, [addMessage, t, displayedPairs]);
   
   const handleShowDataSourceSwitcher = useCallback(() => {
     addMessage({ sender: 'user', text: t('chat.user.switchSource') });
@@ -127,6 +142,7 @@ export function ChatInterface() {
   const resetChat = useCallback(() => {
     const actionButtons: ActionButtonProps[] = [
       { id: 'rates', label: t('chat.showRates'), icon: LineChart, action: handleShowRates },
+      { id: 'configure_pairs', label: t('chat.showDisplayedPairManager'), icon: List, action: handleShowPairManager },
       { id: 'convert', label: t('chat.showConverter'), icon: CircleDollarSign, action: handleShowConverter },
       { id: 'alert', label: t('chat.setAlert'), icon: BellRing, action: handleShowAlertManager },
       { id: 'history', label: t('chat.showHistory'), icon: History, action: handleShowHistoricalRates },
@@ -134,17 +150,18 @@ export function ChatInterface() {
       { id: 'settings', label: t('chat.switchSource'), icon: Settings, action: handleShowDataSourceSwitcher },
     ];
     
-    getInitialRates();
     setMessages([]);
     setAlerts([]);
     setTrackedPairs(new Map());
+    setDisplayedPairs(defaultDisplayedPairs);
 
+    addMessage({ sender: 'bot', component: <LatestRates pairs={defaultDisplayedPairs} /> });
     addMessage({
       sender: 'bot',
       text: t('chat.placeholder'),
       options: actionButtons,
     });
-  }, [t, addMessage, handleShowRates, handleShowConverter, handleShowAlertManager, handleShowHistoricalRates, handleShowTrackingManager, handleShowDataSourceSwitcher]);
+  }, [t, addMessage, handleShowRates, handleShowPairManager, handleShowConverter, handleShowAlertManager, handleShowHistoricalRates, handleShowTrackingManager, handleShowDataSourceSwitcher]);
 
   useEffect(() => {
     if (isInitialMount.current) {
@@ -156,7 +173,8 @@ export function ChatInterface() {
         });
     }
     resetChat();
-  }, [lang, t, resetChat]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang]);
 
 
   const handleSetAlert = (data: Omit<Alert, 'id' | 'baseRate'>) => {
@@ -216,6 +234,21 @@ export function ChatInterface() {
     addMessage({ sender: 'bot', text: t('chat.bot.pairUntracked', { pair }) });
   };
   
+  const handleAddDisplayedPair = (from: string, to: string): boolean => {
+    const pair = `${from}/${to}`;
+    if (displayedPairs.includes(pair)) {
+        return false;
+    }
+    setDisplayedPairs(prev => [...prev, pair]);
+    addMessage({ sender: 'bot', text: t('chat.bot.pairAddedToList', { pair }) });
+    return true;
+  };
+
+  const handleRemoveDisplayedPair = (pair: string) => {
+    setDisplayedPairs(prev => prev.filter(p => p !== pair));
+    addMessage({ sender: 'bot', text: t('chat.bot.pairRemovedFromList', { pair }) });
+  };
+
   useEffect(() => {
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
@@ -251,7 +284,11 @@ export function ChatInterface() {
     const checkRates = async () => {
         if(alerts.length === 0 && trackedPairs.size === 0) return;
         
-        await getLatestRates(); // to update rates
+        const pairsToUpdate = new Set<string>();
+        alerts.forEach(a => pairsToUpdate.add(`${a.from}/${a.to}`));
+        trackedPairs.forEach((_, p) => pairsToUpdate.add(p));
+        
+        await getLatestRates(Array.from(pairsToUpdate)); // to update rates
         
         // Check alerts
         const triggeredAlerts: Alert[] = [];

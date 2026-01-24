@@ -12,6 +12,7 @@ export const translations = {
       switchSource: 'Data source',
       autoClear: 'Auto-clear',
       clear: 'Clear chat',
+      showDisplayedPairManager: 'Configure List',
       user: {
         showRates: 'Show latest rates',
         showConverter: 'I want to convert currency',
@@ -20,18 +21,22 @@ export const translations = {
         trackPair: 'Track a currency pair',
         switchSource: 'Change data source',
         autoClear: 'Set up auto-clear',
+        showDisplayedPairManager: 'Configure the rates list',
       },
       bot: {
         alertSet: 'OK! Alert is set for {from}/{to} {condition} {threshold}.',
         pairTracked: 'OK. Now tracking {pair}. I will notify you of any changes.',
         pairUntracked: 'I have stopped tracking {pair}.',
         sourceSwitched: 'Data source switched to {source}. How can I help you?',
+        pairAddedToList: "OK. The pair {pair} has been added to the list.",
+        pairRemovedFromList: "The pair {pair} has been removed from the list.",
       },
     },
     latestRates: {
       title: 'Latest Rates',
       description: 'Data from {source}',
       loading: 'Loading rates...',
+      noPairs: 'No pairs selected for display. Please configure the list from the main menu.',
     },
     converter: {
       title: 'Currency Converter',
@@ -91,6 +96,12 @@ export const translations = {
         errorDescription: 'Could not find the exchange rate for the selected pair. Rates might still be loading.',
       },
     },
+    displayedPairManager: {
+      title: "Configure Rates List",
+      description: "Choose which pairs to show in 'Latest Rates'.",
+      addPair: "Add Pair",
+      currentlyDisplayed: "Currently displayed pairs",
+    },
     dataSource: {
       title: 'Data Source',
       description: 'Choose the source for currency rates.',
@@ -148,6 +159,7 @@ export const translations = {
       switchSource: 'Источник данных',
       autoClear: 'Автоочистка',
       clear: 'Очистить чат',
+      showDisplayedPairManager: 'Настроить список',
       user: {
         showRates: 'Показать последние курсы',
         showConverter: 'Я хочу конвертировать валюту',
@@ -156,18 +168,22 @@ export const translations = {
         trackPair: 'Отслеживать валютную пару',
         switchSource: 'Изменить источник данных',
         autoClear: 'Настроить автоочистку',
+        showDisplayedPairManager: 'Настроить список курсов',
       },
       bot: {
         alertSet: 'ОК! Оповещение установлено для {from}/{to} {condition} {threshold}.',
         pairTracked: 'ОК. Теперь я отслеживаю {pair}. Я сообщу вам о любых изменениях.',
         pairUntracked: 'Я прекратил отслеживание {pair}.',
         sourceSwitched: 'Источник данных переключен на {source}. Чем могу помочь?',
+        pairAddedToList: "ОК. Пара {pair} добавлена в список.",
+        pairRemovedFromList: "Пара {pair} удалена из списка.",
       },
     },
     latestRates: {
       title: 'Последние курсы',
       description: 'Данные из {source}',
       loading: 'Загрузка курсов...',
+      noPairs: 'Нет выбранных пар для отображения. Пожалуйста, настройте список в главном меню.',
     },
     converter: {
       title: 'Конвертер валют',
@@ -226,6 +242,12 @@ export const translations = {
         errorTitle: 'Ошибка отслеживания пары',
         errorDescription: 'Не удалось найти обменный курс для выбранной пары. Возможно, курсы еще загружаются.',
       },
+    },
+    displayedPairManager: {
+      title: "Настроить список курсов",
+      description: "Выберите, какие пары отображать в 'Последних курсах'.",
+      addPair: "Добавить пару",
+      currentlyDisplayed: "Отображаемые пары",
     },
     dataSource: {
       title: 'Источник данных',
