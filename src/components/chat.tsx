@@ -19,6 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/hooks/use-translation';
 import { Card, CardContent } from './ui/card';
 import { setLang } from '@/lib/localization';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 type Message = {
   id: string;
@@ -41,6 +42,7 @@ export function ChatInterface() {
   const [trackedPairs, setTrackedPairs] = useState<Map<string, number>>(new Map());
   const [dataSource, setDataSourceState] = useState<DataSource>(getDataSource());
   const [autoClearMinutes, setAutoClearMinutes] = useState(0);
+  const [autoClearPopoverOpen, setAutoClearPopoverOpen] = useState(false);
   const autoClearTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -100,30 +102,19 @@ export function ChatInterface() {
     }, 500);
   }, [addMessage, t, dataSource]);
 
-  const handleShowAutoClearManager = useCallback(() => {
-    addMessage({ sender: 'user', text: t('chat.user.autoClear') });
-    setTimeout(() => {
-      addMessage({
-        sender: 'bot',
-        component: <AutoClearManager onSetAutoClear={handleSetAutoClear} currentMinutes={autoClearMinutes} />,
-      });
-    }, 500);
-  }, [addMessage, t, autoClearMinutes]);
-
   const handleSetAutoClear = (minutes: number) => {
     setAutoClearMinutes(minutes);
+    setAutoClearPopoverOpen(false);
 
     if (minutes > 0) {
         toast({
             title: t('autoClear.toast'),
             description: t('autoClear.toastDesc', { minutes: `${minutes}` }),
         });
-        addMessage({ sender: 'bot', text: t('autoClear.toastDesc', { minutes: `${minutes}` }) });
     } else {
         toast({
             title: t('autoClear.toastDisabled'),
         });
-        addMessage({ sender: 'bot', text: t('autoClear.toastDisabled') });
     }
   };
 
@@ -140,7 +131,6 @@ export function ChatInterface() {
       { id: 'alert', label: t('chat.setAlert'), icon: BellRing, action: handleShowAlertManager },
       { id: 'history', label: t('chat.showHistory'), icon: History, action: handleShowHistoricalRates },
       { id: 'track', label: t('chat.trackPair'), icon: Eye, action: handleShowTrackingManager },
-      { id: 'autoclear', label: t('chat.autoClear'), icon: Timer, action: handleShowAutoClearManager },
       { id: 'settings', label: t('chat.switchSource'), icon: Settings, action: handleShowDataSourceSwitcher },
     ];
     
@@ -154,7 +144,7 @@ export function ChatInterface() {
       text: t('chat.placeholder'),
       options: actionButtons,
     });
-  }, [t, addMessage, handleShowRates, handleShowConverter, handleShowAlertManager, handleShowHistoricalRates, handleShowTrackingManager, handleShowDataSourceSwitcher, handleShowAutoClearManager]);
+  }, [t, addMessage, handleShowRates, handleShowConverter, handleShowAlertManager, handleShowHistoricalRates, handleShowTrackingManager, handleShowDataSourceSwitcher]);
 
   useEffect(() => {
     if (isInitialMount.current) {
@@ -329,9 +319,29 @@ export function ChatInterface() {
             <p className="text-sm text-positive">{t('chat.online')}</p>
           </div>
         </div>
-        <Button variant="ghost" size="icon" onClick={resetChat} aria-label={t('chat.clear')}>
-            <Eraser className="h-5 w-5 text-muted-foreground" />
-        </Button>
+        <div className="flex items-center">
+            <Popover open={autoClearPopoverOpen} onOpenChange={setAutoClearPopoverOpen}>
+                <PopoverTrigger asChild>
+                    <Button variant="ghost" size="icon" aria-label={t('autoClear.title')}>
+                        <div className="relative">
+                            <Timer className="h-5 w-5 text-muted-foreground" />
+                            {autoClearMinutes > 0 && (
+                                <span className="absolute -top-1 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                                    {autoClearMinutes > 9 ? '9+' : autoClearMinutes}
+                                </span>
+                            )}
+                        </div>
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80" align="end">
+                    <AutoClearManager onSetAutoClear={handleSetAutoClear} currentMinutes={autoClearMinutes} />
+                </PopoverContent>
+            </Popover>
+
+            <Button variant="ghost" size="icon" onClick={resetChat} aria-label={t('chat.clear')}>
+                <Eraser className="h-5 w-5 text-muted-foreground" />
+            </Button>
+        </div>
       </header>
 
       <div ref={scrollAreaRef} className="flex-1 overflow-y-auto p-4 space-y-6">
