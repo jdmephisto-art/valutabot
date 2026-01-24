@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser } from 'lucide-react';
+import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LatestRates } from '@/components/latest-rates';
@@ -12,6 +12,7 @@ import { HistoricalRates } from '@/components/historical-rates';
 import { TrackingManager } from '@/components/tracking-manager';
 import { RateUpdateCard } from '@/components/rate-update-card';
 import { DataSourceSwitcher } from '@/components/data-source-switcher';
+import { AutoClearManager } from '@/components/auto-clear-manager';
 import type { Alert, DataSource } from '@/lib/types';
 import { findRate, getLatestRates, setDataSource, getDataSource, getInitialRates } from '@/lib/currencies';
 import { useToast } from '@/hooks/use-toast';
@@ -39,6 +40,8 @@ export function ChatInterface() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [trackedPairs, setTrackedPairs] = useState<Map<string, number>>(new Map());
   const [dataSource, setDataSourceState] = useState<DataSource>(getDataSource());
+  const [autoClearMinutes, setAutoClearMinutes] = useState(0);
+  const autoClearTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const componentId = useId();
@@ -97,6 +100,33 @@ export function ChatInterface() {
     }, 500);
   }, [addMessage, t, dataSource]);
 
+  const handleShowAutoClearManager = useCallback(() => {
+    addMessage({ sender: 'user', text: t('chat.user.autoClear') });
+    setTimeout(() => {
+      addMessage({
+        sender: 'bot',
+        component: <AutoClearManager onSetAutoClear={handleSetAutoClear} currentMinutes={autoClearMinutes} />,
+      });
+    }, 500);
+  }, [addMessage, t, autoClearMinutes]);
+
+  const handleSetAutoClear = (minutes: number) => {
+    setAutoClearMinutes(minutes);
+
+    if (minutes > 0) {
+        toast({
+            title: t('autoClear.toast'),
+            description: t('autoClear.toastDesc', { minutes: `${minutes}` }),
+        });
+        addMessage({ sender: 'bot', text: t('autoClear.toastDesc', { minutes: `${minutes}` }) });
+    } else {
+        toast({
+            title: t('autoClear.toastDisabled'),
+        });
+        addMessage({ sender: 'bot', text: t('autoClear.toastDisabled') });
+    }
+  };
+
   const handleDataSourceChange = (source: DataSource) => {
     setDataSource(source);
     setDataSourceState(source);
@@ -110,6 +140,7 @@ export function ChatInterface() {
       { id: 'alert', label: t('chat.setAlert'), icon: BellRing, action: handleShowAlertManager },
       { id: 'history', label: t('chat.showHistory'), icon: History, action: handleShowHistoricalRates },
       { id: 'track', label: t('chat.trackPair'), icon: Eye, action: handleShowTrackingManager },
+      { id: 'autoclear', label: t('chat.autoClear'), icon: Timer, action: handleShowAutoClearManager },
       { id: 'settings', label: t('chat.switchSource'), icon: Settings, action: handleShowDataSourceSwitcher },
     ];
     
@@ -123,7 +154,7 @@ export function ChatInterface() {
       text: t('chat.placeholder'),
       options: actionButtons,
     });
-  }, [t, addMessage, handleShowRates, handleShowConverter, handleShowAlertManager, handleShowHistoricalRates, handleShowTrackingManager, handleShowDataSourceSwitcher]);
+  }, [t, addMessage, handleShowRates, handleShowConverter, handleShowAlertManager, handleShowHistoricalRates, handleShowTrackingManager, handleShowDataSourceSwitcher, handleShowAutoClearManager]);
 
   useEffect(() => {
     if (isInitialMount.current) {
@@ -200,6 +231,31 @@ export function ChatInterface() {
       scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
     }
   }, [messages]);
+
+  useEffect(() => {
+    // Clear any existing timeout
+    if (autoClearTimeoutRef.current) {
+        clearTimeout(autoClearTimeoutRef.current);
+        autoClearTimeoutRef.current = null;
+    }
+
+    if (autoClearMinutes > 0) {
+        const timeoutId = setTimeout(() => {
+            resetChat();
+            // After clearing, also reset the timer setting itself
+            setAutoClearMinutes(0);
+        }, autoClearMinutes * 60 * 1000);
+
+        autoClearTimeoutRef.current = timeoutId;
+    }
+
+    // Cleanup function to clear timeout on component unmount
+    return () => {
+        if (autoClearTimeoutRef.current) {
+            clearTimeout(autoClearTimeoutRef.current);
+        }
+    };
+  }, [autoClearMinutes, resetChat]);
 
   useEffect(() => {
     const checkRates = async () => {

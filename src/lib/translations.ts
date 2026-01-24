@@ -10,6 +10,7 @@ export const translations = {
       showHistory: 'History',
       trackPair: 'Track pair',
       switchSource: 'Data source',
+      autoClear: 'Auto-clear',
       clear: 'Clear chat',
       user: {
         showRates: 'Show latest rates',
@@ -18,6 +19,7 @@ export const translations = {
         showHistory: 'Show rates history',
         trackPair: 'Track a currency pair',
         switchSource: 'Change data source',
+        autoClear: 'Set up auto-clear',
       },
       bot: {
         alertSet: 'OK! Alert is set for {from}/{to} {condition} {threshold}.',
@@ -111,11 +113,21 @@ export const translations = {
       yourAlert: 'Your alert was for {condition} {threshold}.',
       change: '(Change: {change}%)',
     },
+    autoClear: {
+      title: 'Auto-Clear Chat',
+      description: 'Set a timer to automatically clear the chat. Set to 0 to disable.',
+      minutes: 'Minutes',
+      button: 'Set Timer',
+      toast: 'Auto-clear timer set!',
+      toastDesc: 'Chat will clear in {minutes} minutes.',
+      toastDisabled: 'Auto-clear timer disabled.',
+    },
     validation: {
       selectCurrency: 'Please select a currency.',
       positiveThreshold: 'Threshold must be a positive number.',
       selectCondition: 'Please select a condition.',
       differentCurrencies: 'Currencies must be different.',
+      positiveOrZero: 'Please enter a positive number or 0.',
     },
     combobox: {
       placeholder: 'Select a currency...',
@@ -134,6 +146,7 @@ export const translations = {
       showHistory: 'История',
       trackPair: 'Отслеживать',
       switchSource: 'Источник данных',
+      autoClear: 'Автоочистка',
       clear: 'Очистить чат',
       user: {
         showRates: 'Показать последние курсы',
@@ -142,6 +155,7 @@ export const translations = {
         showHistory: 'Показать историю курсов',
         trackPair: 'Отслеживать валютную пару',
         switchSource: 'Изменить источник данных',
+        autoClear: 'Настроить автоочистку',
       },
       bot: {
         alertSet: 'ОК! Оповещение установлено для {from}/{to} {condition} {threshold}.',
@@ -235,11 +249,21 @@ export const translations = {
       yourAlert: 'Ваше оповещение было на {condition} {threshold}.',
       change: '(Изменение: {change}%)',
     },
+    autoClear: {
+      title: 'Автоочистка чата',
+      description: 'Установите таймер для автоматической очистки чата. Установите 0, чтобы отключить.',
+      minutes: 'Минуты',
+      button: 'Установить таймер',
+      toast: 'Таймер автоочистки установлен!',
+      toastDesc: 'Чат будет очищен через {minutes} минут(ы).',
+      toastDisabled: 'Таймер автоочистки отключен.',
+    },
     validation: {
       selectCurrency: 'Пожалуйста, выберите валюту.',
       positiveThreshold: 'Порог должен быть положительным числом.',
       selectCondition: 'Пожалуйста, выберите условие.',
       differentCurrencies: 'Валюты должны быть разными.',
+      positiveOrZero: 'Введите положительное число или 0.',
     },
     combobox: {
       placeholder: 'Выберите валюту...',
