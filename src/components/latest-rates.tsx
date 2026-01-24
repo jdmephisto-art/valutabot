@@ -77,13 +77,13 @@ export function LatestRates({ pairs }: LatestRatesProps) {
                 {pairs.map(p => {
                     const [from, to] = p.split('/');
                     return (
-                        <div key={p} className="flex items-center justify-between text-sm">
+                        <div key={p} className="grid grid-cols-[1fr_auto] items-center text-sm gap-x-4">
                             <div className="flex items-center gap-2 font-medium">
                                 <span>{from}</span>
                                 <ArrowRight className="h-4 w-4 text-muted-foreground" />
                                 <span>{to}</span>
                             </div>
-                            <div className="font-mono animate-pulse">...</div>
+                            <div className="font-mono animate-pulse justify-self-end">...</div>
                         </div>
                     );
                 })}
@@ -99,7 +99,7 @@ export function LatestRates({ pairs }: LatestRatesProps) {
                 return (
                 <div
                     key={`${from}-${to}`}
-                    className="flex items-center justify-between text-sm"
+                    className="grid grid-cols-[1fr_auto] items-center text-sm gap-x-4"
                 >
                     <div className="flex items-center gap-2 font-medium">
                     <span>{from}</span>
@@ -107,7 +107,7 @@ export function LatestRates({ pairs }: LatestRatesProps) {
                     <span>{to}</span>
                     </div>
                     <div className={cn(
-                    'font-mono transition-all duration-500', 
+                    'font-mono transition-all duration-500 justify-self-end', 
                     isChanged && (changeDirection === 'up' ? 'text-positive' : 'text-negative'),
                     isChanged && 'scale-110'
                     )}>
