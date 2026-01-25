@@ -163,7 +163,8 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
 }
 
 export async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
-    if (startOfDay(date) > startOfDay(new Date())) return undefined;
+    const today = startOfDay(new Date());
+    if (startOfDay(date) > today) return undefined;
     if (from === to) return 1;
     
     const formattedDate = format(date, 'yyyy-MM-dd');
