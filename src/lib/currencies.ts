@@ -132,10 +132,6 @@ async function getCurrencyApiCurrencies(): Promise<Currency[]> {
 }
 
 function _updateCurrencyApiRatesCache(baseCurrency = 'USD'): Promise<void> {
-    if (Object.keys(currencyApiRatesCache).length > 0 && (Date.now() - lastCurrencyApiFetchTimestamp < 5 * 60 * 1000)) {
-        return Promise.resolve();
-    }
-    
     if (currencyApiUpdatePromise) {
         return currencyApiUpdatePromise;
     }
@@ -193,26 +189,56 @@ async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDa
         return getNbrbDynamicsForPeriod(from, to, startDate, endDate);
     }
 
-    const dates: Date[] = [];
-    let currentDate = new Date(startDate);
-    while (currentDate <= endDate) {
-        dates.push(new Date(currentDate));
-        currentDate.setDate(currentDate.getDate() + 1);
+    if (from === to) {
+        const days = differenceInDays(endDate, startDate) + 1;
+        return Array.from({ length: days }).map((_, i) => ({
+            date: format(addDays(startDate, i), 'dd.MM'),
+            rate: 1,
+        }));
     }
 
-    const ratePromises = dates.map(date => getCurrencyApiHistoricalRate(from, to, date));
-    const rates = await Promise.all(ratePromises);
+    const base = 'USD';
+    const symbols = [from, to].filter(c => c !== base).join(',');
 
-    return dates
-        .map((date, index) => ({
-            date,
-            rate: rates[index],
-        }))
-        .filter((d): d is { date: Date; rate: number } => d.rate !== undefined)
-        .map(d => ({
-            date: format(d.date, 'dd.MM'),
-            rate: d.rate,
+    if (!symbols) {
+         const days = differenceInDays(endDate, startDate) + 1;
+        return Array.from({ length: days }).map((_, i) => ({
+            date: format(addDays(startDate, i), 'dd.MM'),
+            rate: 1,
         }));
+    }
+
+    const data = await currencyApiNetFetch('timeframe', {
+        start_date: format(startDate, 'yyyy-MM-dd'),
+        end_date: format(endDate, 'yyyy-MM-dd'),
+        base: base,
+        currencies: symbols,
+    });
+    
+    if (!data || !data.data) {
+        return [];
+    }
+    
+    const ratesByDate = data.data;
+    const result: { date: string, rate: number }[] = [];
+
+    for (const dateStr in ratesByDate) {
+        const dailyRates = ratesByDate[dateStr];
+        
+        const fromRate = from === base ? 1 : dailyRates[from];
+        const toRate = to === base ? 1 : dailyRates[to];
+        
+        if (fromRate && toRate && fromRate !== 0) {
+            result.push({
+                date: format(parseISO(dateStr), 'dd.MM'),
+                rate: toRate / fromRate,
+            });
+        }
+    }
+    
+    result.sort((a, b) => a.date.localeCompare(b.date, undefined, { numeric: true }));
+
+    return result;
 }
 
 
@@ -262,9 +288,6 @@ async function getNbrbCurrencies(): Promise<Currency[]> {
 }
 
 function _updateNbrbRatesCache(): Promise<void> {
-    if (Object.keys(nbrbRatesCache).length > 0) {
-        return Promise.resolve();
-    }
     if (nbrbUpdatePromise) {
         return nbrbUpdatePromise;
     }
