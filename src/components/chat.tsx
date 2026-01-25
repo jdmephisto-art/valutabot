@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Check, Languages } from 'lucide-react';
+import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LatestRates } from '@/components/latest-rates';
@@ -58,7 +58,7 @@ export function ChatInterface() {
     setMessages(prev => [...prev, { ...message, id: `${componentId}-${prev.length}` }]);
   }, [componentId]);
 
-  const getActionButtons = useCallback((): ActionButtonProps[] => [
+  const getActionButtons = (): ActionButtonProps[] => [
     { id: 'rates', label: t('chat.showRates'), icon: LineChart },
     { id: 'configure_pairs', label: t('chat.showDisplayedPairManager'), icon: List },
     { id: 'convert', label: t('chat.showConverter'), icon: CircleDollarSign },
@@ -66,9 +66,9 @@ export function ChatInterface() {
     { id: 'history', label: t('chat.showHistory'), icon: History },
     { id: 'track', label: t('chat.trackPair'), icon: Eye },
     { id: 'settings', label: t('chat.switchSource'), icon: Settings },
-  ], [t]);
+  ];
 
-  const resetChat = useCallback(() => {
+  const resetChat = () => {
     setMessages([]);
     setAlerts([]);
     setTrackedPairs(new Map());
@@ -79,9 +79,9 @@ export function ChatInterface() {
       text: t('chat.placeholder'),
       options: getActionButtons(),
     });
-  }, [t, addMessage, getActionButtons]);
+  };
 
-  const handleDataSourceChange = useCallback((source: DataSource) => {
+  const handleDataSourceChange = (source: DataSource) => {
     if (source === dataSource) return;
 
     setDataSource(source);
@@ -94,7 +94,7 @@ export function ChatInterface() {
         title: t('dataSource.toast'),
         description: t('dataSource.toastDesc', { source: source.toUpperCase() }),
     });
-  }, [dataSource, resetChat, t, toast]);
+  };
   
   const handleLanguageChange = (newLang: Language) => {
       if (newLang !== lang) {
@@ -174,13 +174,12 @@ export function ChatInterface() {
     addMessage({ sender: 'bot', text: t('chat.bot.pairRemovedFromList', { pair }) });
   }, [addMessage, t]);
 
-  const handleActionClick = useCallback((id: string) => {
+  const handleActionClick = (id: string) => {
     let messageComponent: React.ReactNode = null;
-    let userTextKey: string | null = null;
     const currentAction = getActionButtons().find(btn => btn.id === id);
     if (!currentAction) return;
 
-    userTextKey = `chat.user.${id}`;
+    const userTextKey = `chat.user.${id}`;
 
     switch (id) {
       case 'rates':
@@ -214,15 +213,13 @@ export function ChatInterface() {
       case 'settings':
         messageComponent = <DataSourceSwitcher currentSource={dataSource} onSourceChange={handleDataSourceChange} />;
         break;
-      default:
-        userTextKey = null;
     }
 
     if (userTextKey && messageComponent) {
       addMessage({ sender: 'user', text: t(userTextKey) });
       setTimeout(() => addMessage({ sender: 'bot', component: messageComponent }), 500);
     }
-  }, [t, addMessage, displayedPairs, handleAddDisplayedPair, handleRemoveDisplayedPair, handleSetAlert, trackedPairs, handleAddTrackedPair, handleRemoveTrackedPair, trackingInterval, dataSource, handleDataSourceChange, getActionButtons]);
+  };
 
   const handleSetAutoClear = (minutes: number) => {
     setAutoClearMinutes(minutes);
@@ -241,8 +238,9 @@ export function ChatInterface() {
   };
   
   useEffect(() => {
-    preFetchInitialRates();
-    resetChat();
+    preFetchInitialRates().then(() => {
+        resetChat();
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -288,7 +286,8 @@ export function ChatInterface() {
             clearTimeout(autoClearTimeoutRef.current);
         }
     };
-  }, [autoClearMinutes, resetChat]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoClearMinutes]);
 
   useEffect(() => {
     const checkRates = async () => {
