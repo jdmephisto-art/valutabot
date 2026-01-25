@@ -1,5 +1,3 @@
-
-
 import type { Currency, ExchangeRate, DataSource } from '@/lib/types';
 import { format, subDays, differenceInDays, addDays, startOfDay, parseISO } from 'date-fns';
 
@@ -589,5 +587,3 @@ export function preFetchInitialRates() {
     _updateCurrencyApiRatesCache('USD');
     _updateNbrbRatesCache();
 }
-
-
