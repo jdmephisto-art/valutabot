@@ -418,8 +418,6 @@ export async function getCurrencies(): Promise<Currency[]> {
 }
 
 export async function getLatestRates(pairs?: string[]): Promise<ExchangeRate[]> {
-    await preFetchInitialRates();
-    
     const pairsToFetch = pairs ? pairs.map(p => {
         const [from, to] = p.split('/');
         return { from, to };
@@ -472,7 +470,6 @@ export function findRate(from: string, to: string): number | undefined {
 }
 
 export async function findRateAsync(from: string, to: string): Promise<number | undefined> {
-    await preFetchInitialRates();
     return findRate(from, to);
 }
 
