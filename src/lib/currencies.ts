@@ -197,48 +197,23 @@ async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDa
         }));
     }
 
-    const base = 'USD';
-    const symbols = [from, to].filter(c => c !== base).join(',');
+    const daysCount = differenceInDays(endDate, startDate);
+    if (daysCount < 0) return [];
 
-    if (!symbols) {
-        const days = differenceInDays(endDate, startDate) + 1;
-        return Array.from({ length: days }).map((_, i) => ({
-            date: format(addDays(startDate, i), 'dd.MM'),
-            rate: 1,
-        }));
+    const promises = [];
+    for (let i = 0; i <= daysCount; i++) {
+        const date = addDays(startDate, i);
+        promises.push(
+            getCurrencyApiHistoricalRate(from, to, date)
+                .then(rate => ({ date: format(date, 'dd.MM'), rate }))
+        );
     }
 
-    const data = await currencyApiNetFetch('timeframe', {
-        start_date: format(startDate, 'yyyy-MM-dd'),
-        end_date: format(endDate, 'yyyy-MM-dd'),
-        base: base,
-        currencies: symbols,
-    });
-    
-    if (!data || !data.data) {
-        return [];
-    }
-    
-    const ratesByDate = data.data;
-    const result: { date: string, rate: number }[] = [];
+    const results = await Promise.all(promises);
 
-    for (const dateStr in ratesByDate) {
-        const dailyRates = ratesByDate[dateStr];
-        
-        const fromRate = from === base ? 1 : dailyRates[from];
-        const toRate = to === base ? 1 : dailyRates[to];
-        
-        if (fromRate && toRate && fromRate !== 0) {
-            result.push({
-                date: format(parseISO(dateStr), 'dd.MM'),
-                rate: toRate / fromRate,
-            });
-        }
-    }
-    
-    result.sort((a, b) => a.date.localeCompare(b.date, undefined, { numeric: true }));
-
-    return result;
+    return results
+        .filter(r => r.rate !== undefined && r.rate !== null)
+        .map(r => ({ date: r.date, rate: r.rate! }));
 }
 
 
@@ -439,7 +414,9 @@ export async function getLatestRates(pairs?: string[]): Promise<ExchangeRate[]> 
         return { from, to };
     }) : defaultPairs;
 
-    const rates = await Promise.all(pairsToFetch.map(pair => findRateAsync(pair.from, pair.to)));
+    await findRateAsync('USD', 'EUR');
+
+    const rates = pairsToFetch.map(pair => findRate(pair.from, pair.to));
 
     return pairsToFetch.map((pair, index) => ({
         ...pair,
@@ -588,9 +565,7 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
     }
 }
 
-export async function preFetchInitialRates() {
-    // This function will now fire off the requests but not wait for them,
-    // allowing the UI to render immediately.
+export function preFetchInitialRates() {
     _updateCurrencyApiRatesCache('USD');
     _updateNbrbRatesCache();
 }
