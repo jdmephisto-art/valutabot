@@ -1,3 +1,4 @@
+
 import type { Currency, ExchangeRate, DataSource } from '@/lib/types';
 import { format, subDays, differenceInDays, addDays, startOfDay, parseISO } from 'date-fns';
 
@@ -65,6 +66,8 @@ async function currencyApiNetFetch(endpoint: string, params: Record<string, stri
     });
 
     const url = `/api/currency?${queryParams.toString()}`;
+    
+    console.log(`Making internal API request to: ${url}`);
 
     try {
         const response = await fetch(url, {
@@ -163,8 +166,17 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
 }
 
 export async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
+    if (!(date instanceof Date) || isNaN(date.getTime())) {
+        console.error("getCurrencyApiHistoricalRate received an invalid date:", date);
+        return undefined;
+    }
+
     const today = startOfDay(new Date());
-    if (startOfDay(date) > today) return undefined;
+    if (startOfDay(date) > today) {
+        console.warn(`Attempted to fetch historical rate for a future date: ${date}. Aborting.`);
+        return undefined;
+    }
+    
     if (from === to) return 1;
     
     const formattedDate = format(date, 'yyyy-MM-dd');
@@ -196,16 +208,32 @@ export async function getCurrencyApiHistoricalRate(from: string, to: string, dat
 }
 
 export async function getCurrencyApiDynamicsForPeriod(from: string, to:string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number; }[]> {
+    if (!(startDate instanceof Date) || isNaN(startDate.getTime()) || !(endDate instanceof Date) || isNaN(endDate.getTime())) {
+        console.error("getCurrencyApiDynamicsForPeriod received invalid dates:", { startDate, endDate });
+        return [];
+    }
+
+    let effectiveEndDate = endDate;
     const today = startOfDay(new Date());
-    if (startOfDay(startDate) > today) return [];
+
+    if (startOfDay(startDate) > today) {
+        console.warn(`Attempted to fetch dynamics for a future start date: ${startDate}. Aborting.`);
+        return [];
+    }
     if (startOfDay(endDate) > today) {
-        endDate = today;
+        console.warn(`Dynamics end date was in the future (${endDate}). Resetting to today.`);
+        effectiveEndDate = today;
+    }
+
+    if (startOfDay(startDate) > startOfDay(effectiveEndDate)) {
+        console.warn(`Dynamics start date ${startDate} is after end date ${effectiveEndDate}. Aborting.`);
+        return [];
     }
     
     const params: Record<string, string> = {
         base: 'USD',
         start_date: format(startDate, 'yyyy-MM-dd'),
-        end_date: format(endDate, 'yyyy-MM-dd'),
+        end_date: format(effectiveEndDate, 'yyyy-MM-dd'),
     };
     const currencies = [...new Set([from, to])].filter(c => c && c !== 'USD').join(',');
     if (currencies) {
