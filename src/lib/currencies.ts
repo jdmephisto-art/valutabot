@@ -167,20 +167,36 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
 async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
     if (from === to) return 1;
 
-    // CurrencyAPI free plan doesn't support BYN, so we use NBRB for it.
     if (from === 'BYN' || to === 'BYN') {
         return getNbrbHistoricalRate(from, to, date);
     }
     
     const formattedDate = format(date, 'yyyy-MM-dd');
-    const data = await currencyApiNetFetch('history', { date: formattedDate, base: 'USD' });
-    if (data && data.rates) {
-        const fromRate = from === 'USD' ? 1 : data.rates[from];
-        const toRate = to === 'USD' ? 1 : data.rates[to];
-        if (fromRate && toRate && fromRate !== 0) {
-            return toRate / fromRate;
-        }
+    const currencies = [...new Set([from, to])].filter(c => c !== 'USD').join(',');
+
+    const params: Record<string, string> = {
+        base: 'USD',
+        start_date: formattedDate,
+        end_date: formattedDate,
+    };
+    if (currencies) {
+        params.currencies = currencies;
     }
+
+    const data = await currencyApiNetFetch('timeframe', params);
+
+    if (!data || !data.rates || !data.rates[formattedDate]) {
+        return undefined;
+    }
+
+    const dailyRates = data.rates[formattedDate];
+    const fromRate = from === 'USD' ? 1 : dailyRates[from];
+    const toRate = to === 'USD' ? 1 : dailyRates[to];
+
+    if (fromRate && toRate && fromRate !== 0) {
+        return toRate / fromRate;
+    }
+    
     return undefined;
 }
 
@@ -188,32 +204,44 @@ async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDa
     if (from === 'BYN' || to === 'BYN') {
         return getNbrbDynamicsForPeriod(from, to, startDate, endDate);
     }
+    
+    const currencies = [...new Set([from, to])].filter(c => c !== 'USD').join(',');
 
-    if (from === to) {
-        const days = differenceInDays(endDate, startDate) + 1;
-        return Array.from({ length: days }).map((_, i) => ({
-            date: format(addDays(startDate, i), 'dd.MM'),
-            rate: 1,
-        }));
+    const params: Record<string, string> = {
+        base: 'USD',
+        start_date: format(startDate, 'yyyy-MM-dd'),
+        end_date: format(endDate, 'yyyy-MM-dd'),
+    };
+    if (currencies) {
+        params.currencies = currencies;
+    } else if (from !== 'USD' || to !== 'USD') {
+        // Fallback for cases like 'USD' to 'EUR' where currencies would be 'EUR'
+        // This seems redundant given the logic, but as a safeguard.
+    } else {
+        // Both are USD, handled by getDynamicsForPeriod check
+        return [];
+    }
+    
+    const data = await currencyApiNetFetch('timeframe', params);
+
+    if (!data || !data.rates) {
+        return [];
     }
 
-    const daysCount = differenceInDays(endDate, startDate);
-    if (daysCount < 0) return [];
-
-    const promises = [];
-    for (let i = 0; i <= daysCount; i++) {
-        const date = addDays(startDate, i);
-        promises.push(
-            getCurrencyApiHistoricalRate(from, to, date)
-                .then(rate => ({ date: format(date, 'dd.MM'), rate }))
-        );
+    const results: { date: string, rate: number }[] = [];
+    for (const dateStr in data.rates) {
+        const dailyRates = data.rates[dateStr];
+        const fromRate = from === 'USD' ? 1 : dailyRates[from];
+        const toRate = to === 'USD' ? 1 : dailyRates[to];
+        if (fromRate !== undefined && toRate !== undefined && fromRate !== 0) {
+            results.push({
+                date: format(parseISO(dateStr), 'dd.MM'),
+                rate: toRate / fromRate,
+            });
+        }
     }
-
-    const results = await Promise.all(promises);
-
-    return results
-        .filter(r => r.rate !== undefined && r.rate !== null)
-        .map(r => ({ date: r.date, rate: r.rate! }));
+    results.sort((a, b) => a.date.localeCompare(b.date, undefined, { numeric: true }));
+    return results;
 }
 
 
@@ -520,6 +548,14 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
 }
 
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
+    if (from === to) {
+        const days = differenceInDays(endDate, startDate) + 1;
+        return Array.from({ length: days }).map((_, i) => ({
+            date: format(addDays(startDate, i), 'dd.MM'),
+            rate: 1,
+        }));
+    }
+
     const fromIsCrypto = cryptoCodes.includes(from);
     const toIsCrypto = cryptoCodes.includes(to);
 
