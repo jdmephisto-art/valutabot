@@ -3,7 +3,7 @@
 import type { Currency, ExchangeRate, DataSource } from '@/lib/types';
 import { format, subDays, differenceInDays, addDays, startOfDay, parseISO } from 'date-fns';
 
-let activeDataSource: DataSource = 'nbrb'; // Default data source
+let activeDataSource: DataSource = 'ru' === 'ru' ? 'nbrb' : 'currencyapi';
 
 const defaultPairs = [
     { from: 'USD', to: 'EUR' }, { from: 'EUR', to: 'USD' }, { from: 'USD', to: 'BYN' },
@@ -115,7 +115,8 @@ async function getCurrencyApiCurrencies(): Promise<Currency[]> {
         
         const extraAssets: Record<string, string> = {
             'ETH': 'Ethereum', 'LTC': 'Litecoin', 'XRP': 'Ripple',
-            'XAU': 'Gold Ounce', 'XAG': 'Silver Ounce'
+            'XAU': 'Gold Ounce', 'XAG': 'Silver Ounce',
+            'BCH': 'Bitcoin Cash', 'BTG': 'Bitcoin Gold', 'DASH': 'Dash', 'EOS': 'EOS'
         };
 
         for (const code in extraAssets) {
@@ -190,36 +191,30 @@ async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date
 }
 
 async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string, rate: number }[]> {
-     if (from === 'BYN' || to === 'BYN') {
+    if (from === 'BYN' || to === 'BYN') {
         return getNbrbDynamicsForPeriod(from, to, startDate, endDate);
     }
 
-    const formattedStart = format(startDate, 'yyyy-MM-dd');
-    const formattedEnd = format(endDate, 'yyyy-MM-dd');
-
-    const data = await currencyApiNetFetch('timeframe', {
-        start_date: formattedStart,
-        end_date: formattedEnd,
-        base: 'USD'
-    });
-
-    if (data && data.rates) {
-        const result = Object.entries(data.rates).map(([date, dailyRates]: [string, any]) => {
-            const fromRate = from === 'USD' ? 1 : dailyRates[from];
-            const toRate = to === 'USD' ? 1 : dailyRates[to];
-            
-            if (fromRate && toRate && fromRate !== 0) {
-                return {
-                    date: format(parseISO(date), 'dd.MM'),
-                    rate: toRate / fromRate
-                };
-            }
-            return null;
-        });
-        return result.filter((d): d is { date: string; rate: number } => d !== null);
+    const dates: Date[] = [];
+    let currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+        dates.push(new Date(currentDate));
+        currentDate.setDate(currentDate.getDate() + 1);
     }
 
-    return [];
+    const ratePromises = dates.map(date => getCurrencyApiHistoricalRate(from, to, date));
+    const rates = await Promise.all(ratePromises);
+
+    return dates
+        .map((date, index) => ({
+            date,
+            rate: rates[index],
+        }))
+        .filter((d): d is { date: Date; rate: number } => d.rate !== undefined)
+        .map(d => ({
+            date: format(d.date, 'dd.MM'),
+            rate: d.rate,
+        }));
 }
 
 
@@ -469,8 +464,9 @@ export function findRate(from: string, to: string): number | undefined {
     }
 }
 
-export async function findRateAsync(from: string, to: string): Promise<number | undefined> {
-    return findRate(from, to);
+export function findRateAsync(from: string, to: string): Promise<number | undefined> {
+    const rate = findRate(from, to);
+    return Promise.resolve(rate);
 }
 
 export async function getHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
@@ -562,3 +558,4 @@ export async function preFetchInitialRates() {
         _updateNbrbRatesCache()
     ]);
 }
+
