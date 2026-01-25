@@ -76,7 +76,7 @@ async function currencyApiNetFetch(endpoint: string, params: Record<string, stri
 
         if (!response.ok) {
             const errorBody = await response.json().catch(() => ({}));
-            console.error(`Internal API request failed: ${response.status} ${response.statusText}`, errorBody);
+            console.error(`Internal API request to ${url} failed: ${response.status} ${response.statusText}`, errorBody);
             return null;
         }
 

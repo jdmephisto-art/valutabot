@@ -1,7 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
+export async function GET(request: NextRequest) {
+  const { searchParams } = request.nextUrl;
   const endpoint = searchParams.get('endpoint');
 
   if (!endpoint) {
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
 
     if (!apiResponse.ok) {
         const errorBody = await apiResponse.json().catch(() => ({}));
-        console.error(`Proxied CurrencyAPI.net request failed: ${apiResponse.status} ${apiResponse.statusText}`, errorBody);
+        console.error(`Proxied CurrencyAPI.net request to ${apiUrl} failed: ${apiResponse.status} ${apiResponse.statusText}`, errorBody);
         return NextResponse.json(
             { error: `API request failed with status ${apiResponse.status}`, details: errorBody },
             { status: apiResponse.status }
