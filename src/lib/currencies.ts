@@ -179,29 +179,35 @@ export async function getCurrencyApiHistoricalRate(from: string, to: string, dat
     if (from === to) return 1;
     
     const formattedDate = format(date, 'yyyy-MM-dd');
+    const currencies = [...new Set([from, to])].filter(c => c && c !== 'USD').join(',');
+    
     const params: Record<string, string> = {
         base: 'USD',
-        start_date: formattedDate,
-        end_date: formattedDate,
+        date: formattedDate,
     };
-    const currencies = [...new Set([from, to])].filter(c => c && c !== 'USD').join(',');
     if (currencies) {
         params.currencies = currencies;
     }
 
     console.log('[DIAGNOSTIC] Calling currencyApiNetFetch for single date with params:', params);
-    const data = await currencyApiNetFetch('timeframe', params);
+    const data = await currencyApiNetFetch('historical', params);
 
-    if (!data || !data.rates || !data.rates[formattedDate]) {
-        console.error('[DIAGNOSTIC] No historical rate data returned for date:', formattedDate);
+    if (!data || !data.data) {
+        console.error('[DIAGNOSTIC] No historical rate data returned from API for date:', formattedDate);
         return undefined;
     }
 
-    const dailyRates = data.rates[formattedDate];
+    const dailyRates: {[key: string]: number} = {};
+    for (const code in data.data) {
+        if (data.data[code] && typeof data.data[code].value === 'number') {
+            dailyRates[code] = data.data[code].value;
+        }
+    }
+
     const fromRate = from === 'USD' ? 1 : dailyRates[from];
     const toRate = to === 'USD' ? 1 : dailyRates[to];
 
-    if (fromRate && toRate && fromRate !== 0) {
+    if (fromRate !== undefined && toRate !== undefined && fromRate !== 0) {
         return toRate / fromRate;
     }
     
@@ -231,39 +237,36 @@ export async function getCurrencyApiDynamicsForPeriod(from: string, to:string, s
         console.warn(`[DIAGNOSTIC] Dynamics start date ${startDate} is after end date ${effectiveEndDate}. Aborting.`);
         return [];
     }
-
-    const params: Record<string, string> = {
-        base: 'USD',
-        start_date: format(startDate, 'yyyy-MM-dd'),
-        end_date: format(effectiveEndDate, 'yyyy-MM-dd'),
-    };
-    const currencies = [...new Set([from, to])].filter(c => c && c !== 'USD').join(',');
-    if (currencies) {
-        params.currencies = currencies;
-    }
     
-    console.log('[DIAGNOSTIC] Calling currencyApiNetFetch for dynamics with params:', params);
-    const data = await currencyApiNetFetch('timeframe', params);
-
-    if (!data || !data.rates) {
-        console.error('[DIAGNOSTIC] No dynamics data returned from API.');
-        return [];
+    const promises = [];
+    let currentDate = startDate;
+    while (currentDate <= effectiveEndDate) {
+        const dateToFetch = new Date(currentDate);
+        promises.push(
+            getCurrencyApiHistoricalRate(from, to, dateToFetch).then(rate => {
+                if (rate !== undefined) {
+                    return {
+                        dateObj: dateToFetch,
+                        rate: rate,
+                    };
+                }
+                return null;
+            })
+        );
+        currentDate = addDays(currentDate, 1);
     }
 
-    const results: { date: string, rate: number }[] = [];
-    for (const dateStr in data.rates) {
-        const dailyRates = data.rates[dateStr];
-        const fromRate = from === 'USD' ? 1 : dailyRates[from];
-        const toRate = to === 'USD' ? 1 : dailyRates[to];
-        if (fromRate !== undefined && toRate !== undefined && fromRate !== 0) {
-            results.push({
-                date: format(parseISO(dateStr), 'dd.MM'),
-                rate: toRate / fromRate,
-            });
-        }
-    }
-    results.sort((a, b) => a.date.localeCompare(b.date, undefined, { numeric: true }));
-    return results;
+    const settledResults = await Promise.all(promises);
+
+    const validResults = settledResults
+        .filter((r): r is { dateObj: Date, rate: number } => r !== null)
+        .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime())
+        .map(r => ({
+            date: format(r.dateObj, 'dd.MM'),
+            rate: r.rate,
+        }));
+        
+    return validResults;
 }
 
 
