@@ -167,18 +167,13 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
 async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
     if (from === to) return 1;
 
-    if (from === 'BYN' || to === 'BYN') {
-        return getNbrbHistoricalRate(from, to, date);
-    }
-    
     const formattedDate = format(date, 'yyyy-MM-dd');
-    const currencies = [...new Set([from, to])].filter(c => c !== 'USD').join(',');
-
     const params: Record<string, string> = {
         base: 'USD',
         start_date: formattedDate,
         end_date: formattedDate,
     };
+    const currencies = [...new Set([from, to])].filter(c => c !== 'USD').join(',');
     if (currencies) {
         params.currencies = currencies;
     }
@@ -201,25 +196,14 @@ async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date
 }
 
 async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string, rate: number }[]> {
-    if (from === 'BYN' || to === 'BYN') {
-        return getNbrbDynamicsForPeriod(from, to, startDate, endDate);
-    }
-    
-    const currencies = [...new Set([from, to])].filter(c => c !== 'USD').join(',');
-
     const params: Record<string, string> = {
         base: 'USD',
         start_date: format(startDate, 'yyyy-MM-dd'),
         end_date: format(endDate, 'yyyy-MM-dd'),
     };
+    const currencies = [...new Set([from, to])].filter(c => c !== 'USD').join(',');
     if (currencies) {
         params.currencies = currencies;
-    } else if (from !== 'USD' || to !== 'USD') {
-        // Fallback for cases like 'USD' to 'EUR' where currencies would be 'EUR'
-        // This seems redundant given the logic, but as a safeguard.
-    } else {
-        // Both are USD, handled by getDynamicsForPeriod check
-        return [];
     }
     
     const data = await currencyApiNetFetch('timeframe', params);
