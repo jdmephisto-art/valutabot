@@ -30,7 +30,16 @@ export function getLang(): Language {
 
 export function getCurrencyName(code: string, language: Language): string {
     const names = currencyNames[language] as Record<string, string> | undefined;
-    return names?.[code] ?? code;
+    let name = names?.[code];
+
+    // If a name is not found for Russian, fall back to English.
+    if (!name && language === 'ru') {
+        const englishNames = currencyNames['en'] as Record<string, string>;
+        name = englishNames?.[code];
+    }
+    
+    // If still no name is found (e.g., a new currency code not in any list), return the code.
+    return name ?? code;
 }
 
 export const translations = allTranslations;
