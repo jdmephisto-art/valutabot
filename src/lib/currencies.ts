@@ -61,27 +61,25 @@ async function nbrbApiFetch(endpoint: string) {
 }
 
 async function currencyApiNetFetch(endpoint: string, params: Record<string, string> = {}) {
-    const apiKey = '6431078d4fc8bf5d4097027ee62c2c0dc4e0';
-    const baseUrl = 'https://currencyapi.net/api/v1/';
-
     const queryParams = new URLSearchParams({
-        key: apiKey,
-        output: 'json',
+        endpoint,
         ...params
     });
 
-    const url = `${baseUrl}${endpoint}?${queryParams.toString()}`;
+    const url = `/api/currency?${queryParams.toString()}`;
 
     try {
-        const response = await fetch(url, { 
+        const response = await fetch(url, {
             headers: { 'Accept': 'application/json' },
-            cache: 'no-store' 
+            cache: 'no-store'
         });
+
         if (!response.ok) {
             const errorBody = await response.json().catch(() => ({}));
-            console.error(`CurrencyAPI.net request failed: ${response.status} ${response.statusText}`, errorBody);
+            console.error(`Internal API request failed: ${response.status} ${response.statusText}`, errorBody);
             return null;
         }
+
         const data = await response.json();
         if (data.valid === false || data.error) {
              console.error(`CurrencyAPI.net request returned an error:`, data.error || 'Unknown error');
@@ -89,7 +87,7 @@ async function currencyApiNetFetch(endpoint: string, params: Record<string, stri
         }
         return data;
     } catch (error) {
-        console.error('Failed to fetch from CurrencyAPI.net API:', error);
+        console.error('Failed to fetch from internal API:', error);
         return null;
     }
 }
@@ -418,9 +416,11 @@ export async function getLatestRates(pairs?: string[]): Promise<ExchangeRate[]> 
         return { from, to };
     }) : defaultPairs;
 
-    return pairsToFetch.map(pair => ({
+    const rates = await Promise.all(pairsToFetch.map(pair => findRateAsync(pair.from, pair.to)));
+
+    return pairsToFetch.map((pair, index) => ({
         ...pair,
-        rate: findRate(pair.from, pair.to) ?? 0,
+        rate: rates[index] ?? 0,
     })).filter(r => r.rate !== 0);
 }
 
@@ -464,9 +464,22 @@ export function findRate(from: string, to: string): number | undefined {
     }
 }
 
-export function findRateAsync(from: string, to: string): Promise<number | undefined> {
-    const rate = findRate(from, to);
-    return Promise.resolve(rate);
+export async function findRateAsync(from: string, to: string): Promise<number | undefined> {
+    const fromIsCrypto = cryptoCodes.includes(from);
+    const toIsCrypto = cryptoCodes.includes(to);
+    const requiresNbrb = activeDataSource === 'nbrb' || from === 'BYN' || to === 'BYN' || (!fromIsCrypto && !toIsCrypto);
+    const requiresCurrencyApi = activeDataSource === 'currencyapi' || fromIsCrypto || toIsCrypto;
+
+    const updatePromises: Promise<void>[] = [];
+    if (requiresNbrb) {
+        updatePromises.push(_updateNbrbRatesCache());
+    }
+    if (requiresCurrencyApi) {
+        updatePromises.push(_updateCurrencyApiRatesCache('USD'));
+    }
+    await Promise.all(updatePromises);
+    
+    return findRate(from, to);
 }
 
 export async function getHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
@@ -553,9 +566,8 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
 }
 
 export async function preFetchInitialRates() {
-    await Promise.all([
-        _updateCurrencyApiRatesCache('USD'),
-        _updateNbrbRatesCache()
-    ]);
+    // This function will now fire off the requests but not wait for them,
+    // allowing the UI to render immediately.
+    _updateCurrencyApiRatesCache('USD');
+    _updateNbrbRatesCache();
 }
-
