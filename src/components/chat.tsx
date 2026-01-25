@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useId, useCallback } from 'react';
+import { useState, useEffect, useRef, useId } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -54,10 +54,10 @@ export function ChatInterface() {
   const { t, lang, setLang } = useTranslation();
   const isInitialMount = useRef(true);
 
-  const addMessage = useCallback((message: Omit<Message, 'id'>) => {
+  const addMessage = (message: Omit<Message, 'id'>) => {
     setMessages(prev => [...prev, { ...message, id: `${componentId}-${prev.length}` }]);
-  }, [componentId]);
-
+  };
+  
   const getActionButtons = (): ActionButtonProps[] => [
     { id: 'rates', label: t('chat.showRates'), icon: LineChart },
     { id: 'configure_pairs', label: t('chat.showDisplayedPairManager'), icon: List },
@@ -102,7 +102,7 @@ export function ChatInterface() {
       }
   };
 
-  const handleSetAlert = useCallback((data: Omit<Alert, 'id' | 'baseRate'>) => {
+  const handleSetAlert = (data: Omit<Alert, 'id' | 'baseRate'>) => {
     const baseRate = findRate(data.from, data.to);
     if (baseRate === undefined) {
       toast({
@@ -132,9 +132,9 @@ export function ChatInterface() {
             threshold: data.threshold,
         })
     });
-  }, [addMessage, t, toast]);
+  };
 
-  const handleAddTrackedPair = useCallback((from: string, to: string): boolean => {
+  const handleAddTrackedPair = (from: string, to: string): boolean => {
     const pair = `${from}/${to}`;
     const rate = findRate(from, to);
     if (rate === undefined) {
@@ -148,18 +148,18 @@ export function ChatInterface() {
     setTrackedPairs(prev => new Map(prev).set(pair, rate));
     addMessage({ sender: 'bot', text: t('chat.bot.pairTracked', { pair: pair, rate: rate.toFixed(4) }) });
     return true;
-  }, [addMessage, t, toast]);
+  };
 
-  const handleRemoveTrackedPair = useCallback((pair: string) => {
+  const handleRemoveTrackedPair = (pair: string) => {
     setTrackedPairs(prev => {
       const newMap = new Map(prev);
       newMap.delete(pair);
       return newMap;
     });
     addMessage({ sender: 'bot', text: t('chat.bot.pairUntracked', { pair }) });
-  }, [addMessage, t]);
+  };
   
-  const handleAddDisplayedPair = useCallback((from: string, to: string): boolean => {
+  const handleAddDisplayedPair = (from: string, to: string): boolean => {
     const pair = `${from}/${to}`;
     if (displayedPairs.includes(pair)) {
         return false;
@@ -167,18 +167,16 @@ export function ChatInterface() {
     setDisplayedPairs(prev => [...prev, pair]);
     addMessage({ sender: 'bot', text: t('chat.bot.pairAddedToList', { pair }) });
     return true;
-  }, [addMessage, t, displayedPairs]);
+  };
 
-  const handleRemoveDisplayedPair = useCallback((pair: string) => {
+  const handleRemoveDisplayedPair = (pair: string) => {
     setDisplayedPairs(prev => prev.filter(p => p !== pair));
     addMessage({ sender: 'bot', text: t('chat.bot.pairRemovedFromList', { pair }) });
-  }, [addMessage, t]);
+  };
 
   const handleActionClick = (id: string) => {
     let messageComponent: React.ReactNode = null;
-    const currentAction = getActionButtons().find(btn => btn.id === id);
-    if (!currentAction) return;
-
+    
     const userTextKey = `chat.user.${id}`;
 
     switch (id) {
@@ -238,9 +236,8 @@ export function ChatInterface() {
   };
   
   useEffect(() => {
-    preFetchInitialRates().then(() => {
-        resetChat();
-    });
+    resetChat();
+    preFetchInitialRates();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
