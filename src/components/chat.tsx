@@ -87,8 +87,8 @@ export function ChatInterface() {
     setDataSource(source);
     setDataSourceState(source);
     
-    preFetchInitialRates();
     resetChat();
+    preFetchInitialRates();
     
     toast({
         title: t('dataSource.toast'),
@@ -176,43 +176,36 @@ export function ChatInterface() {
 
   const handleActionClick = (id: string) => {
     let messageComponent: React.ReactNode = null;
-    
     const userTextKey = `chat.user.${id}`;
-
-    switch (id) {
-      case 'rates':
-        messageComponent = <LatestRates pairs={displayedPairs} />;
-        break;
-      case 'configure_pairs':
-        messageComponent = <DisplayedPairManager 
-            pairs={displayedPairs}
-            onAddPair={handleAddDisplayedPair}
-            onRemovePair={handleRemoveDisplayedPair}
-        />;
-        break;
-      case 'convert':
-        messageComponent = <CurrencyConverter />;
-        break;
-      case 'alert':
-        messageComponent = <NotificationManager onSetAlert={handleSetAlert} />;
-        break;
-      case 'history':
-        messageComponent = <HistoricalRates />;
-        break;
-      case 'track':
-        messageComponent = <TrackingManager 
-            trackedPairs={Array.from(trackedPairs.keys())}
-            onAddPair={handleAddTrackedPair}
-            onRemovePair={handleRemoveTrackedPair}
-            onIntervalChange={setTrackingInterval}
-            currentInterval={trackingInterval}
-        />;
-        break;
-      case 'settings':
-        messageComponent = <DataSourceSwitcher currentSource={dataSource} onSourceChange={handleDataSourceChange} />;
-        break;
+  
+    const actionMap: Record<string, () => React.ReactNode> = {
+      rates: () => <LatestRates pairs={displayedPairs} />,
+      configure_pairs: () => (
+        <DisplayedPairManager
+          pairs={displayedPairs}
+          onAddPair={handleAddDisplayedPair}
+          onRemovePair={handleRemoveDisplayedPair}
+        />
+      ),
+      convert: () => <CurrencyConverter />,
+      alert: () => <NotificationManager onSetAlert={handleSetAlert} />,
+      history: () => <HistoricalRates />,
+      track: () => (
+        <TrackingManager
+          trackedPairs={Array.from(trackedPairs.keys())}
+          onAddPair={handleAddTrackedPair}
+          onRemovePair={handleRemoveTrackedPair}
+          onIntervalChange={setTrackingInterval}
+          currentInterval={trackingInterval}
+        />
+      ),
+      settings: () => <DataSourceSwitcher currentSource={dataSource} onSourceChange={handleDataSourceChange} />,
+    };
+  
+    if (actionMap[id]) {
+      messageComponent = actionMap[id]();
     }
-
+  
     if (userTextKey && messageComponent) {
       addMessage({ sender: 'user', text: t(userTextKey) });
       setTimeout(() => addMessage({ sender: 'bot', component: messageComponent }), 500);
@@ -236,9 +229,8 @@ export function ChatInterface() {
   };
   
   useEffect(() => {
-    preFetchInitialRates().then(() => {
-        resetChat();
-    });
+    resetChat();
+    preFetchInitialRates();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -249,18 +241,18 @@ export function ChatInterface() {
     }
     
     const newSource = lang === 'ru' ? 'nbrb' : 'currencyapi';
-    
-    // Directly apply changes instead of going through handleDataSourceChange
-    // to ensure reset happens even if the source is technically the same.
-    setDataSource(newSource);
-    setDataSourceState(newSource);
-    preFetchInitialRates();
-    resetChat();
 
+    if (dataSource !== newSource) {
+      handleDataSourceChange(newSource);
+    } else {
+      resetChat();
+    }
+    
     toast({
         title: t('language.toastTitle'),
         description: t('language.toastDesc', { lang: lang === 'ru' ? 'Русский' : 'English' }),
     });
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lang]);
 
