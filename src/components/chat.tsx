@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List } from 'lucide-react';
+import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Languages, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LatestRates } from '@/components/latest-rates';
@@ -14,13 +14,13 @@ import { RateUpdateCard } from '@/components/rate-update-card';
 import { DataSourceSwitcher } from '@/components/data-source-switcher';
 import { AutoClearManager } from '@/components/auto-clear-manager';
 import { DisplayedPairManager } from '@/components/displayed-pair-manager';
-import type { Alert, DataSource } from '@/lib/types';
+import type { Alert, DataSource, Language } from '@/lib/types';
 import { findRate, getLatestRates, setDataSource, getDataSource, preFetchInitialRates } from '@/lib/currencies';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/hooks/use-translation';
 import { Card, CardContent } from './ui/card';
-import { setLang } from '@/lib/localization';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 type Message = {
   id: string;
@@ -51,18 +51,58 @@ export function ChatInterface() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const componentId = useId();
-  const { t, lang } = useTranslation();
+  const { t, lang, setLang } = useTranslation();
   const isInitialMount = useRef(true);
 
   const addMessage = useCallback((message: Omit<Message, 'id'>) => {
     setMessages(prev => [...prev, { ...message, id: `${componentId}-${prev.length}` }]);
   }, [componentId]);
 
+  const resetChat = useCallback(() => {
+    const actionButtons: ActionButtonProps[] = [
+      { id: 'rates', label: t('chat.showRates'), icon: LineChart },
+      { id: 'configure_pairs', label: t('chat.showDisplayedPairManager'), icon: List },
+      { id: 'convert', label: t('chat.showConverter'), icon: CircleDollarSign },
+      { id: 'alert', label: t('chat.setAlert'), icon: BellRing },
+      { id: 'history', label: t('chat.showHistory'), icon: History },
+      { id: 'track', label: t('chat.trackPair'), icon: Eye },
+      { id: 'settings', label: t('chat.switchSource'), icon: Settings },
+    ];
+    
+    setMessages([]);
+    setAlerts([]);
+    setTrackedPairs(new Map());
+    setDisplayedPairs(defaultDisplayedPairs);
+
+    addMessage({
+      sender: 'bot',
+      text: t('chat.placeholder'),
+      options: actionButtons,
+    });
+  }, [t, addMessage]);
+
+  // Handler for manual data source changes from the UI
   const handleDataSourceChange = useCallback((source: DataSource) => {
+    if (source === dataSource) return;
+
     setDataSource(source);
     setDataSourceState(source);
-    setLang(source === 'nbrb' ? 'ru' : 'en');
-  }, []);
+    
+    preFetchInitialRates();
+    resetChat();
+    
+    toast({
+        title: t('dataSource.toast'),
+        description: t('dataSource.toastDesc', { source: source.toUpperCase() }),
+    });
+  }, [dataSource, resetChat, t, toast]);
+  
+  // Handler for language changes from the new language switcher
+  const handleLanguageChange = (newLang: Language) => {
+      if (newLang !== lang) {
+          setLang(newLang); // This triggers the useEffect below
+      }
+  };
 
   const handleSetAlert = useCallback((data: Omit<Alert, 'id' | 'baseRate'>) => {
     const baseRate = findRate(data.from, data.to);
@@ -203,43 +243,34 @@ export function ChatInterface() {
         });
     }
   };
+  
+  // Effect for initial load
+  useEffect(() => {
+    preFetchInitialRates();
+    resetChat();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const resetChat = useCallback(() => {
-    const actionButtons: ActionButtonProps[] = [
-      { id: 'rates', label: t('chat.showRates'), icon: LineChart },
-      { id: 'configure_pairs', label: t('chat.showDisplayedPairManager'), icon: List },
-      { id: 'convert', label: t('chat.showConverter'), icon: CircleDollarSign },
-      { id: 'alert', label: t('chat.setAlert'), icon: BellRing },
-      { id: 'history', label: t('chat.showHistory'), icon: History },
-      { id: 'track', label: t('chat.trackPair'), icon: Eye },
-      { id: 'settings', label: t('chat.switchSource'), icon: Settings },
-    ];
-    
-    setMessages([]);
-    setAlerts([]);
-    setTrackedPairs(new Map());
-    setDisplayedPairs(defaultDisplayedPairs);
-
-    addMessage({
-      sender: 'bot',
-      text: t('chat.placeholder'),
-      options: actionButtons,
-    });
-  }, [t, addMessage]);
-
+  // Effect to handle consequences of a language change
   useEffect(() => {
     if (isInitialMount.current) {
         isInitialMount.current = false;
-        preFetchInitialRates();
-    } else {
-        toast({
-            title: t('dataSource.toast'),
-            description: t('dataSource.toastDesc', { source: getDataSource().toUpperCase() }),
-        });
-        preFetchInitialRates();
+        return;
     }
+
+    const newSource = lang === 'ru' ? 'nbrb' : 'currencyapi';
+    setDataSource(newSource);
+    setDataSourceState(newSource);
+    
+    preFetchInitialRates();
     resetChat();
-  }, [lang, resetChat, toast]);
+
+    toast({
+        title: t('language.toastTitle'),
+        description: t('language.toastDesc', { lang: lang === 'ru' ? 'Русский' : 'English' }),
+    });
+  }, [lang, resetChat, t, toast]);
+
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -344,6 +375,24 @@ export function ChatInterface() {
           </div>
         </div>
         <div className="flex items-center">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" aria-label="Change language">
+                      <Languages className="h-5 w-5 text-muted-foreground" />
+                  </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => handleLanguageChange('en')}>
+                      <Check className={cn('mr-2 h-4 w-4', lang === 'en' ? 'opacity-100' : 'opacity-0')} />
+                      English
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleLanguageChange('ru')}>
+                      <Check className={cn('mr-2 h-4 w-4', lang === 'ru' ? 'opacity-100' : 'opacity-0')} />
+                      Русский
+                  </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <Popover open={autoClearPopoverOpen} onOpenChange={setAutoClearPopoverOpen}>
                 <PopoverTrigger asChild>
                     <Button variant="ghost" size="icon" aria-label={t('autoClear.title')}>

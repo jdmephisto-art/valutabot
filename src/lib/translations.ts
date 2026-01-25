@@ -32,6 +32,10 @@ export const translations = {
         pairRemovedFromList: "The pair {pair} has been removed from the list.",
       },
     },
+    language: {
+      toastTitle: 'Language Changed',
+      toastDesc: 'Switched to {lang}. The chat has been reset.',
+    },
     latestRates: {
       title: 'Latest Rates',
       description: 'Data from {source}',
@@ -185,6 +189,10 @@ export const translations = {
         pairAddedToList: "ОК. Пара {pair} добавлена в список.",
         pairRemovedFromList: "Пара {pair} удалена из списка.",
       },
+    },
+    language: {
+        toastTitle: 'Язык изменен',
+        toastDesc: 'Переключено на {lang}. Чат был сброшен.',
     },
     latestRates: {
       title: 'Последние курсы',
