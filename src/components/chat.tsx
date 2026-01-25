@@ -73,7 +73,6 @@ export function ChatInterface() {
     setMessages([]);
     setAlerts([]);
     setTrackedPairs(new Map());
-    setDisplayedPairs(defaultDisplayedPairs);
 
     addMessage({
       sender: 'bot',
