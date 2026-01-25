@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Languages, Check } from 'lucide-react';
+import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LatestRates } from '@/components/latest-rates';
@@ -58,17 +58,17 @@ export function ChatInterface() {
     setMessages(prev => [...prev, { ...message, id: `${componentId}-${prev.length}` }]);
   }, [componentId]);
 
+  const getActionButtons = useCallback((): ActionButtonProps[] => [
+    { id: 'rates', label: t('chat.showRates'), icon: LineChart },
+    { id: 'configure_pairs', label: t('chat.showDisplayedPairManager'), icon: List },
+    { id: 'convert', label: t('chat.showConverter'), icon: CircleDollarSign },
+    { id: 'alert', label: t('chat.setAlert'), icon: BellRing },
+    { id: 'history', label: t('chat.showHistory'), icon: History },
+    { id: 'track', label: t('chat.trackPair'), icon: Eye },
+    { id: 'settings', label: t('chat.switchSource'), icon: Settings },
+  ], [t]);
+
   const resetChat = useCallback(() => {
-    const actionButtons: ActionButtonProps[] = [
-      { id: 'rates', label: t('chat.showRates'), icon: LineChart },
-      { id: 'configure_pairs', label: t('chat.showDisplayedPairManager'), icon: List },
-      { id: 'convert', label: t('chat.showConverter'), icon: CircleDollarSign },
-      { id: 'alert', label: t('chat.setAlert'), icon: BellRing },
-      { id: 'history', label: t('chat.showHistory'), icon: History },
-      { id: 'track', label: t('chat.trackPair'), icon: Eye },
-      { id: 'settings', label: t('chat.switchSource'), icon: Settings },
-    ];
-    
     setMessages([]);
     setAlerts([]);
     setTrackedPairs(new Map());
@@ -77,11 +77,10 @@ export function ChatInterface() {
     addMessage({
       sender: 'bot',
       text: t('chat.placeholder'),
-      options: actionButtons,
+      options: getActionButtons(),
     });
-  }, [t, addMessage]);
+  }, [t, addMessage, getActionButtons]);
 
-  // Handler for manual data source changes from the UI
   const handleDataSourceChange = useCallback((source: DataSource) => {
     if (source === dataSource) return;
 
@@ -97,10 +96,9 @@ export function ChatInterface() {
     });
   }, [dataSource, resetChat, t, toast]);
   
-  // Handler for language changes from the new language switcher
   const handleLanguageChange = (newLang: Language) => {
       if (newLang !== lang) {
-          setLang(newLang); // This triggers the useEffect below
+          setLang(newLang);
       }
   };
 
@@ -178,15 +176,17 @@ export function ChatInterface() {
 
   const handleActionClick = useCallback((id: string) => {
     let messageComponent: React.ReactNode = null;
-    let userText: string = '';
+    let userTextKey: string | null = null;
+    const currentAction = getActionButtons().find(btn => btn.id === id);
+    if (!currentAction) return;
+
+    userTextKey = `chat.user.${id}`;
 
     switch (id) {
       case 'rates':
-        userText = t('chat.user.showRates');
         messageComponent = <LatestRates pairs={displayedPairs} />;
         break;
       case 'configure_pairs':
-        userText = t('chat.user.showDisplayedPairManager');
         messageComponent = <DisplayedPairManager 
             pairs={displayedPairs}
             onAddPair={handleAddDisplayedPair}
@@ -194,19 +194,15 @@ export function ChatInterface() {
         />;
         break;
       case 'convert':
-        userText = t('chat.user.showConverter');
         messageComponent = <CurrencyConverter />;
         break;
       case 'alert':
-        userText = t('chat.user.setAlert');
         messageComponent = <NotificationManager onSetAlert={handleSetAlert} />;
         break;
       case 'history':
-        userText = t('chat.user.showHistory');
         messageComponent = <HistoricalRates />;
         break;
       case 'track':
-        userText = t('chat.user.trackPair');
         messageComponent = <TrackingManager 
             trackedPairs={Array.from(trackedPairs.keys())}
             onAddPair={handleAddTrackedPair}
@@ -216,17 +212,17 @@ export function ChatInterface() {
         />;
         break;
       case 'settings':
-        userText = t('chat.user.switchSource');
         messageComponent = <DataSourceSwitcher currentSource={dataSource} onSourceChange={handleDataSourceChange} />;
         break;
+      default:
+        userTextKey = null;
     }
 
-    if (userText && messageComponent) {
-      addMessage({ sender: 'user', text: userText });
+    if (userTextKey && messageComponent) {
+      addMessage({ sender: 'user', text: t(userTextKey) });
       setTimeout(() => addMessage({ sender: 'bot', component: messageComponent }), 500);
     }
-  }, [t, addMessage, displayedPairs, handleAddDisplayedPair, handleRemoveDisplayedPair, handleSetAlert, trackedPairs, handleAddTrackedPair, handleRemoveTrackedPair, trackingInterval, dataSource, handleDataSourceChange]);
-
+  }, [t, addMessage, displayedPairs, handleAddDisplayedPair, handleRemoveDisplayedPair, handleSetAlert, trackedPairs, handleAddTrackedPair, handleRemoveTrackedPair, trackingInterval, dataSource, handleDataSourceChange, getActionButtons]);
 
   const handleSetAutoClear = (minutes: number) => {
     setAutoClearMinutes(minutes);
@@ -244,14 +240,13 @@ export function ChatInterface() {
     }
   };
   
-  // Effect for initial load
   useEffect(() => {
-    preFetchInitialRates();
-    resetChat();
+    preFetchInitialRates().then(() => {
+        resetChat();
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Effect to handle consequences of a language change
   useEffect(() => {
     if (isInitialMount.current) {
         isInitialMount.current = false;
@@ -259,18 +254,14 @@ export function ChatInterface() {
     }
 
     const newSource = lang === 'ru' ? 'nbrb' : 'currencyapi';
-    setDataSource(newSource);
-    setDataSourceState(newSource);
-    
-    preFetchInitialRates();
-    resetChat();
+    handleDataSourceChange(newSource);
 
     toast({
         title: t('language.toastTitle'),
         description: t('language.toastDesc', { lang: lang === 'ru' ? 'Русский' : 'English' }),
     });
-  }, [lang, resetChat, t, toast]);
-
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang]);
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -377,8 +368,10 @@ export function ChatInterface() {
         <div className="flex items-center">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" aria-label="Change language">
-                      <Languages className="h-5 w-5 text-muted-foreground" />
+                  <Button variant="ghost" size="icon" aria-label={t('language.changeLang')}>
+                      <div className="flex h-6 w-6 items-center justify-center rounded-sm border bg-transparent text-xs font-bold text-muted-foreground">
+                        {lang.toUpperCase()}
+                      </div>
                   </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">

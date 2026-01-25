@@ -21,7 +21,7 @@ export const translations = {
         trackPair: 'Track a currency pair',
         switchSource: 'Change data source',
         autoClear: 'Set up auto-clear',
-        showDisplayedPairManager: 'Configure the rates list',
+        configure_pairs: 'Configure the rates list',
       },
       bot: {
         alertSet: 'OK! Alert is set for {from}/{to} {condition} {threshold}.',
@@ -35,6 +35,7 @@ export const translations = {
     language: {
       toastTitle: 'Language Changed',
       toastDesc: 'Switched to {lang}. The chat has been reset.',
+      changeLang: 'Change language',
     },
     latestRates: {
       title: 'Latest Rates',
@@ -179,7 +180,7 @@ export const translations = {
         trackPair: 'Отслеживать валютную пару',
         switchSource: 'Изменить источник данных',
         autoClear: 'Настроить автоочистку',
-        showDisplayedPairManager: 'Настроить список курсов',
+        configure_pairs: 'Настроить список курсов',
       },
       bot: {
         alertSet: 'ОК! Оповещение установлено для {from}/{to} {condition} {threshold}.',
@@ -193,6 +194,7 @@ export const translations = {
     language: {
         toastTitle: 'Язык изменен',
         toastDesc: 'Переключено на {lang}. Чат был сброшен.',
+        changeLang: 'Сменить язык',
     },
     latestRates: {
       title: 'Последние курсы',
