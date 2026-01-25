@@ -163,14 +163,16 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
 }
 
 export async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
+    if (startOfDay(date) > startOfDay(new Date())) return undefined;
     if (from === to) return 1;
+    
     const formattedDate = format(date, 'yyyy-MM-dd');
     const params: Record<string, string> = {
         base: 'USD',
         start_date: formattedDate,
         end_date: formattedDate,
     };
-    const currencies = [...new Set([from, to])].filter(c => c !== 'USD').join(',');
+    const currencies = [...new Set([from, to])].filter(c => c && c !== 'USD').join(',');
     if (currencies) {
         params.currencies = currencies;
     }
@@ -193,12 +195,18 @@ export async function getCurrencyApiHistoricalRate(from: string, to: string, dat
 }
 
 export async function getCurrencyApiDynamicsForPeriod(from: string, to:string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number; }[]> {
+    const today = startOfDay(new Date());
+    if (startOfDay(startDate) > today) return [];
+    if (startOfDay(endDate) > today) {
+        endDate = today;
+    }
+    
     const params: Record<string, string> = {
         base: 'USD',
         start_date: format(startDate, 'yyyy-MM-dd'),
         end_date: format(endDate, 'yyyy-MM-dd'),
     };
-    const currencies = [...new Set([from, to])].filter(c => c !== 'USD').join(',');
+    const currencies = [...new Set([from, to])].filter(c => c && c !== 'USD').join(',');
     if (currencies) {
         params.currencies = currencies;
     }
