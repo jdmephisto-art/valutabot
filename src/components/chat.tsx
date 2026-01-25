@@ -236,8 +236,9 @@ export function ChatInterface() {
   };
   
   useEffect(() => {
-    resetChat();
-    preFetchInitialRates();
+    preFetchInitialRates().then(() => {
+        resetChat();
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -246,9 +247,15 @@ export function ChatInterface() {
         isInitialMount.current = false;
         return;
     }
-
+    
     const newSource = lang === 'ru' ? 'nbrb' : 'currencyapi';
-    handleDataSourceChange(newSource);
+    
+    // Directly apply changes instead of going through handleDataSourceChange
+    // to ensure reset happens even if the source is technically the same.
+    setDataSource(newSource);
+    setDataSourceState(newSource);
+    preFetchInitialRates();
+    resetChat();
 
     toast({
         title: t('language.toastTitle'),
