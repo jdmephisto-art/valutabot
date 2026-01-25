@@ -166,13 +166,6 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
 
 export async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
     if (from === to) return 1;
-
-    const today = startOfDay(new Date());
-    if (date > today) {
-        console.warn("Attempted to fetch CurrencyAPI.net historical data for a future date. Aborting.");
-        return undefined;
-    }
-
     const formattedDate = format(date, 'yyyy-MM-dd');
     const params: Record<string, string> = {
         base: 'USD',
@@ -202,12 +195,6 @@ export async function getCurrencyApiHistoricalRate(from: string, to: string, dat
 }
 
 export async function getCurrencyApiDynamicsForPeriod(from: string, to:string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number; }[]> {
-    const today = startOfDay(new Date());
-    if (startDate > today || endDate > today) {
-        console.warn("Attempted to fetch CurrencyAPI.net dynamics data for a future date. Aborting.");
-        return [];
-    }
-    
     const params: Record<string, string> = {
         base: 'USD',
         start_date: format(startDate, 'yyyy-MM-dd'),
@@ -339,13 +326,7 @@ function findNbrbRate(from: string, to: string): number | undefined {
 
 async function getNbrbHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
     if (from === to) return 1;
-
-    const today = startOfDay(new Date());
-    if (date > today) {
-        console.warn("Attempted to fetch NBRB historical data for a future date. Aborting.");
-        return undefined;
-    }
-
+    
     await ensureNbrbFullCache();
     const nbrbIdMap = buildNbrbIdMap();
     
@@ -371,13 +352,6 @@ async function getNbrbHistoricalRate(from: string, to: string, date: Date): Prom
 }
 
 async function getNbrbDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string, rate: number }[]> {
-    
-    const today = startOfDay(new Date());
-    if (startDate > today || endDate > today) {
-        console.warn("Attempted to fetch NBRB dynamics data for a future date. Aborting.");
-        return [];
-    }
-    
     await ensureNbrbFullCache();
     if (!nbrbFullCurrencyInfoCache) return [];
 
@@ -615,4 +589,5 @@ export function preFetchInitialRates() {
     _updateCurrencyApiRatesCache('USD');
     _updateNbrbRatesCache();
 }
+
 
