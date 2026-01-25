@@ -37,6 +37,7 @@ type ActionButtonProps = {
 };
 
 const defaultDisplayedPairs = ['USD/EUR', 'EUR/USD', 'USD/BYN', 'EUR/BYN', 'USD/RUB', 'EUR/RUB'];
+const DISPLAYED_PAIRS_STORAGE_KEY = 'currencyBotDisplayedPairs';
 
 export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -229,14 +230,31 @@ export function ChatInterface() {
   };
   
   useEffect(() => {
-    resetChat();
+    // Load custom pairs from localStorage on initial mount
+    const storedPairsJSON = localStorage.getItem(DISPLAYED_PAIRS_STORAGE_KEY);
+    if (storedPairsJSON) {
+        try {
+            const storedPairs = JSON.parse(storedPairsJSON);
+            if (Array.isArray(storedPairs) && storedPairs.length > 0 && storedPairs.every(p => typeof p === 'string')) {
+                setDisplayedPairs(storedPairs);
+            }
+        } catch (e) {
+            console.error("Failed to parse displayed pairs from localStorage", e);
+        }
+    }
+
+    addMessage({
+      sender: 'bot',
+      text: t('chat.placeholder'),
+      options: getActionButtons(),
+    });
     preFetchInitialRates();
+    isInitialMount.current = false;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (isInitialMount.current) {
-        isInitialMount.current = false;
         return;
     }
     
@@ -284,6 +302,12 @@ export function ChatInterface() {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoClearMinutes]);
+
+  useEffect(() => {
+    if (!isInitialMount.current) {
+        localStorage.setItem(DISPLAYED_PAIRS_STORAGE_KEY, JSON.stringify(displayedPairs));
+    }
+  }, [displayedPairs]);
 
   useEffect(() => {
     const checkRates = async () => {
