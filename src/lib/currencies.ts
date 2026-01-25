@@ -10,7 +10,7 @@ const defaultPairs = [
     { from: 'EUR', to: 'BYN' }, { from: 'USD', to: 'RUB' }, { from: 'EUR', to: 'RUB' },
 ];
 
-export const cryptoCodes = ['BTC', 'ETH', 'LTC', 'XRP', 'XAU', 'XAG'];
+export const cryptoCodes = ['BTC', 'ETH', 'LTC', 'XRP', 'XAU', 'XAG', 'BCH', 'BTG', 'DASH', 'EOS'];
 
 // Caches
 let nbrbCurrenciesCache: Currency[] | null = null;
