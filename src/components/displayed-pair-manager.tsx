@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { List, PlusCircle, Trash2 } from 'lucide-react';
 import { Separator } from './ui/separator';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useTranslation } from '@/hooks/use-translation';
 import { CurrencyCombobox } from './currency-combobox';
@@ -31,6 +31,10 @@ export function DisplayedPairManager({ onAddPair, onRemovePair, pairs: initialPa
   const { currencies } = useCurrencies();
   const { t } = useTranslation();
   const [localPairs, setLocalPairs] = useState(initialPairs);
+
+  useEffect(() => {
+    setLocalPairs(initialPairs);
+  }, [initialPairs]);
 
   const pairSchema = useMemo(() => getPairSchema(t), [t]);
   type PairFormValues = z.infer<typeof pairSchema>;

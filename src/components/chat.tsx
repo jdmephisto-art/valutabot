@@ -164,13 +164,17 @@ export function ChatInterface() {
     if (displayedPairs.includes(pair)) {
         return false;
     }
-    setDisplayedPairs(prev => [...prev, pair]);
+    const newPairs = [...displayedPairs, pair];
+    setDisplayedPairs(newPairs);
+    localStorage.setItem(DISPLAYED_PAIRS_STORAGE_KEY, JSON.stringify(newPairs));
     addMessage({ sender: 'bot', text: t('chat.bot.pairAddedToList', { pair }) });
     return true;
   };
 
   const handleRemoveDisplayedPair = (pair: string) => {
-    setDisplayedPairs(prev => prev.filter(p => p !== pair));
+    const newPairs = displayedPairs.filter(p => p !== pair);
+    setDisplayedPairs(newPairs);
+    localStorage.setItem(DISPLAYED_PAIRS_STORAGE_KEY, JSON.stringify(newPairs));
     addMessage({ sender: 'bot', text: t('chat.bot.pairRemovedFromList', { pair }) });
   };
 
@@ -229,7 +233,6 @@ export function ChatInterface() {
   };
   
   useEffect(() => {
-    // Load custom pairs from localStorage on initial mount
     const storedPairsJSON = localStorage.getItem(DISPLAYED_PAIRS_STORAGE_KEY);
     if (storedPairsJSON) {
         try {
