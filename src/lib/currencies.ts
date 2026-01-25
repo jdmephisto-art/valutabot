@@ -201,7 +201,7 @@ async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDa
     const symbols = [from, to].filter(c => c !== base).join(',');
 
     if (!symbols) {
-         const days = differenceInDays(endDate, startDate) + 1;
+        const days = differenceInDays(endDate, startDate) + 1;
         return Array.from({ length: days }).map((_, i) => ({
             date: format(addDays(startDate, i), 'dd.MM'),
             rate: 1,
