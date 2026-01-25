@@ -107,6 +107,9 @@ export function HistoricalRates() {
     const disabled: { before?: Date, after?: Date } = { after: new Date() };
     if (getDataSource() === 'nbrb') {
         disabled.before = new Date('2021-01-01');
+    } else { // currencyapi
+        // Free plan only supports up to 2 years of historical data.
+        disabled.before = subDays(new Date(), (365 * 2) - 1);
     }
     return disabled;
   }
