@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Check } from 'lucide-react';
+import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Check, Languages } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LatestRates } from '@/components/latest-rates';
@@ -241,9 +241,8 @@ export function ChatInterface() {
   };
   
   useEffect(() => {
-    preFetchInitialRates().then(() => {
-        resetChat();
-    });
+    preFetchInitialRates();
+    resetChat();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
