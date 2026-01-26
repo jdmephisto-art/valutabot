@@ -11,8 +11,8 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { getDynamicsForPeriod, getHistoricalRate, getDataSource } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
-import { format, subDays, differenceInDays } from 'date-fns';
-import { CalendarIcon, TrendingDown, TrendingUp } from 'lucide-react';
+import { format, subDays, differenceInDays, addDays, startOfDay, parseISO } from 'date-fns';
+import { CalendarIcon, TrendingDown, TrendingUp, Info } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useToast } from '@/hooks/use-toast';
@@ -21,6 +21,7 @@ import { CurrencyCombobox } from './currency-combobox';
 
 
 export function HistoricalRates() {
+  const dataSource = getDataSource();
   const { currencies } = useCurrencies();
   const { toast } = useToast();
   const { t, lang, dateLocale } = useTranslation();
@@ -112,6 +113,25 @@ export function HistoricalRates() {
         disabled.before = subDays(new Date(), (365 * 2) - 1);
     }
     return disabled;
+  }
+
+  if (dataSource === 'currencyapi') {
+      return (
+          <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
+              <CardHeader>
+                  <CardTitle className="text-lg font-semibold">{t('history.title')}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                  <div className="flex flex-col items-center justify-center text-center p-4 bg-muted/50 rounded-lg">
+                      <Info className="h-10 w-10 text-muted-foreground mb-4" />
+                      <h3 className="font-semibold mb-2">{t('history.apiPlanErrorTitle')}</h3>
+                      <p className="text-sm text-muted-foreground">
+                          {t('history.apiPlanErrorDesc')}
+                      </p>
+                  </div>
+              </CardContent>
+          </Card>
+      );
   }
 
 

@@ -88,6 +88,8 @@ export const translations = {
       rangeTooLargeDesc: 'Please select a range of 30 days or less for CurrencyAPI to avoid exceeding API limits.',
       noDynamics: 'Could not get dynamics for the selected period. Please select another date range.',
       noRate: 'Could not get the rate for the selected date.',
+      apiPlanErrorTitle: 'Feature Unavailable',
+      apiPlanErrorDesc: 'Historical data is not available on the free plan of CurrencyAPI.net. Please switch to the NBRB data source to use this feature.',
     },
     tracking: {
       title: 'Track Currency Pairs',
@@ -247,6 +249,8 @@ export const translations = {
       rangeTooLargeDesc: 'Пожалуйста, выберите диапазон 30 дней или меньше для CurrencyAPI, чтобы не превышать лимиты API.',
       noDynamics: 'Не удалось получить динамику для выбранного периода. Выберите другой диапазон дат.',
       noRate: 'Не удалось получить курс для выбранной даты.',
+      apiPlanErrorTitle: 'Функция недоступна',
+      apiPlanErrorDesc: 'Исторические данные недоступны на бесплатном тарифе CurrencyAPI.net. Пожалуйста, переключитесь на источник данных НБРБ, чтобы использовать эту функцию.',
     },
     tracking: {
       title: 'Отслеживание валютных пар',
