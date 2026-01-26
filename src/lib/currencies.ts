@@ -446,7 +446,7 @@ async function getNbrbDynamicsForPeriod(from: string, to: string, startDate: Dat
             };
         }
         return null;
-    }).filter((d): d is { date: string; rate: number } => d !== null);
+    }).filter((d): d is { date: string, rate: number } => d !== null);
 
     return result;
 }
@@ -484,16 +484,112 @@ export async function getLatestRates(pairs?: string[]): Promise<ExchangeRate[]> 
         return [];
     }
 
-    const rates = await Promise.all(
-        pairsToFetch.map(pair => findRateAsync(pair.from, pair.to))
-    );
+    const allCodes = Array.from(new Set(pairsToFetch.flatMap(p => [p.from, p.to])));
+    const cryptoInvolved = allCodes.some(c => cryptoCodes.includes(c));
+    const bynInvolved = allCodes.includes('BYN');
 
-    const resultsWithUndefined = pairsToFetch.map((pair, index) => ({
-        ...pair,
-        rate: rates[index],
-    }));
+    let localNbrbRates: { [key: string]: { rate: number, scale: number } } = {};
+    let localApiRates: { [key: string]: number } = {};
 
-    return resultsWithUndefined
+    const nbrbPromise = (async () => {
+        if (activeDataSource === 'nbrb' || bynInvolved) {
+            // Use global cache if valid, otherwise fetch locally
+            if (isCacheValid(nbrbRatesTimestamp, CACHE_TTL_RATES)) {
+                localNbrbRates = nbrbRatesCache;
+            } else {
+                const dailyData = await nbrbApiFetch('rates?periodicity=0');
+                const monthlyData = await nbrbApiFetch('rates?periodicity=1');
+                if (dailyData) dailyData.forEach((r: any) => { localNbrbRates[r.Cur_Abbreviation] = { rate: r.Cur_OfficialRate, scale: r.Cur_Scale }; });
+                if (monthlyData) monthlyData.forEach((r: any) => { if (!localNbrbRates[r.Cur_Abbreviation]) localNbrbRates[r.Cur_Abbreviation] = { rate: r.Cur_OfficialRate, scale: r.Cur_Scale }; });
+            }
+        }
+    })();
+
+    const currencyApiPromise = (async () => {
+        if (activeDataSource === 'currencyapi' || cryptoInvolved || bynInvolved) {
+            const currenciesToFetch = allCodes.filter(c => c !== 'USD');
+            const requiredMissing = currenciesToFetch.filter(c => !currencyApiRatesCache[c]);
+
+            if (isCacheValid(currencyApiRatesTimestamp, CACHE_TTL_RATES) && requiredMissing.length === 0) {
+                 localApiRates = currencyApiRatesCache;
+            } else {
+                const params: Record<string, string> = { base: 'USD' };
+                if (currenciesToFetch.length > 0) {
+                    params.currencies = currenciesToFetch.join(',');
+                    const data = await currencyApiNetFetch('rates', params);
+                    if (data && data.rates) {
+                        localApiRates = data.rates;
+                    }
+                }
+            }
+            localApiRates['USD'] = 1;
+        }
+    })();
+
+    await Promise.all([nbrbPromise, currencyApiPromise]);
+    
+    const findRateFromLocal = (from: string, to: string): number | undefined => {
+        if (from === to) return 1;
+
+        const fromIsCrypto = cryptoCodes.includes(from);
+        const toIsCrypto = cryptoCodes.includes(to);
+
+        if ((fromIsCrypto || toIsCrypto) && from !== 'BYN' && to !== 'BYN') {
+            const fromRate = localApiRates[from];
+            const toRate = localApiRates[to];
+            if (fromRate && toRate) return toRate / fromRate;
+            return undefined;
+        }
+        
+        if (from === 'BYN' || to === 'BYN') {
+            const otherCode = from === 'BYN' ? to : from;
+            const otherIsCrypto = cryptoCodes.includes(otherCode);
+
+            if (otherIsCrypto) {
+                const usdToBynRateInfo = localNbrbRates['USD'];
+                if (!usdToBynRateInfo) return undefined;
+                const usdToBynRate = usdToBynRateInfo.rate / usdToBynRateInfo.scale;
+                
+                const usdToCryptoRate = localApiRates[otherCode];
+                if (!usdToBynRate || !usdToCryptoRate) return undefined;
+                
+                const bynToCryptoRate = usdToCryptoRate / usdToBynRate;
+                return from === 'BYN' ? bynToCryptoRate : 1 / bynToCryptoRate;
+
+            } else { // BYN-fiat
+                const toRateInfo = localNbrbRates[to];
+                const fromRateInfo = localNbrbRates[from];
+                const rateToBynForFROM = from === 'BYN' ? 1 : (fromRateInfo ? fromRateInfo.rate / fromRateInfo.scale : undefined);
+                const rateToBynForTO = to === 'BYN' ? 1 : (toRateInfo ? toRateInfo.rate / toRateInfo.scale : undefined);
+                if (rateToBynForFROM !== undefined && rateToBynForTO !== undefined && rateToBynForTO !== 0) {
+                    return rateToBynForFROM / rateToBynForTO;
+                }
+                return undefined;
+            }
+        }
+        
+        if (activeDataSource === 'nbrb') {
+             const toRateInfo = localNbrbRates[to];
+             const fromRateInfo = localNbrbRates[from];
+             const rateToBynForFROM = from === 'BYN' ? 1 : (fromRateInfo ? fromRateInfo.rate / fromRateInfo.scale : undefined);
+             const rateToBynForTO = to === 'BYN' ? 1 : (toRateInfo ? toRateInfo.rate / toRateInfo.scale : undefined);
+             if (rateToBynForFROM !== undefined && rateToBynForTO !== undefined && rateToBynForTO !== 0) {
+                 return rateToBynForFROM / rateToBynForTO;
+             }
+             return undefined;
+        } else { // currencyapi
+            const fromRate = localApiRates[from];
+            const toRate = localApiRates[to];
+            if (fromRate && toRate) return toRate / fromRate;
+            return undefined;
+        }
+    };
+    
+    return pairsToFetch
+        .map(pair => ({
+            ...pair,
+            rate: findRateFromLocal(pair.from, pair.to),
+        }))
         .filter((r): r is (typeof r & { rate: number }) => r.rate !== undefined);
 }
 

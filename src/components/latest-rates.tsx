@@ -21,16 +21,21 @@ export function LatestRates({ pairs }: LatestRatesProps) {
 
   useEffect(() => {
     if (pairs.length > 0) {
-      // Immediately set pairs with placeholder rate to make the UI responsive
       const initialData = pairs.map(p => {
         const [from, to] = p.split('/');
         return { from, to, rate: undefined };
       });
       setRates(initialData);
 
-      // Then, fetch the actual rates
       getLatestRates(pairs).then(fetchedRates => {
-        setRates(fetchedRates);
+        const fetchedRatesMap = new Map(fetchedRates.map(r => [`${r.from}/${r.to}`, r.rate]));
+        
+        const updatedRates = pairs.map(p => {
+            const [from, to] = p.split('/');
+            return { from, to, rate: fetchedRatesMap.get(p) };
+        });
+        
+        setRates(updatedRates);
       });
     } else {
       setRates([]);
@@ -42,19 +47,21 @@ export function LatestRates({ pairs }: LatestRatesProps) {
     if (pairs.length === 0 || rates.some(r => r.rate === undefined)) return;
 
     const interval = setInterval(async () => {
-      const oldRates = new Map(rates.map(r => [`${r.from}-${r.to}`, r.rate!]));
+      const oldRatesMap = new Map(rates.filter(r => r.rate !== undefined).map(r => [`${r.from}-${r.to}`, r.rate!]));
       const newRates = await getLatestRates(pairs);
       const changed = new Map<string, 'up' | 'down'>();
 
+      const newRatesMap = new Map<string, number>();
       for (const newRate of newRates) {
         const key = `${newRate.from}-${newRate.to}`;
-        const oldRate = oldRates.get(key);
+        newRatesMap.set(key, newRate.rate);
+        const oldRate = oldRatesMap.get(key);
         if (oldRate && oldRate !== newRate.rate) {
           changed.set(key, newRate.rate > oldRate ? 'up' : 'down');
         }
       }
       
-      setRates(newRates);
+      setRates(prevRates => prevRates.map(r => ({ ...r, rate: newRatesMap.get(`${r.from}/${r.to}`) ?? r.rate })));
       setChangedRates(changed);
 
       if (changed.size > 0) {
