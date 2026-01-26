@@ -192,20 +192,15 @@ export async function getCurrencyApiHistoricalRate(from: string, to: string, dat
         params.currencies = currencies;
     }
 
-    const data = await currencyApiNetFetch('historical', params);
+    console.log('[DIAGNOSTIC] Fetching historical rate with params:', params);
+    const data = await currencyApiNetFetch('history', params);
 
-    if (!data || !data.data) {
+    if (!data || !data.rates) {
         console.error('[DIAGNOSTIC] No historical rate data returned from API for date:', formattedDate);
         return undefined;
     }
 
-    const dailyRates: {[key: string]: number} = {};
-    for (const code in data.data) {
-        if (data.data[code] && typeof data.data[code].value === 'number') {
-            dailyRates[code] = data.data[code].value;
-        }
-    }
-
+    const dailyRates = data.rates;
     const fromRate = from === 'USD' ? 1 : dailyRates[from];
     const toRate = to === 'USD' ? 1 : dailyRates[to];
 
@@ -222,24 +217,26 @@ export async function getCurrencyApiDynamicsForPeriod(from: string, to:string, s
         console.error("[DIAGNOSTIC] getCurrencyApiDynamicsForPeriod received invalid dates:", { startDate, endDate });
         return [];
     }
-    let effectiveEndDate = endDate;
+    
     const today = startOfDay(new Date());
+    let effectiveStartDate = startOfDay(startDate);
+    let effectiveEndDate = startOfDay(endDate);
 
-    if (startOfDay(startDate) > today) {
-        console.error(`[DIAGNOSTIC] Attempted to fetch CurrencyAPI.net dynamics for a future start date: ${format(startDate, 'yyyy-MM-dd')}. Aborting.`);
+    if (effectiveStartDate > today) {
+        console.warn(`[DIAGNOSTIC] Dynamics start date for CurrencyAPI.net was in the future. Aborting.`);
         return [];
     }
-    if (startOfDay(endDate) > today) {
-        console.log(`[DIAGNOSTIC] Dynamics end date for CurrencyAPI.net was in the future. Resetting to today.`);
+    if (effectiveEndDate > today) {
+        console.warn(`[DIAGNOSTIC] Dynamics end date for CurrencyAPI.net was in the future. Resetting to today.`);
         effectiveEndDate = today;
     }
-    if (startOfDay(startDate) > startOfDay(effectiveEndDate)) {
+    if (effectiveStartDate > effectiveEndDate) {
         console.error(`[DIAGNOSTIC] Dynamics start date for CurrencyAPI.net is after end date. Aborting.`);
         return [];
     }
 
     const promises = [];
-    let currentDate = startDate;
+    let currentDate = effectiveStartDate;
     while (currentDate <= effectiveEndDate) {
         const dateToFetch = new Date(currentDate);
         promises.push(
