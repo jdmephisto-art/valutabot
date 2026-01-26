@@ -470,46 +470,37 @@ export async function getCurrencies(): Promise<Currency[]> {
 }
 
 export async function getLatestRates(pairs?: string[]): Promise<ExchangeRate[]> {
-    const defaultPairs = [
-        { from: 'USD', to: 'EUR' }, { from: 'EUR', to: 'USD' }, { from: 'USD', to: 'BYN' },
-        { from: 'EUR', to: 'BYN' }, { from: 'USD', to: 'RUB' }, { from: 'EUR', to: 'RUB' },
-    ];
-    
-    const pairsToFetch = pairs ? pairs.map(p => {
-        const [from, to] = p.split('/');
-        return { from, to };
-    }) : defaultPairs;
-
-    if (pairsToFetch.length === 0) {
+    if (!pairs || pairs.length === 0) {
         return [];
     }
 
-    const allCodes = Array.from(new Set(pairsToFetch.flatMap(p => [p.from, p.to])));
+    // 1. Collect all unique currency codes.
+    const allCodes = Array.from(new Set(pairs.flatMap(p => p.split('/'))));
+
+    // 2. Determine which APIs to call.
     const cryptoInvolved = allCodes.some(c => cryptoCodes.includes(c));
     const bynInvolved = allCodes.includes('BYN');
 
     const updatePromises: Promise<any>[] = [];
 
-    // If crypto is involved, or the main source is currencyapi, we need currencyapi cache.
     if (cryptoInvolved || activeDataSource === 'currencyapi') {
         updatePromises.push(_updateCurrencyApiRatesCache('USD'));
     }
-    // If BYN is involved for accuracy, or the main source is NBRB, we need NBRB cache.
     if (bynInvolved || activeDataSource === 'nbrb') {
         updatePromises.push(_updateNbrbRatesCache());
     }
 
-    // Update caches in parallel
+    // 3. Update caches in parallel.
     await Promise.all(updatePromises);
     
-    // Now that caches are populated, calculate rates for all pairs.
-    const rates = pairsToFetch.map(pair => {
-        const rate = findRate(pair.from, pair.to);
-        return { ...pair, rate };
+    // 4. Calculate rates for all pairs and return the full list.
+    const rates = pairs.map(pairString => {
+        const [from, to] = pairString.split('/');
+        const rate = findRate(from, to);
+        return { from, to, rate }; // rate can be undefined
     });
 
-    // Filter out pairs where a rate could not be calculated, as expected by the calling component.
-    return rates.filter((r): r is (typeof r & { rate: number }) => r.rate !== undefined);
+    return rates;
 }
 
 export function findRate(from: string, to: string): number | undefined {

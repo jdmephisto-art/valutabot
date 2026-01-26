@@ -8,7 +8,7 @@ export type Currency = {
 export type ExchangeRate = {
   from: string;
   to: string;
-  rate: number;
+  rate?: number;
 };
 
 export type Alert = {
