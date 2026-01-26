@@ -1,4 +1,3 @@
-
 import type { Currency, ExchangeRate, DataSource } from '@/lib/types';
 import { format, subDays, differenceInDays, addDays, startOfDay, parseISO } from 'date-fns';
 
@@ -168,6 +167,9 @@ function _updateCurrencyApiRatesCache(baseCurrency = 'USD'): Promise<void> {
                 currencyApiRatesCache = data.rates;
                 currencyApiRatesCache[baseCurrency] = 1;
                 currencyApiRatesTimestamp = Date.now();
+            } else {
+                // If the API call fails (e.g., rate limit), clear the cache to indicate data is stale
+                currencyApiRatesCache = {};
             }
         } finally {
             currencyApiUpdatePromise = null;
@@ -479,16 +481,23 @@ export async function getLatestRates(pairs?: string[]): Promise<ExchangeRate[]> 
         return [];
     }
 
-    // Pre-warm both caches
-    await Promise.all([
-        _updateCurrencyApiRatesCache('USD'),
-        _updateNbrbRatesCache()
-    ]);
+    const updatePromises: Promise<void>[] = [];
+    
+    // Always pre-warm NBRB for BYN and as a fallback
+    updatePromises.push(_updateNbrbRatesCache());
+
+    // Pre-warm CurrencyAPI if it's the source or if crypto is involved
+    const hasCrypto = pairs.some(p => p.split('/').some(c => cryptoCodes.includes(c)));
+    if (activeDataSource === 'currencyapi' || hasCrypto) {
+         updatePromises.push(_updateCurrencyApiRatesCache('USD'));
+    }
+    
+    await Promise.all(updatePromises);
     
     const rates = pairs.map(pairString => {
         const [from, to] = pairString.split('/');
         const rate = findRate(from, to);
-        return { from, to, rate };
+        return { from, to, rate }; // rate can be undefined
     });
 
     return rates;
@@ -498,7 +507,7 @@ export function findRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
 
     // A consistent helper to get any currency's rate against USD.
-    // It handles crypto, BYN, and data source logic internally.
+    // It handles crypto, BYN, data source logic, and fallbacks internally.
     const getRateAgainstUsd = (code: string): number | undefined => {
         if (code === 'USD') return 1;
 
@@ -519,7 +528,7 @@ export function findRate(from: string, to: string): number | undefined {
             if (rate !== undefined) {
                 return rate;
             }
-            console.warn(`CurrencyAPI rate for ${code}/USD failed or not available. Falling back to NBRB.`);
+            // console.warn(`CurrencyAPI rate for ${code}/USD failed or not available. Falling back to NBRB.`);
             return findNbrbRate(code, 'USD');
         } else { // activeDataSource is 'nbrb'
             return findNbrbRate(code, 'USD');
@@ -529,8 +538,12 @@ export function findRate(from: string, to: string): number | undefined {
     const fromRate = getRateAgainstUsd(from);
     const toRate = getRateAgainstUsd(to);
 
-    if (fromRate !== undefined && toRate !== undefined && toRate !== 0) {
-        // Formula: (FROM/USD) / (TO/USD) = FROM/TO
+    if (fromRate !== undefined && toRate !== undefined && fromRate !== 0) {
+        // We want to find how many TO is 1 FROM.
+        // 1 FROM = fromRate USD
+        // 1 TO   = toRate USD
+        // => 1 USD = 1 / toRate TO
+        // => 1 FROM = fromRate * (1 / toRate) TO = fromRate / toRate TO
         return fromRate / toRate;
     }
 
