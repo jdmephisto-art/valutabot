@@ -67,7 +67,7 @@ async function currencyApiNetFetch(endpoint: string, params: Record<string, stri
 
     const url = `/api/currency?${queryParams.toString()}`;
     
-    console.log(`[DIAGNOSTIC] Making internal API request to: ${url}`);
+    console.log(`[DIAGNOSTIC] Sending internal API request to: ${url}`);
 
     try {
         const response = await fetch(url, {
@@ -76,19 +76,22 @@ async function currencyApiNetFetch(endpoint: string, params: Record<string, stri
         });
 
         if (!response.ok) {
-            const errorBody = await response.json().catch(() => ({}));
-            console.error(`Internal API request to ${url} failed: ${response.status} ${response.statusText}`, errorBody);
+            const errorBody = await response.json().catch(() => ({ message: 'Could not parse error response body.' }));
+            console.error(`[DIAGNOSTIC] Internal API request to ${url} FAILED with status ${response.status} ${response.statusText}. Error Body:`, JSON.stringify(errorBody));
             return null;
         }
 
         const data = await response.json();
+        
+        console.log(`[DIAGNOSTIC] Received data from internal API for ${url}:`, JSON.stringify(data));
+
         if (data.valid === false || data.error) {
-             console.error(`CurrencyAPI.net request returned an error:`, data.error || 'Unknown error');
+             console.error(`[DIAGNOSTIC] CurrencyAPI.net indicated an error for ${url}. Error:`, data.error || 'Unknown validation error.');
              return null;
         }
         return data;
-    } catch (error) {
-        console.error('Failed to fetch from internal API:', error);
+    } catch (error: any) {
+        console.error(`[DIAGNOSTIC] A network or other error occurred while fetching from internal API: ${url}. Error:`, error.message);
         return null;
     }
 }
@@ -189,7 +192,6 @@ export async function getCurrencyApiHistoricalRate(from: string, to: string, dat
         params.currencies = currencies;
     }
 
-    console.log('[DIAGNOSTIC] Calling currencyApiNetFetch for single date with params:', params);
     const data = await currencyApiNetFetch('historical', params);
 
     if (!data || !data.data) {
@@ -220,7 +222,6 @@ export async function getCurrencyApiDynamicsForPeriod(from: string, to:string, s
         console.error("[DIAGNOSTIC] getCurrencyApiDynamicsForPeriod received invalid dates:", { startDate, endDate });
         return [];
     }
-
     let effectiveEndDate = endDate;
     const today = startOfDay(new Date());
 
@@ -232,11 +233,12 @@ export async function getCurrencyApiDynamicsForPeriod(from: string, to:string, s
         console.warn(`[DIAGNOSTIC] Dynamics end date was in the future (${endDate}). Resetting to today.`);
         effectiveEndDate = today;
     }
-
     if (startOfDay(startDate) > startOfDay(effectiveEndDate)) {
         console.warn(`[DIAGNOSTIC] Dynamics start date ${startDate} is after end date ${effectiveEndDate}. Aborting.`);
         return [];
     }
+    
+    console.log(`[DIAGNOSTIC] getCurrencyApiDynamicsForPeriod called with:`, { from, to, startDate: format(startDate, 'yyyy-MM-dd'), endDate: format(effectiveEndDate, 'yyyy-MM-dd') });
     
     const promises = [];
     let currentDate = startDate;
@@ -265,6 +267,10 @@ export async function getCurrencyApiDynamicsForPeriod(from: string, to:string, s
             date: format(r.dateObj, 'dd.MM'),
             rate: r.rate,
         }));
+        
+    if (validResults.length === 0) {
+        console.log('[DIAGNOSTIC] No dynamics data returned from API.');
+    }
         
     return validResults;
 }
