@@ -90,7 +90,12 @@ async function currencyApiNetFetch(endpoint: string, params: Record<string, stri
 
         if (!response.ok) {
             const errorBody = await response.json().catch(() => ({}));
-            console.error(`[DIAGNOSTIC] Internal API request to ${url} FAILED with status ${response.status} ${response.statusText}. Error Body:`, JSON.stringify(errorBody));
+            // Check for specific subscription error to avoid breaking the app
+            if (errorBody?.details?.error?.code === 405) {
+                 console.warn(`[DIAGNOSTIC] CurrencyAPI.net request to ${url} failed, likely due to subscription limits.`, JSON.stringify(errorBody));
+            } else {
+                 console.error(`[DIAGNOSTIC] Internal API request to ${url} FAILED with status ${response.status} ${response.statusText}. Error Body:`, JSON.stringify(errorBody));
+            }
             return null;
         }
 
@@ -474,21 +479,11 @@ export async function getLatestRates(pairs?: string[]): Promise<ExchangeRate[]> 
         return [];
     }
 
-    const allCodes = Array.from(new Set(pairs.flatMap(p => p.split('/'))));
-    const cryptoInvolved = allCodes.some(c => cryptoCodes.includes(c));
-    const bynInvolved = allCodes.includes('BYN');
-
-    const updatePromises: Promise<any>[] = [];
-
-    // always update both caches if BYN is involved to allow bridging
-    if (cryptoInvolved || bynInvolved || activeDataSource === 'currencyapi') {
-        updatePromises.push(_updateCurrencyApiRatesCache('USD'));
-    }
-    if (activeDataSource === 'nbrb' || bynInvolved) {
-        updatePromises.push(_updateNbrbRatesCache());
-    }
-
-    await Promise.all(updatePromises);
+    // Pre-warm both caches
+    await Promise.all([
+        _updateCurrencyApiRatesCache('USD'),
+        _updateNbrbRatesCache()
+    ]);
     
     const rates = pairs.map(pairString => {
         const [from, to] = pairString.split('/');
@@ -502,44 +497,46 @@ export async function getLatestRates(pairs?: string[]): Promise<ExchangeRate[]> 
 export function findRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
 
-    // This is the unified function to get the rate of any currency against USD.
+    // A consistent helper to get any currency's rate against USD.
+    // It handles crypto, BYN, and data source logic internally.
     const getRateAgainstUsd = (code: string): number | undefined => {
         if (code === 'USD') return 1;
-        
-        const isCrypto = cryptoCodes.includes(code);
 
-        // Special handling for BYN: always use NBRB for its USD rate.
+        // BYN is special, must use NBRB as it's the authority for BYN.
         if (code === 'BYN') {
-            // findNbrbRate('USD', 'BYN') returns USD/BYN, we need BYN/USD.
-            const usdToByn = findNbrbRate('USD', 'BYN');
-            if (usdToByn) return 1 / usdToByn;
-            return undefined;
-        }
-        
-        // For crypto, always use currencyapi
-        if (isCrypto) {
-            return findCurrencyApiRate('USD', code);
+            return findNbrbRate('BYN', 'USD');
         }
 
-        // For other fiat, use the active data source
-        if (activeDataSource === 'nbrb') {
-            const usdToFiat = findNbrbRate('USD', code);
-            if (usdToFiat) return 1 / usdToFiat;
-            return undefined;
-        } else { // currencyapi source
-            return findCurrencyApiRate('USD', code);
+        // Crypto is special, must use CurrencyAPI as NBRB doesn't have it.
+        if (cryptoCodes.includes(code)) {
+            return findCurrencyApiRate(code, 'USD');
+        }
+
+        // For other fiat currencies, respect the data source, but with a fallback.
+        if (activeDataSource === 'currencyapi') {
+            const rate = findCurrencyApiRate(code, 'USD');
+            // If currencyapi fails (e.g. limit reached), fallback to nbrb
+            if (rate !== undefined) {
+                return rate;
+            }
+            console.warn(`CurrencyAPI rate for ${code}/USD failed or not available. Falling back to NBRB.`);
+            return findNbrbRate(code, 'USD');
+        } else { // activeDataSource is 'nbrb'
+            return findNbrbRate(code, 'USD');
         }
     };
 
-    const fromRateAgainstUsd = getRateAgainstUsd(from);
-    const toRateAgainstUsd = getRateAgainstUsd(to);
-    
-    if (fromRateAgainstUsd !== undefined && toRateAgainstUsd !== undefined && fromRateAgainstUsd !== 0) {
-        return toRateAgainstUsd / fromRateAgainstUsd;
+    const fromRate = getRateAgainstUsd(from);
+    const toRate = getRateAgainstUsd(to);
+
+    if (fromRate !== undefined && toRate !== undefined && toRate !== 0) {
+        // Formula: (FROM/USD) / (TO/USD) = FROM/TO
+        return fromRate / toRate;
     }
-    
+
     return undefined;
 }
+
 
 export async function findRateAsync(from: string, to: string): Promise<number | undefined> {
     const fromIsCrypto = cryptoCodes.includes(from);
