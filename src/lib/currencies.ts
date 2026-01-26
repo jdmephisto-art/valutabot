@@ -4,25 +4,34 @@ import { format, subDays, differenceInDays, addDays, startOfDay, parseISO } from
 
 let activeDataSource: DataSource = 'ru' === 'ru' ? 'nbrb' : 'currencyapi';
 
-const defaultPairs = [
-    { from: 'USD', to: 'EUR' }, { from: 'EUR', to: 'USD' }, { from: 'USD', to: 'BYN' },
-    { from: 'EUR', to: 'BYN' }, { from: 'USD', to: 'RUB' }, { from: 'EUR', to: 'RUB' },
-];
-
+// --- Constants ---
 export const cryptoCodes = ['BTC', 'ETH', 'LTC', 'XRP', 'XAU', 'XAG', 'BCH', 'BTG', 'DASH', 'EOS'];
+const CACHE_TTL_RATES = 15 * 60 * 1000; // 15 minutes
+const CACHE_TTL_CURRENCIES = 24 * 60 * 60 * 1000; // 24 hours
 
-// Caches
+
+// --- Caches & Timestamps ---
 let nbrbCurrenciesCache: Currency[] | null = null;
+let nbrbCurrenciesTimestamp = 0;
 let nbrbFullCurrencyInfoCache: any[] | null = null;
+let nbrbFullCurrencyInfoTimestamp = 0;
 let nbrbRatesCache: { [key: string]: { rate: number, scale: number } } = {};
+let nbrbRatesTimestamp = 0;
 
 let currencyApiCurrenciesCache: Currency[] | null = null;
+let currencyApiCurrenciesTimestamp = 0;
 let currencyApiRatesCache: { [key: string]: number } = {};
-let lastCurrencyApiFetchTimestamp = 0;
+let currencyApiRatesTimestamp = 0;
 
-// Promise gates to prevent race conditions
+
+// --- Promise Gates ---
 let nbrbUpdatePromise: Promise<void> | null = null;
 let currencyApiUpdatePromise: Promise<void> | null = null;
+
+// --- Cache Helper ---
+function isCacheValid(timestamp: number, ttl: number): boolean {
+    return timestamp > 0 && (Date.now() - timestamp) < ttl;
+}
 
 
 export function setDataSource(source: DataSource) {
@@ -30,11 +39,17 @@ export function setDataSource(source: DataSource) {
         activeDataSource = source;
         // Clear all caches and promises to ensure fresh data from the new source
         nbrbCurrenciesCache = null;
+        nbrbCurrenciesTimestamp = 0;
         nbrbFullCurrencyInfoCache = null;
+        nbrbFullCurrencyInfoTimestamp = 0;
         nbrbRatesCache = {};
+        nbrbRatesTimestamp = 0;
+
         currencyApiCurrenciesCache = null;
+        currencyApiCurrenciesTimestamp = 0;
         currencyApiRatesCache = {};
-        lastCurrencyApiFetchTimestamp = 0;
+        currencyApiRatesTimestamp = 0;
+        
         nbrbUpdatePromise = null;
         currencyApiUpdatePromise = null;
     }
@@ -99,7 +114,7 @@ async function currencyApiNetFetch(endpoint: string, params: Record<string, stri
 
 // --- CURRENCYAPI.NET PROVIDER ---
 async function getCurrencyApiCurrencies(): Promise<Currency[]> {
-    if (currencyApiCurrenciesCache) {
+    if (isCacheValid(currencyApiCurrenciesTimestamp, CACHE_TTL_CURRENCIES) && currencyApiCurrenciesCache) {
         return currencyApiCurrenciesCache;
     }
 
@@ -129,6 +144,7 @@ async function getCurrencyApiCurrencies(): Promise<Currency[]> {
         
         result.sort((a, b) => a.code.localeCompare(b.code));
         currencyApiCurrenciesCache = result;
+        currencyApiCurrenciesTimestamp = Date.now();
         return result;
     }
     
@@ -136,6 +152,10 @@ async function getCurrencyApiCurrencies(): Promise<Currency[]> {
 }
 
 function _updateCurrencyApiRatesCache(baseCurrency = 'USD'): Promise<void> {
+    if (isCacheValid(currencyApiRatesTimestamp, CACHE_TTL_RATES) && Object.keys(currencyApiRatesCache).length > 0) {
+        return Promise.resolve();
+    }
+
     if (currencyApiUpdatePromise) {
         return currencyApiUpdatePromise;
     }
@@ -146,7 +166,7 @@ function _updateCurrencyApiRatesCache(baseCurrency = 'USD'): Promise<void> {
             if (data && data.rates) {
                 currencyApiRatesCache = data.rates;
                 currencyApiRatesCache[baseCurrency] = 1;
-                lastCurrencyApiFetchTimestamp = Date.now();
+                currencyApiRatesTimestamp = Date.now();
             }
         } finally {
             currencyApiUpdatePromise = null;
@@ -168,22 +188,22 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
     return undefined;
 }
 
-export async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
-    if (!(date instanceof Date) || isNaN(date.getTime())) {
+
+async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
+     if (!(date instanceof Date) || isNaN(date.getTime())) {
         console.error("[DIAGNOSTIC] getCurrencyApiHistoricalRate received an invalid date:", date);
         return undefined;
     }
     const today = startOfDay(new Date());
     if (startOfDay(date) > today) {
-        console.error(`[DIAGNOSTIC] Attempted to fetch CurrencyAPI.net historical rate for a future date: ${format(date, 'yyyy-MM-dd')}. Aborting.`);
+        console.warn(`[DIAGNOSTIC] Attempted to fetch CurrencyAPI.net historical rate for a future date: ${format(date, 'yyyy-MM-dd')}. Aborting.`);
         return undefined;
     }
-
     if (from === to) return 1;
-    
+
     const formattedDate = format(date, 'yyyy-MM-dd');
     const currencies = [...new Set([from, to])].filter(c => c && c !== 'USD').join(',');
-    
+
     const params: Record<string, string> = {
         base: 'USD',
         date: formattedDate,
@@ -193,13 +213,13 @@ export async function getCurrencyApiHistoricalRate(from: string, to: string, dat
     }
 
     console.log('[DIAGNOSTIC] Fetching historical rate with params:', params);
-    const data = await currencyApiNetFetch('history', params);
+    const data = await currencyApiNetFetch('historical', params);
 
     if (!data || !data.rates) {
-        console.error('[DIAGNOSTIC] No historical rate data returned from API for date:', formattedDate);
+        console.error('[DIAGNOSTIC] No historical rate data returned from API for date:', formattedDate, 'Response:', data);
         return undefined;
     }
-
+    
     const dailyRates = data.rates;
     const fromRate = from === 'USD' ? 1 : dailyRates[from];
     const toRate = to === 'USD' ? 1 : dailyRates[to];
@@ -207,21 +227,25 @@ export async function getCurrencyApiHistoricalRate(from: string, to: string, dat
     if (fromRate !== undefined && toRate !== undefined && fromRate !== 0) {
         return toRate / fromRate;
     }
-    
+
     console.error('[DIAGNOSTIC] Could not calculate historical rate from API response:', dailyRates);
     return undefined;
 }
 
-export async function getCurrencyApiDynamicsForPeriod(from: string, to:string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number; }[]> {
+async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
     if (!(startDate instanceof Date) || isNaN(startDate.getTime()) || !(endDate instanceof Date) || isNaN(endDate.getTime())) {
         console.error("[DIAGNOSTIC] getCurrencyApiDynamicsForPeriod received invalid dates:", { startDate, endDate });
         return [];
     }
-    
+
     const today = startOfDay(new Date());
     let effectiveStartDate = startOfDay(startDate);
     let effectiveEndDate = startOfDay(endDate);
-
+    
+    if (effectiveStartDate > effectiveEndDate) {
+        console.error(`[DIAGNOSTIC] Dynamics start date for CurrencyAPI.net is after end date. Aborting.`);
+        return [];
+    }
     if (effectiveStartDate > today) {
         console.warn(`[DIAGNOSTIC] Dynamics start date for CurrencyAPI.net was in the future. Aborting.`);
         return [];
@@ -230,38 +254,27 @@ export async function getCurrencyApiDynamicsForPeriod(from: string, to:string, s
         console.warn(`[DIAGNOSTIC] Dynamics end date for CurrencyAPI.net was in the future. Resetting to today.`);
         effectiveEndDate = today;
     }
-    if (effectiveStartDate > effectiveEndDate) {
-        console.error(`[DIAGNOSTIC] Dynamics start date for CurrencyAPI.net is after end date. Aborting.`);
-        return [];
-    }
 
     const promises = [];
     let currentDate = effectiveStartDate;
     while (currentDate <= effectiveEndDate) {
-        const dateToFetch = new Date(currentDate);
-        promises.push(
-            getCurrencyApiHistoricalRate(from, to, dateToFetch).then(rate => {
-                if (rate !== undefined) {
-                    return {
-                        dateObj: dateToFetch,
-                        rate: rate,
-                    };
-                }
-                return null;
-            })
-        );
+        promises.push(getCurrencyApiHistoricalRate(from, to, new Date(currentDate)));
         currentDate = addDays(currentDate, 1);
     }
+    
+    const settledRates = await Promise.all(promises);
 
-    const settledResults = await Promise.all(promises);
-
-    const validResults = settledResults
-        .filter((r): r is { dateObj: Date, rate: number } => r !== null)
-        .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime())
-        .map(r => ({
-            date: format(r.dateObj, 'dd.MM'),
-            rate: r.rate,
-        }));
+    const validResults = settledRates
+        .map((rate, index) => {
+            if (rate !== undefined) {
+                return {
+                    date: format(addDays(effectiveStartDate, index), 'dd.MM'),
+                    rate: rate,
+                };
+            }
+            return null;
+        })
+        .filter((r): r is { date: string, rate: number } => r !== null);
         
     if (validResults.length === 0) {
         console.log('[DIAGNOSTIC] No dynamics data returned from API.');
@@ -271,12 +284,16 @@ export async function getCurrencyApiDynamicsForPeriod(from: string, to:string, s
 }
 
 
+
 // --- NBRB PROVIDER ---
 async function ensureNbrbFullCache() {
-    if (nbrbFullCurrencyInfoCache) return;
+    if (isCacheValid(nbrbFullCurrencyInfoTimestamp, CACHE_TTL_CURRENCIES) && nbrbFullCurrencyInfoCache) {
+        return;
+    }
     const data = await nbrbApiFetch('currencies');
     if (data) {
         nbrbFullCurrencyInfoCache = data.filter((c: any) => new Date(c.Cur_DateEnd) > new Date());
+        nbrbFullCurrencyInfoTimestamp = Date.now();
     } else {
         nbrbFullCurrencyInfoCache = [];
     }
@@ -292,7 +309,7 @@ function buildNbrbIdMap() {
 
 
 async function getNbrbCurrencies(): Promise<Currency[]> {
-    if (nbrbCurrenciesCache) {
+     if (isCacheValid(nbrbCurrenciesTimestamp, CACHE_TTL_CURRENCIES) && nbrbCurrenciesCache) {
         return nbrbCurrenciesCache;
     }
     
@@ -313,10 +330,15 @@ async function getNbrbCurrencies(): Promise<Currency[]> {
     currencies.sort((a, b) => a.code.localeCompare(b.code));
     
     nbrbCurrenciesCache = currencies;
+    nbrbCurrenciesTimestamp = Date.now();
     return nbrbCurrenciesCache;
 }
 
 function _updateNbrbRatesCache(): Promise<void> {
+    if (isCacheValid(nbrbRatesTimestamp, CACHE_TTL_RATES) && Object.keys(nbrbRatesCache).length > 0) {
+        return Promise.resolve();
+    }
+
     if (nbrbUpdatePromise) {
         return nbrbUpdatePromise;
     }
@@ -342,6 +364,7 @@ function _updateNbrbRatesCache(): Promise<void> {
             }
             if (Object.keys(tempCache).length > 0) {
                 nbrbRatesCache = tempCache;
+                nbrbRatesTimestamp = Date.now();
             }
         } finally {
             nbrbUpdatePromise = null;
@@ -464,6 +487,10 @@ export async function getCurrencies(): Promise<Currency[]> {
 }
 
 export async function getLatestRates(pairs?: string[]): Promise<ExchangeRate[]> {
+    const defaultPairs = [
+        { from: 'USD', to: 'EUR' }, { from: 'EUR', to: 'USD' }, { from: 'USD', to: 'BYN' },
+        { from: 'EUR', to: 'BYN' }, { from: 'USD', to: 'RUB' }, { from: 'EUR', to: 'RUB' },
+    ];
     const pairsToFetch = pairs ? pairs.map(p => {
         const [from, to] = p.split('/');
         return { from, to };
