@@ -474,10 +474,7 @@ export async function getLatestRates(pairs?: string[]): Promise<ExchangeRate[]> 
         return [];
     }
 
-    // 1. Collect all unique currency codes.
     const allCodes = Array.from(new Set(pairs.flatMap(p => p.split('/'))));
-
-    // 2. Determine which APIs to call.
     const cryptoInvolved = allCodes.some(c => cryptoCodes.includes(c));
     const bynInvolved = allCodes.includes('BYN');
 
@@ -490,57 +487,56 @@ export async function getLatestRates(pairs?: string[]): Promise<ExchangeRate[]> 
         updatePromises.push(_updateNbrbRatesCache());
     }
 
-    // 3. Update caches in parallel.
     await Promise.all(updatePromises);
     
-    // 4. Calculate rates for all pairs and return the full list.
     const rates = pairs.map(pairString => {
         const [from, to] = pairString.split('/');
         const rate = findRate(from, to);
-        return { from, to, rate }; // rate can be undefined
+        return { from, to, rate };
     });
 
     return rates;
 }
 
 export function findRate(from: string, to: string): number | undefined {
+    if (from === to) return 1;
+
     const fromIsCrypto = cryptoCodes.includes(from);
     const toIsCrypto = cryptoCodes.includes(to);
 
-    if (from === to) return 1;
-
-    // Case 1: Crypto involved, but no BYN. Always use CurrencyAPI.
-    if ((fromIsCrypto || toIsCrypto) && from !== 'BYN' && to !== 'BYN') {
-        return findCurrencyApiRate(from, to);
-    }
-
-    // Case 2: BYN is involved.
-    if (from === 'BYN' || to === 'BYN') {
-        const otherCode = from === 'BYN' ? to : from;
-        const otherIsCrypto = cryptoCodes.includes(otherCode);
-
-        if (otherIsCrypto) {
-            // Bridge Crypto to BYN via USD
-            const usdToBynRate = findNbrbRate('USD', 'BYN');
-            const usdToCryptoRate = findCurrencyApiRate('USD', otherCode);
-            
-            if (usdToBynRate && usdToCryptoRate) {
-                const bynToCryptoRate = usdToCryptoRate / usdToBynRate;
-                return from === 'BYN' ? bynToCryptoRate : 1 / bynToCryptoRate;
-            }
-            return undefined;
+    // Unified strategy: bridge everything via USD.
+    // Use the most appropriate data source for each conversion leg.
+    let usdToFromRate: number | undefined;
+    if (from === 'USD') {
+        usdToFromRate = 1;
+    } else {
+        // Use currencyapi for crypto, OR if it's the main source.
+        if (fromIsCrypto || activeDataSource === 'currencyapi') {
+            usdToFromRate = findCurrencyApiRate('USD', from);
         } else {
-            // Standard BYN-fiat pair is always handled by NBRB
-            return findNbrbRate(from, to);
+            // Otherwise (fiat and NBRB source), use NBRB.
+            usdToFromRate = findNbrbRate('USD', from);
         }
     }
 
-    // Case 3: Standard fiat-fiat pair (non-BYN)
-    if (activeDataSource === 'nbrb') {
-        return findNbrbRate(from, to);
-    } else { // currencyapi
-        return findCurrencyApiRate(from, to);
+    let usdToToRate: number | undefined;
+    if (to === 'USD') {
+        usdToToRate = 1;
+    } else {
+        if (toIsCrypto || activeDataSource === 'currencyapi') {
+            usdToToRate = findCurrencyApiRate('USD', to);
+        } else {
+            usdToToRate = findNbrbRate('USD', to);
+        }
     }
+    
+    if (usdToFromRate !== undefined && usdToToRate !== undefined && usdToFromRate !== 0) {
+        // We have rate(USD -> FROM) and rate(USD -> TO).
+        // We want rate(FROM -> TO), which is calculated as (USD -> TO) / (USD -> FROM).
+        return usdToToRate / usdToFromRate;
+    }
+
+    return undefined;
 }
 
 export async function findRateAsync(from: string, to: string): Promise<number | undefined> {
