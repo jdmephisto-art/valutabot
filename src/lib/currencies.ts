@@ -488,109 +488,28 @@ export async function getLatestRates(pairs?: string[]): Promise<ExchangeRate[]> 
     const cryptoInvolved = allCodes.some(c => cryptoCodes.includes(c));
     const bynInvolved = allCodes.includes('BYN');
 
-    let localNbrbRates: { [key: string]: { rate: number, scale: number } } = {};
-    let localApiRates: { [key: string]: number } = {};
+    const updatePromises: Promise<any>[] = [];
 
-    const nbrbPromise = (async () => {
-        if (activeDataSource === 'nbrb' || bynInvolved) {
-            // Use global cache if valid, otherwise fetch locally
-            if (isCacheValid(nbrbRatesTimestamp, CACHE_TTL_RATES)) {
-                localNbrbRates = nbrbRatesCache;
-            } else {
-                const dailyData = await nbrbApiFetch('rates?periodicity=0');
-                const monthlyData = await nbrbApiFetch('rates?periodicity=1');
-                if (dailyData) dailyData.forEach((r: any) => { localNbrbRates[r.Cur_Abbreviation] = { rate: r.Cur_OfficialRate, scale: r.Cur_Scale }; });
-                if (monthlyData) monthlyData.forEach((r: any) => { if (!localNbrbRates[r.Cur_Abbreviation]) localNbrbRates[r.Cur_Abbreviation] = { rate: r.Cur_OfficialRate, scale: r.Cur_Scale }; });
-            }
-        }
-    })();
+    // If crypto is involved, or the main source is currencyapi, we need currencyapi cache.
+    if (cryptoInvolved || activeDataSource === 'currencyapi') {
+        updatePromises.push(_updateCurrencyApiRatesCache('USD'));
+    }
+    // If BYN is involved for accuracy, or the main source is NBRB, we need NBRB cache.
+    if (bynInvolved || activeDataSource === 'nbrb') {
+        updatePromises.push(_updateNbrbRatesCache());
+    }
 
-    const currencyApiPromise = (async () => {
-        if (activeDataSource === 'currencyapi' || cryptoInvolved || bynInvolved) {
-            const currenciesToFetch = allCodes.filter(c => c !== 'USD');
-            const requiredMissing = currenciesToFetch.filter(c => !currencyApiRatesCache[c]);
-
-            if (isCacheValid(currencyApiRatesTimestamp, CACHE_TTL_RATES) && requiredMissing.length === 0) {
-                 localApiRates = currencyApiRatesCache;
-            } else {
-                const params: Record<string, string> = { base: 'USD' };
-                if (currenciesToFetch.length > 0) {
-                    params.currencies = currenciesToFetch.join(',');
-                    const data = await currencyApiNetFetch('rates', params);
-                    if (data && data.rates) {
-                        localApiRates = data.rates;
-                    }
-                }
-            }
-            localApiRates['USD'] = 1;
-        }
-    })();
-
-    await Promise.all([nbrbPromise, currencyApiPromise]);
+    // Update caches in parallel
+    await Promise.all(updatePromises);
     
-    const findRateFromLocal = (from: string, to: string): number | undefined => {
-        if (from === to) return 1;
+    // Now that caches are populated, calculate rates for all pairs.
+    const rates = pairsToFetch.map(pair => {
+        const rate = findRate(pair.from, pair.to);
+        return { ...pair, rate };
+    });
 
-        const fromIsCrypto = cryptoCodes.includes(from);
-        const toIsCrypto = cryptoCodes.includes(to);
-
-        if ((fromIsCrypto || toIsCrypto) && from !== 'BYN' && to !== 'BYN') {
-            const fromRate = localApiRates[from];
-            const toRate = localApiRates[to];
-            if (fromRate && toRate) return toRate / fromRate;
-            return undefined;
-        }
-        
-        if (from === 'BYN' || to === 'BYN') {
-            const otherCode = from === 'BYN' ? to : from;
-            const otherIsCrypto = cryptoCodes.includes(otherCode);
-
-            if (otherIsCrypto) {
-                const usdToBynRateInfo = localNbrbRates['USD'];
-                if (!usdToBynRateInfo) return undefined;
-                const usdToBynRate = usdToBynRateInfo.rate / usdToBynRateInfo.scale;
-                
-                const usdToCryptoRate = localApiRates[otherCode];
-                if (!usdToBynRate || !usdToCryptoRate) return undefined;
-                
-                const bynToCryptoRate = usdToCryptoRate / usdToBynRate;
-                return from === 'BYN' ? bynToCryptoRate : 1 / bynToCryptoRate;
-
-            } else { // BYN-fiat
-                const toRateInfo = localNbrbRates[to];
-                const fromRateInfo = localNbrbRates[from];
-                const rateToBynForFROM = from === 'BYN' ? 1 : (fromRateInfo ? fromRateInfo.rate / fromRateInfo.scale : undefined);
-                const rateToBynForTO = to === 'BYN' ? 1 : (toRateInfo ? toRateInfo.rate / toRateInfo.scale : undefined);
-                if (rateToBynForFROM !== undefined && rateToBynForTO !== undefined && rateToBynForTO !== 0) {
-                    return rateToBynForFROM / rateToBynForTO;
-                }
-                return undefined;
-            }
-        }
-        
-        if (activeDataSource === 'nbrb') {
-             const toRateInfo = localNbrbRates[to];
-             const fromRateInfo = localNbrbRates[from];
-             const rateToBynForFROM = from === 'BYN' ? 1 : (fromRateInfo ? fromRateInfo.rate / fromRateInfo.scale : undefined);
-             const rateToBynForTO = to === 'BYN' ? 1 : (toRateInfo ? toRateInfo.rate / toRateInfo.scale : undefined);
-             if (rateToBynForFROM !== undefined && rateToBynForTO !== undefined && rateToBynForTO !== 0) {
-                 return rateToBynForFROM / rateToBynForTO;
-             }
-             return undefined;
-        } else { // currencyapi
-            const fromRate = localApiRates[from];
-            const toRate = localApiRates[to];
-            if (fromRate && toRate) return toRate / fromRate;
-            return undefined;
-        }
-    };
-    
-    return pairsToFetch
-        .map(pair => ({
-            ...pair,
-            rate: findRateFromLocal(pair.from, pair.to),
-        }))
-        .filter((r): r is (typeof r & { rate: number }) => r.rate !== undefined);
+    // Filter out pairs where a rate could not be calculated, as expected by the calling component.
+    return rates.filter((r): r is (typeof r & { rate: number }) => r.rate !== undefined);
 }
 
 export function findRate(from: string, to: string): number | undefined {
@@ -652,6 +571,8 @@ export async function findRateAsync(from: string, to: string): Promise<number | 
 }
 
 export async function getHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
+    if (activeDataSource === 'currencyapi') return undefined; // API plan does not support this.
+
     const fromIsCrypto = cryptoCodes.includes(from);
     const toIsCrypto = cryptoCodes.includes(to);
 
@@ -689,6 +610,8 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
 }
 
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
+    if (activeDataSource === 'currencyapi') return []; // API plan does not support this.
+    
     if (from === to) {
         const days = differenceInDays(endDate, startDate) + 1;
         return Array.from({ length: days }).map((_, i) => ({
