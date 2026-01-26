@@ -82,8 +82,6 @@ async function currencyApiNetFetch(endpoint: string, params: Record<string, stri
 
     const url = `/api/currency?${queryParams.toString()}`;
     
-    console.log(`[DIAGNOSTIC] Sending internal API request to: ${url}`);
-
     try {
         const response = await fetch(url, {
             headers: { 'Accept': 'application/json' },
@@ -97,11 +95,9 @@ async function currencyApiNetFetch(endpoint: string, params: Record<string, stri
         }
 
         const data = await response.json();
-        
-        console.log(`[DIAGNOSTIC] Received data from internal API for ${url}:`, JSON.stringify(data));
 
-        if (data.valid === false || data.error) {
-             console.error(`[DIAGNOSTIC] CurrencyAPI.net indicated an error for ${url}. Error:`, data.error || 'Unknown validation error.');
+        if (data.valid === false || (data.error && data.error.info)) {
+             console.error(`[DIAGNOSTIC] CurrencyAPI.net indicated an error for ${url}. Error:`, data.error.info);
              return null;
         }
         return data;
@@ -191,12 +187,10 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
 
 async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
      if (!(date instanceof Date) || isNaN(date.getTime())) {
-        console.error("[DIAGNOSTIC] getCurrencyApiHistoricalRate received an invalid date:", date);
         return undefined;
     }
     const today = startOfDay(new Date());
     if (startOfDay(date) > today) {
-        console.warn(`[DIAGNOSTIC] Attempted to fetch CurrencyAPI.net historical rate for a future date: ${format(date, 'yyyy-MM-dd')}. Aborting.`);
         return undefined;
     }
     if (from === to) return 1;
@@ -212,11 +206,9 @@ async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date
         params.currencies = currencies;
     }
 
-    console.log('[DIAGNOSTIC] Fetching historical rate with params:', params);
-    const data = await currencyApiNetFetch('historical', params);
+    const data = await currencyApiNetFetch('history', params);
 
     if (!data || !data.rates) {
-        console.error('[DIAGNOSTIC] No historical rate data returned from API for date:', formattedDate, 'Response:', data);
         return undefined;
     }
     
@@ -228,13 +220,14 @@ async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date
         return toRate / fromRate;
     }
 
-    console.error('[DIAGNOSTIC] Could not calculate historical rate from API response:', dailyRates);
     return undefined;
 }
 
 async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
     if (!(startDate instanceof Date) || isNaN(startDate.getTime()) || !(endDate instanceof Date) || isNaN(endDate.getTime())) {
-        console.error("[DIAGNOSTIC] getCurrencyApiDynamicsForPeriod received invalid dates:", { startDate, endDate });
+        return [];
+    }
+     if (startDate > endDate) {
         return [];
     }
 
@@ -242,16 +235,10 @@ async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDa
     let effectiveStartDate = startOfDay(startDate);
     let effectiveEndDate = startOfDay(endDate);
     
-    if (effectiveStartDate > effectiveEndDate) {
-        console.error(`[DIAGNOSTIC] Dynamics start date for CurrencyAPI.net is after end date. Aborting.`);
-        return [];
-    }
     if (effectiveStartDate > today) {
-        console.warn(`[DIAGNOSTIC] Dynamics start date for CurrencyAPI.net was in the future. Aborting.`);
         return [];
     }
     if (effectiveEndDate > today) {
-        console.warn(`[DIAGNOSTIC] Dynamics end date for CurrencyAPI.net was in the future. Resetting to today.`);
         effectiveEndDate = today;
     }
 
@@ -275,10 +262,6 @@ async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDa
             return null;
         })
         .filter((r): r is { date: string, rate: number } => r !== null);
-        
-    if (validResults.length === 0) {
-        console.log('[DIAGNOSTIC] No dynamics data returned from API.');
-    }
         
     return validResults;
 }
@@ -417,7 +400,7 @@ async function getNbrbHistoricalRate(from: string, to: string, date: Date): Prom
     return undefined;
 }
 
-async function getNbrbDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string, rate: number }[]> {
+async function getNbrbDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
     await ensureNbrbFullCache();
     if (!nbrbFullCurrencyInfoCache) return [];
 
@@ -491,19 +474,27 @@ export async function getLatestRates(pairs?: string[]): Promise<ExchangeRate[]> 
         { from: 'USD', to: 'EUR' }, { from: 'EUR', to: 'USD' }, { from: 'USD', to: 'BYN' },
         { from: 'EUR', to: 'BYN' }, { from: 'USD', to: 'RUB' }, { from: 'EUR', to: 'RUB' },
     ];
+    
     const pairsToFetch = pairs ? pairs.map(p => {
         const [from, to] = p.split('/');
         return { from, to };
     }) : defaultPairs;
 
-    await findRateAsync('USD', 'EUR');
+    if (pairsToFetch.length === 0) {
+        return [];
+    }
 
-    const rates = pairsToFetch.map(pair => findRate(pair.from, pair.to));
+    const rates = await Promise.all(
+        pairsToFetch.map(pair => findRateAsync(pair.from, pair.to))
+    );
 
-    return pairsToFetch.map((pair, index) => ({
+    const resultsWithUndefined = pairsToFetch.map((pair, index) => ({
         ...pair,
-        rate: rates[index] ?? 0,
-    })).filter(r => r.rate !== 0);
+        rate: rates[index],
+    }));
+
+    return resultsWithUndefined
+        .filter((r): r is (typeof r & { rate: number }) => r.rate !== undefined);
 }
 
 export function findRate(from: string, to: string): number | undefined {
