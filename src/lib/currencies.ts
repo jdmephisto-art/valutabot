@@ -76,7 +76,7 @@ async function currencyApiNetFetch(endpoint: string, params: Record<string, stri
         });
 
         if (!response.ok) {
-            const errorBody = await response.json().catch(() => ({ message: 'Could not parse error response body.' }));
+            const errorBody = await response.json().catch(() => ({}));
             console.error(`[DIAGNOSTIC] Internal API request to ${url} FAILED with status ${response.status} ${response.statusText}. Error Body:`, JSON.stringify(errorBody));
             return null;
         }
@@ -175,7 +175,7 @@ export async function getCurrencyApiHistoricalRate(from: string, to: string, dat
     }
     const today = startOfDay(new Date());
     if (startOfDay(date) > today) {
-        console.warn(`[DIAGNOSTIC] Attempted to fetch historical rate for a future date: ${date}. Aborting.`);
+        console.error(`[DIAGNOSTIC] Attempted to fetch CurrencyAPI.net historical rate for a future date: ${format(date, 'yyyy-MM-dd')}. Aborting.`);
         return undefined;
     }
 
@@ -226,20 +226,18 @@ export async function getCurrencyApiDynamicsForPeriod(from: string, to:string, s
     const today = startOfDay(new Date());
 
     if (startOfDay(startDate) > today) {
-        console.warn(`[DIAGNOSTIC] Attempted to fetch dynamics for a future start date: ${startDate}. Aborting.`);
+        console.error(`[DIAGNOSTIC] Attempted to fetch CurrencyAPI.net dynamics for a future start date: ${format(startDate, 'yyyy-MM-dd')}. Aborting.`);
         return [];
     }
     if (startOfDay(endDate) > today) {
-        console.warn(`[DIAGNOSTIC] Dynamics end date was in the future (${endDate}). Resetting to today.`);
+        console.log(`[DIAGNOSTIC] Dynamics end date for CurrencyAPI.net was in the future. Resetting to today.`);
         effectiveEndDate = today;
     }
     if (startOfDay(startDate) > startOfDay(effectiveEndDate)) {
-        console.warn(`[DIAGNOSTIC] Dynamics start date ${startDate} is after end date ${effectiveEndDate}. Aborting.`);
+        console.error(`[DIAGNOSTIC] Dynamics start date for CurrencyAPI.net is after end date. Aborting.`);
         return [];
     }
-    
-    console.log(`[DIAGNOSTIC] getCurrencyApiDynamicsForPeriod called with:`, { from, to, startDate: format(startDate, 'yyyy-MM-dd'), endDate: format(effectiveEndDate, 'yyyy-MM-dd') });
-    
+
     const promises = [];
     let currentDate = startDate;
     while (currentDate <= effectiveEndDate) {
