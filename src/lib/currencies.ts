@@ -25,10 +25,20 @@ let currencyApiRatesTimestamp = 0;
 let cbrRatesCache: any | null = null;
 let cbrRatesTimestamp = 0;
 
+let fixerRatesCache: { [key: string]: number } = {};
+let fixerRatesTimestamp = 0;
+
+let coinlayerRatesCache: { [key: string]: number } = {};
+let coinlayerRatesTimestamp = 0;
+
+
 // --- Promise Gates ---
 let nbrbUpdatePromise: Promise<void> | null = null;
 let currencyApiUpdatePromise: Promise<void> | null = null;
 let cbrUpdatePromise: Promise<void> | null = null;
+let fixerUpdatePromise: Promise<void> | null = null;
+let coinlayerUpdatePromise: Promise<void> | null = null;
+
 
 // --- Cache Helper ---
 function isCacheValid(timestamp: number, ttl: number): boolean {
@@ -55,9 +65,17 @@ export function setDataSource(source: DataSource) {
         cbrRatesCache = null;
         cbrRatesTimestamp = 0;
         
+        fixerRatesCache = {};
+        fixerRatesTimestamp = 0;
+
+        coinlayerRatesCache = {};
+        coinlayerRatesTimestamp = 0;
+
         nbrbUpdatePromise = null;
         currencyApiUpdatePromise = null;
         cbrUpdatePromise = null;
+        fixerUpdatePromise = null;
+        coinlayerUpdatePromise = null;
     }
 }
 
@@ -97,7 +115,7 @@ async function currencyApiNetFetch(endpoint: string, params: Record<string, stri
         if (!response.ok) {
             const errorBody = await response.json().catch(() => ({}));
             // Check for specific subscription error to avoid breaking the app
-            if (errorBody?.details?.error?.code === 405) {
+            if (errorBody?.details?.error?.code === 405 || errorBody?.details?.message === "You have hit your monthly subscription allowance.") {
                  console.warn(`[DIAGNOSTIC] CurrencyAPI.net request to ${url} failed due to subscription limits.`, JSON.stringify(errorBody));
             } else {
                  console.error(`[DIAGNOSTIC] Internal API request to ${url} FAILED with status ${response.status} ${response.statusText}. Error Body:`, JSON.stringify(errorBody));
@@ -128,6 +146,38 @@ async function cbrApiFetch() {
         return response.json();
     } catch (error) {
         console.error('Failed to fetch from CBR API proxy:', error);
+        return null;
+    }
+}
+
+async function fixerApiFetch(endpoint: string, params: Record<string, string> = {}) {
+    const queryParams = new URLSearchParams({ endpoint, ...params });
+    const url = `/api/fixer?${queryParams.toString()}`;
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            console.error(`Fixer API request to ${url} failed: ${response.status} ${response.statusText}`);
+            return null;
+        }
+        return response.json();
+    } catch (error) {
+        console.error('Failed to fetch from Fixer API proxy:', error);
+        return null;
+    }
+}
+
+async function coinlayerApiFetch(endpoint: string, params: Record<string, string> = {}) {
+    const queryParams = new URLSearchParams({ endpoint, ...params });
+    const url = `/api/coinlayer?${queryParams.toString()}`;
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            console.error(`Coinlayer API request to ${url} failed: ${response.status} ${response.statusText}`);
+            return null;
+        }
+        return response.json();
+    } catch (error) {
+        console.error('Failed to fetch from Coinlayer API proxy:', error);
         return null;
     }
 }
@@ -228,8 +278,9 @@ function _updateCurrencyApiRatesCache(baseCurrency = 'USD'): Promise<void> {
 function findCurrencyApiRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
 
-    const fromRate = currencyApiRatesCache[from];
-    const toRate = currencyApiRatesCache[to];   
+    // CurrencyAPI free plan is base USD, so we calculate through it.
+    const fromRate = from === 'USD' ? 1 : currencyApiRatesCache[from];
+    const toRate = to === 'USD' ? 1 : currencyApiRatesCache[to];   
     
     if (fromRate && toRate) {
         return toRate / fromRate;
@@ -319,6 +370,75 @@ async function getCurrencyApiDynamicsForPeriod(from: string, to: string, startDa
     return validResults;
 }
 
+// --- FIXER.IO PROVIDER ---
+function _updateFixerRatesCache(): Promise<void> {
+    if (isCacheValid(fixerRatesTimestamp, CACHE_TTL_RATES) && Object.keys(fixerRatesCache).length > 0) {
+        return Promise.resolve();
+    }
+    if (fixerUpdatePromise) {
+        return fixerUpdatePromise;
+    }
+    fixerUpdatePromise = (async () => {
+        try {
+            const data = await fixerApiFetch('latest');
+            if (data && data.success && data.rates) {
+                fixerRatesCache = data.rates;
+                fixerRatesTimestamp = Date.now();
+            } else {
+                fixerRatesCache = {};
+            }
+        } finally {
+            fixerUpdatePromise = null;
+        }
+    })();
+    return fixerUpdatePromise;
+}
+
+function findFixerRate(from: string, to: string): number | undefined {
+    if (from === to) return 1;
+    // Fixer free plan base is EUR.
+    const fromRateEur = from === 'EUR' ? 1 : fixerRatesCache[from];
+    const toRateEur = to === 'EUR' ? 1 : fixerRatesCache[to];
+    if (fromRateEur && toRateEur) {
+        return toRateEur / fromRateEur;
+    }
+    return undefined;
+}
+
+// --- COINLAYER PROVIDER ---
+function _updateCoinlayerRatesCache(): Promise<void> {
+    if (isCacheValid(coinlayerRatesTimestamp, CACHE_TTL_RATES) && Object.keys(coinlayerRatesCache).length > 0) {
+        return Promise.resolve();
+    }
+    if (coinlayerUpdatePromise) {
+        return coinlayerUpdatePromise;
+    }
+    coinlayerUpdatePromise = (async () => {
+        try {
+            const data = await coinlayerApiFetch('live');
+            if (data && data.success && data.rates) {
+                coinlayerRatesCache = data.rates;
+                coinlayerRatesTimestamp = Date.now();
+            } else {
+                coinlayerRatesCache = {};
+            }
+        } finally {
+            coinlayerUpdatePromise = null;
+        }
+    })();
+    return coinlayerUpdatePromise;
+}
+
+function findCoinlayerRate(from: string, to: string): number | undefined {
+    if (from === to) return 1;
+    // Coinlayer base is USD.
+    const fromRate = from === 'USD' ? 1 : coinlayerRatesCache[from];
+    const toRate = to === 'USD' ? 1 : coinlayerRatesCache[to];
+    if (fromRate && toRate) {
+        return toRate / fromRate;
+    }
+    return undefined;
+}
 
 
 // --- NBRB PROVIDER ---
@@ -531,19 +651,12 @@ export async function getLatestRates(pairs?: string[]): Promise<(Omit<ExchangeRa
         return [];
     }
     
-    const updatePromises: Promise<void>[] = [];
-    
-    // Pre-warm all caches. Their internal TTL will prevent unnecessary fetches.
-    updatePromises.push(_updateNbrbRatesCache());
-    updatePromises.push(_updateCbrRatesCache());
-    updatePromises.push(_updateCurrencyApiRatesCache('USD'));
-    
-    await Promise.all(updatePromises);
+    await preFetchInitialRates();
     
     const rates = pairs.map(pairString => {
         const [from, to] = pairString.split('/');
         const rate = findRate(from, to);
-        return { from, to, rate }; // rate can be undefined
+        return { from, to, rate };
     });
 
     return rates;
@@ -552,17 +665,14 @@ export async function getLatestRates(pairs?: string[]): Promise<(Omit<ExchangeRa
 export function findRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
 
-    // A consistent helper to get any currency's rate against USD.
-    // It handles crypto, BYN, RUB, data source logic, and fallbacks internally.
+    // Helper to get any currency's rate against USD.
     const getRateAgainstUsd = (code: string): number | undefined => {
         if (code === 'USD') return 1;
 
-        // BYN is special, must use NBRB as it's the authority for BYN.
+        // 1. Authoritative sources first
         if (code === 'BYN') {
             return findNbrbRate('BYN', 'USD');
         }
-
-        // RUB is special, must use CBR as it's the authority for RUB.
         if (code === 'RUB') {
             const cbrUsdData = cbrRatesCache?.Valute?.USD;
             if (cbrUsdData?.Value) {
@@ -570,18 +680,28 @@ export function findRate(from: string, to: string): number | undefined {
                 return 1 / cbrUsdData.Value;
             }
         }
-        
-        // Crypto is special, must use CurrencyAPI as NBRB doesn't have it.
+    
+        // 2. Crypto sources
         if (cryptoCodes.includes(code)) {
-            return findCurrencyApiRate(code, 'USD');
+            const coinlayerRate = findCoinlayerRate(code, 'USD');
+            if (coinlayerRate !== undefined) return coinlayerRate;
+    
+            const currencyApiRate = findCurrencyApiRate(code, 'USD');
+            if (currencyApiRate !== undefined) return currencyApiRate;
+
+            return undefined; // No more fallbacks for crypto
         }
-        
-        // For other fiat, prioritize currencyapi but fallback to nbrb
-        const apiRate = findCurrencyApiRate(code, 'USD');
-        if (apiRate !== undefined) {
-            return apiRate;
+    
+        // 3. Fiat sources with fallbacks
+        if (activeDataSource === 'currencyapi') {
+            const currencyApiRate = findCurrencyApiRate(code, 'USD');
+            if (currencyApiRate !== undefined) return currencyApiRate;
+
+            const fixerRate = findFixerRate(code, 'USD');
+            if (fixerRate !== undefined) return fixerRate;
         }
 
+        // Default to NBRB for its supported currencies or as last resort
         return findNbrbRate(code, 'USD');
     };
 
@@ -592,8 +712,11 @@ export function findRate(from: string, to: string): number | undefined {
         // We want to find how many TO is 1 FROM.
         // 1 FROM = fromRate USD
         // 1 TO   = toRate USD
-        // So: 1 FROM = (fromRate / toRate) TO
-        return fromRate / toRate;
+        // So: 1 FROM = (fromRate / toRate) TO. No, it's the other way.
+        // 1 USD = 1/fromRate FROM
+        // 1 USD = 1/toRate TO
+        // So 1/fromRate FROM = 1/toRate TO  => 1 FROM = fromRate/toRate TO
+        return toRate / fromRate;
     }
 
     return undefined;
@@ -601,12 +724,7 @@ export function findRate(from: string, to: string): number | undefined {
 
 
 export async function findRateAsync(from: string, to: string): Promise<number | undefined> {
-    const updatePromises: Promise<void>[] = [];
-    updatePromises.push(_updateNbrbRatesCache());
-    updatePromises.push(_updateCbrRatesCache());
-    updatePromises.push(_updateCurrencyApiRatesCache('USD'));
-    await Promise.all(updatePromises);
-    
+    await preFetchInitialRates();
     return findRate(from, to);
 }
 
@@ -706,7 +824,11 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
 }
 
 export function preFetchInitialRates() {
-    _updateCurrencyApiRatesCache('USD');
-    _updateNbrbRatesCache();
-    _updateCbrRatesCache();
+    const promises: Promise<void>[] = [];
+    promises.push(_updateCurrencyApiRatesCache('USD'));
+    promises.push(_updateNbrbRatesCache());
+    promises.push(_updateCbrRatesCache());
+    promises.push(_updateFixerRatesCache());
+    promises.push(_updateCoinlayerRatesCache());
+    return Promise.all(promises);
 }
