@@ -25,7 +25,7 @@ const getTrackingSchema = (t: (key: string, params?: Record<string, string | num
   });
 
 type TrackingManagerProps = {
-    onAddPair: (from: string, to: string) => boolean;
+    onAddPair: (from: string, to: string) => Promise<boolean>;
     onRemovePair: (pair: string) => void;
     trackedPairs: string[];
     onIntervalChange: (seconds: number) => void;
@@ -50,8 +50,8 @@ export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initial
     },
   });
 
-  const handleSubmit = (data: TrackingFormValues) => {
-    const success = onAddPair(data.from, data.to);
+  const handleSubmit = async (data: TrackingFormValues) => {
+    const success = await onAddPair(data.from, data.to);
     if (success) {
       const newPair = `${data.from}/${data.to}`;
       if (!localTrackedPairs.includes(newPair)) {

@@ -54,7 +54,7 @@ export function DisplayedPairManager({ onAddPair, onRemovePair, pairs: initialPa
       if (!localPairs.includes(newPair)) {
         setLocalPairs(prev => [...prev, newPair]);
       }
-      form.reset({ from: 'USD', to: 'EUR' });
+      form.reset();
     }
   }
   
