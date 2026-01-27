@@ -22,10 +22,13 @@ let currencyApiCurrenciesTimestamp = 0;
 let currencyApiRatesCache: { [key: string]: number } = {};
 let currencyApiRatesTimestamp = 0;
 
+let cbrRatesCache: any | null = null;
+let cbrRatesTimestamp = 0;
 
 // --- Promise Gates ---
 let nbrbUpdatePromise: Promise<void> | null = null;
 let currencyApiUpdatePromise: Promise<void> | null = null;
+let cbrUpdatePromise: Promise<void> | null = null;
 
 // --- Cache Helper ---
 function isCacheValid(timestamp: number, ttl: number): boolean {
@@ -49,8 +52,12 @@ export function setDataSource(source: DataSource) {
         currencyApiRatesCache = {};
         currencyApiRatesTimestamp = 0;
         
+        cbrRatesCache = null;
+        cbrRatesTimestamp = 0;
+        
         nbrbUpdatePromise = null;
         currencyApiUpdatePromise = null;
+        cbrUpdatePromise = null;
     }
 }
 
@@ -91,7 +98,7 @@ async function currencyApiNetFetch(endpoint: string, params: Record<string, stri
             const errorBody = await response.json().catch(() => ({}));
             // Check for specific subscription error to avoid breaking the app
             if (errorBody?.details?.error?.code === 405) {
-                 console.warn(`[DIAGNOSTIC] CurrencyAPI.net request to ${url} failed, likely due to subscription limits.`, JSON.stringify(errorBody));
+                 console.warn(`[DIAGNOSTIC] CurrencyAPI.net request to ${url} failed due to subscription limits.`, JSON.stringify(errorBody));
             } else {
                  console.error(`[DIAGNOSTIC] Internal API request to ${url} FAILED with status ${response.status} ${response.statusText}. Error Body:`, JSON.stringify(errorBody));
             }
@@ -109,6 +116,45 @@ async function currencyApiNetFetch(endpoint: string, params: Record<string, stri
         console.error(`[DIAGNOSTIC] A network or other error occurred while fetching from internal API: ${url}. Error:`, error.message);
         return null;
     }
+}
+
+async function cbrApiFetch() {
+    try {
+        const response = await fetch(`/api/cbr`);
+        if (!response.ok) {
+            console.error(`CBR request failed: ${response.status} ${response.statusText}`);
+            return null;
+        }
+        return response.json();
+    } catch (error) {
+        console.error('Failed to fetch from CBR API proxy:', error);
+        return null;
+    }
+}
+
+
+// --- CBR.RU PROVIDER ---
+function _updateCbrRatesCache(): Promise<void> {
+    if (isCacheValid(cbrRatesTimestamp, CACHE_TTL_RATES) && cbrRatesCache) {
+        return Promise.resolve();
+    }
+    if (cbrUpdatePromise) {
+        return cbrUpdatePromise;
+    }
+    cbrUpdatePromise = (async () => {
+        try {
+            const data = await cbrApiFetch();
+            if (data && data.Valute) {
+                cbrRatesCache = data;
+                cbrRatesTimestamp = Date.now();
+            } else {
+                cbrRatesCache = null;
+            }
+        } finally {
+            cbrUpdatePromise = null;
+        }
+    })();
+    return cbrUpdatePromise;
 }
 
 
@@ -316,6 +362,10 @@ async function getNbrbCurrencies(): Promise<Currency[]> {
     if (!currencies.some(c => c.code === 'BYN')) {
         currencies.push({ code: 'BYN', name: 'Белорусский рубль' });
     }
+    
+    if (!currencies.some(c => c.code === 'RUB')) {
+        currencies.push({ code: 'RUB', name: 'Российский рубль' });
+    }
 
     currencies.sort((a, b) => a.code.localeCompare(b.code));
     
@@ -476,21 +526,17 @@ export async function getCurrencies(): Promise<Currency[]> {
     }
 }
 
-export async function getLatestRates(pairs?: string[]): Promise<ExchangeRate[]> {
+export async function getLatestRates(pairs?: string[]): Promise<(Omit<ExchangeRate, 'rate'> & { rate?: number })[]> {
     if (!pairs || pairs.length === 0) {
         return [];
     }
-
+    
     const updatePromises: Promise<void>[] = [];
     
-    // Always pre-warm NBRB for BYN and as a fallback
+    // Pre-warm all caches. Their internal TTL will prevent unnecessary fetches.
     updatePromises.push(_updateNbrbRatesCache());
-
-    // Pre-warm CurrencyAPI if it's the source or if crypto is involved
-    const hasCrypto = pairs.some(p => p.split('/').some(c => cryptoCodes.includes(c)));
-    if (activeDataSource === 'currencyapi' || hasCrypto) {
-         updatePromises.push(_updateCurrencyApiRatesCache('USD'));
-    }
+    updatePromises.push(_updateCbrRatesCache());
+    updatePromises.push(_updateCurrencyApiRatesCache('USD'));
     
     await Promise.all(updatePromises);
     
@@ -507,7 +553,7 @@ export function findRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
 
     // A consistent helper to get any currency's rate against USD.
-    // It handles crypto, BYN, data source logic, and fallbacks internally.
+    // It handles crypto, BYN, RUB, data source logic, and fallbacks internally.
     const getRateAgainstUsd = (code: string): number | undefined => {
         if (code === 'USD') return 1;
 
@@ -516,34 +562,37 @@ export function findRate(from: string, to: string): number | undefined {
             return findNbrbRate('BYN', 'USD');
         }
 
+        // RUB is special, must use CBR as it's the authority for RUB.
+        if (code === 'RUB') {
+            const cbrUsdData = cbrRatesCache?.Valute?.USD;
+            if (cbrUsdData?.Value) {
+                // CBR gives USD -> RUB rate. We need USD per 1 RUB.
+                return 1 / cbrUsdData.Value;
+            }
+        }
+        
         // Crypto is special, must use CurrencyAPI as NBRB doesn't have it.
         if (cryptoCodes.includes(code)) {
             return findCurrencyApiRate(code, 'USD');
         }
-
-        // For other fiat currencies, respect the data source, but with a fallback.
-        if (activeDataSource === 'currencyapi') {
-            const rate = findCurrencyApiRate(code, 'USD');
-            // If currencyapi fails (e.g. limit reached), fallback to nbrb
-            if (rate !== undefined) {
-                return rate;
-            }
-            // console.warn(`CurrencyAPI rate for ${code}/USD failed or not available. Falling back to NBRB.`);
-            return findNbrbRate(code, 'USD');
-        } else { // activeDataSource is 'nbrb'
-            return findNbrbRate(code, 'USD');
+        
+        // For other fiat, prioritize currencyapi but fallback to nbrb
+        const apiRate = findCurrencyApiRate(code, 'USD');
+        if (apiRate !== undefined) {
+            return apiRate;
         }
+
+        return findNbrbRate(code, 'USD');
     };
 
     const fromRate = getRateAgainstUsd(from);
     const toRate = getRateAgainstUsd(to);
-
+    
     if (fromRate !== undefined && toRate !== undefined && fromRate !== 0) {
         // We want to find how many TO is 1 FROM.
         // 1 FROM = fromRate USD
         // 1 TO   = toRate USD
-        // => 1 USD = 1 / toRate TO
-        // => 1 FROM = fromRate * (1 / toRate) TO = fromRate / toRate TO
+        // So: 1 FROM = (fromRate / toRate) TO
         return fromRate / toRate;
     }
 
@@ -552,18 +601,10 @@ export function findRate(from: string, to: string): number | undefined {
 
 
 export async function findRateAsync(from: string, to: string): Promise<number | undefined> {
-    const fromIsCrypto = cryptoCodes.includes(from);
-    const toIsCrypto = cryptoCodes.includes(to);
-    const requiresNbrb = activeDataSource === 'nbrb' || from === 'BYN' || to === 'BYN' || (!fromIsCrypto && !toIsCrypto);
-    const requiresCurrencyApi = activeDataSource === 'currencyapi' || fromIsCrypto || toIsCrypto;
-
     const updatePromises: Promise<void>[] = [];
-    if (requiresNbrb) {
-        updatePromises.push(_updateNbrbRatesCache());
-    }
-    if (requiresCurrencyApi) {
-        updatePromises.push(_updateCurrencyApiRatesCache('USD'));
-    }
+    updatePromises.push(_updateNbrbRatesCache());
+    updatePromises.push(_updateCbrRatesCache());
+    updatePromises.push(_updateCurrencyApiRatesCache('USD'));
     await Promise.all(updatePromises);
     
     return findRate(from, to);
@@ -667,4 +708,5 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
 export function preFetchInitialRates() {
     _updateCurrencyApiRatesCache('USD');
     _updateNbrbRatesCache();
+    _updateCbrRatesCache();
 }
