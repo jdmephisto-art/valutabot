@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Eye, PlusCircle, Trash2 } from 'lucide-react';
 import { Separator } from './ui/separator';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useTranslation } from '@/hooks/use-translation';
 import { CurrencyCombobox } from './currency-combobox';
@@ -39,6 +39,10 @@ export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initial
   const [localTrackedPairs, setLocalTrackedPairs] = useState(initialTrackedPairs);
   const [localInterval, setLocalInterval] = useState(currentInterval / 1000);
 
+  useEffect(() => {
+    setLocalTrackedPairs(initialTrackedPairs);
+  }, [initialTrackedPairs]);
+
   const trackingSchema = useMemo(() => getTrackingSchema(t), [t]);
   type TrackingFormValues = z.infer<typeof trackingSchema>;
 
@@ -57,7 +61,7 @@ export function TrackingManager({ onAddPair, onRemovePair, trackedPairs: initial
       if (!localTrackedPairs.includes(newPair)) {
         setLocalTrackedPairs(prev => [...prev, newPair]);
       }
-      form.reset();
+      form.reset({ from: 'USD', to: 'EUR' });
     }
   }
   

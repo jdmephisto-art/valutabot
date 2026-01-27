@@ -103,6 +103,8 @@ export const translations = {
       setInterval: 'Set Interval',
       intervalSet: 'Interval updated!',
       intervalSetDesc: 'Tracking interval is now {seconds} seconds.',
+      alreadyExistsTitle: "Pair Already Tracked",
+      alreadyExistsDesc: "The pair {pair} is already being tracked.",
       toast: {
         errorTitle: 'Error tracking pair',
         errorDescription: 'Could not find the exchange rate for the selected pair. Rates might still be loading.',
@@ -113,6 +115,8 @@ export const translations = {
       description: "Choose which pairs to show in 'Latest Rates'.",
       addPair: "Add Pair",
       currentlyDisplayed: "Currently displayed pairs",
+      alreadyExistsTitle: "Pair Already Exists",
+      alreadyExistsDesc: "The pair {pair} is already in your list.",
     },
     dataSource: {
       title: 'Data Source',
@@ -266,6 +270,8 @@ export const translations = {
       setInterval: 'Установить интервал',
       intervalSet: 'Интервал обновлен!',
       intervalSetDesc: 'Интервал отслеживания теперь {seconds} секунд.',
+      alreadyExistsTitle: "Пара уже отслеживается",
+      alreadyExistsDesc: "Пара {pair} уже отслеживается.",
       toast: {
         errorTitle: 'Ошибка отслеживания пары',
         errorDescription: 'Не удалось найти обменный курс для выбранной пары. Возможно, курсы еще загружаются.',
@@ -276,6 +282,8 @@ export const translations = {
       description: "Выберите, какие пары отображать в 'Последних курсах'.",
       addPair: "Добавить пару",
       currentlyDisplayed: "Отображаемые пары",
+      alreadyExistsTitle: "Пара уже существует",
+      alreadyExistsDesc: "Пара {pair} уже есть в вашем списке.",
     },
     dataSource: {
       title: 'Источник данных',

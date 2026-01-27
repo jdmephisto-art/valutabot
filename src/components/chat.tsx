@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useId } from 'react';
+import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -139,6 +139,14 @@ export function ChatInterface() {
 
   const handleAddTrackedPair = async (from: string, to: string): Promise<boolean> => {
     const pair = `${from}/${to}`;
+    if (trackedPairs.has(pair)) {
+        toast({
+            variant: "destructive",
+            title: t('tracking.alreadyExistsTitle'),
+            description: t('tracking.alreadyExistsDesc', { pair: `${from}/${to}` })
+        })
+        return false;
+    }
     const rate = await findRateAsync(from, to);
     if (rate === undefined) {
       toast({
@@ -162,16 +170,21 @@ export function ChatInterface() {
     addMessage({ sender: 'bot', text: t('chat.bot.pairUntracked', { pair }) });
   };
   
-  const handleAddDisplayedPair = (from: string, to: string): boolean => {
+  const handleAddDisplayedPair = useCallback((from: string, to: string): boolean => {
     const pair = `${from}/${to}`;
     if (displayedPairsRef.current.includes(pair)) {
+        toast({
+            variant: 'destructive',
+            title: t('displayedPairManager.alreadyExistsTitle'),
+            description: t('displayedPairManager.alreadyExistsDesc', { pair: `${from}/${to}` }),
+        });
         return false;
     }
     const newPairs = [...displayedPairsRef.current, pair];
     setDisplayedPairs(newPairs);
     addMessage({ sender: 'bot', text: t('chat.bot.pairAddedToList', { pair }) });
     return true;
-  };
+  }, [t, toast]);
 
   const handleRemoveDisplayedPair = (pair: string) => {
     const newPairs = displayedPairsRef.current.filter(p => p !== pair);

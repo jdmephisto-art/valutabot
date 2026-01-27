@@ -12,6 +12,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useTranslation } from '@/hooks/use-translation';
 import { CurrencyCombobox } from './currency-combobox';
+import { useToast } from '@/hooks/use-toast';
 
 const getPairSchema = (t: (key: string, params?: Record<string, string | number>) => string) => z.object({
     from: z.string().min(1, t('validation.selectCurrency')),
@@ -30,6 +31,7 @@ type DisplayedPairManagerProps = {
 export function DisplayedPairManager({ onAddPair, onRemovePair, pairs: initialPairs }: DisplayedPairManagerProps) {
   const { currencies } = useCurrencies();
   const { t } = useTranslation();
+  const { toast } = useToast();
   const [localPairs, setLocalPairs] = useState(initialPairs);
 
   useEffect(() => {
@@ -54,7 +56,7 @@ export function DisplayedPairManager({ onAddPair, onRemovePair, pairs: initialPa
       if (!localPairs.includes(newPair)) {
         setLocalPairs(prev => [...prev, newPair]);
       }
-      form.reset();
+      form.reset({ from: 'USD', to: 'EUR' });
     }
   }
   
