@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Server, Globe } from 'lucide-react';
+import { Server, Globe, Landmark } from 'lucide-react';
 import type { DataSource } from '@/lib/types';
 import { useTranslation } from '@/hooks/use-translation';
 
@@ -29,6 +29,17 @@ export function DataSourceSwitcher({ currentSource, onSourceChange }: DataSource
                     <div className="flex-1">
                         <p className="font-semibold">{t('dataSource.nbrb')}</p>
                         <p className="text-xs text-muted-foreground font-normal whitespace-normal">{t('dataSource.nbrbDesc')}</p>
+                    </div>
+                </Button>
+                <Button 
+                    onClick={() => onSourceChange('cbr')} 
+                    variant={currentSource === 'cbr' ? 'default' : 'outline'}
+                    className="w-full justify-start text-left h-auto py-2"
+                >
+                    <Landmark className="mr-3 h-5 w-5 flex-shrink-0" />
+                    <div className="flex-1">
+                        <p className="font-semibold">{t('dataSource.cbr')}</p>
+                        <p className="text-xs text-muted-foreground font-normal whitespace-normal">{t('dataSource.cbrDesc')}</p>
                     </div>
                 </Button>
                 <Button 
