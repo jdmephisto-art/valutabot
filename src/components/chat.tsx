@@ -15,7 +15,7 @@ import { DataSourceSwitcher } from '@/components/data-source-switcher';
 import { AutoClearManager } from '@/components/auto-clear-manager';
 import { DisplayedPairManager } from '@/components/displayed-pair-manager';
 import type { Alert, DataSource, Language } from '@/lib/types';
-import { findRate, getLatestRates, setDataSource, getDataSource, preFetchInitialRates } from '@/lib/currencies';
+import { findRateAsync, getLatestRates, setDataSource, getDataSource, preFetchInitialRates } from '@/lib/currencies';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/hooks/use-translation';
 import { Card, CardContent } from './ui/card';
@@ -102,8 +102,8 @@ export function ChatInterface() {
       }
   };
 
-  const handleSetAlert = (data: Omit<Alert, 'id' | 'baseRate'>) => {
-    const baseRate = findRate(data.from, data.to);
+  const handleSetAlert = async (data: Omit<Alert, 'id' | 'baseRate'>) => {
+    const baseRate = await findRateAsync(data.from, data.to);
     if (baseRate === undefined) {
       toast({
         variant: 'destructive',
@@ -134,9 +134,9 @@ export function ChatInterface() {
     });
   };
 
-  const handleAddTrackedPair = (from: string, to: string): boolean => {
+  const handleAddTrackedPair = async (from: string, to: string): Promise<boolean> => {
     const pair = `${from}/${to}`;
-    const rate = findRate(from, to);
+    const rate = await findRateAsync(from, to);
     if (rate === undefined) {
       toast({
         variant: 'destructive',
@@ -319,12 +319,13 @@ export function ChatInterface() {
         alerts.forEach(a => pairsToUpdate.add(`${a.from}/${a.to}`));
         trackedPairs.forEach((_, p) => pairsToUpdate.add(p));
         
-        await getLatestRates(Array.from(pairsToUpdate));
-        
+        const fetchedRates = await getLatestRates(Array.from(pairsToUpdate));
+        const ratesMap = new Map(fetchedRates.map(r => [`${r.from}/${r.to}`, r.rate]));
+
         const triggeredAlerts: Alert[] = [];
         const remainingAlerts: Alert[] = [];
         alerts.forEach(alert => {
-            const currentRate = findRate(alert.from, alert.to);
+            const currentRate = ratesMap.get(`${alert.from}/${alert.to}`);
             if (currentRate === undefined) {
                 remainingAlerts.push(alert);
                 return;
@@ -343,7 +344,7 @@ export function ChatInterface() {
         if (triggeredAlerts.length > 0) {
             setAlerts(remainingAlerts);
             triggeredAlerts.forEach(alert => {
-                const currentRate = findRate(alert.from, alert.to) ?? 0;
+                const currentRate = ratesMap.get(`${alert.from}/${alert.to}`) ?? 0;
                  addMessage({ sender: 'bot', component: <AlertCard alert={alert} currentRate={currentRate} /> })
             })
         }
@@ -352,8 +353,7 @@ export function ChatInterface() {
             const newTrackedPairs = new Map(trackedPairs);
             let changed = false;
             trackedPairs.forEach((lastRate, pair) => {
-                const [from, to] = pair.split('/');
-                const currentRate = findRate(from, to);
+                const currentRate = ratesMap.get(pair);
                 if (currentRate !== undefined && Math.abs(currentRate - lastRate) > 1e-9) {
                     addMessage({
                         sender: 'bot',
@@ -370,7 +370,7 @@ export function ChatInterface() {
     };
     const interval = setInterval(checkRates, trackingInterval);
     return () => clearInterval(interval);
-  }, [alerts, toast, addMessage, trackedPairs, t, trackingInterval]);
+  }, [alerts, toast, trackedPairs, t, trackingInterval]);
 
   return (
     <div className="w-full max-w-md h-[85vh] max-h-[900px] flex flex-col bg-card rounded-2xl shadow-2xl overflow-hidden border">

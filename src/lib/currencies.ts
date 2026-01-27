@@ -207,6 +207,26 @@ function _updateCbrRatesCache(): Promise<void> {
     return cbrUpdatePromise;
 }
 
+function findCbrRate(from: string, to: string): number | undefined {
+    if (!cbrRatesCache?.Valute) return undefined;
+    if (from === to) return 1;
+
+    const valute = cbrRatesCache.Valute;
+
+    // All rates in CBR are against RUB
+    const fromRate = from === 'RUB' ? 1 : (valute[from] ? valute[from].Value / valute[from].Nominal : undefined);
+    const toRate = to === 'RUB' ? 1 : (valute[to] ? valute[to].Value / valute[to].Nominal : undefined);
+
+    if (fromRate !== undefined && toRate !== undefined && toRate !== 0) {
+        // We want to get "how many TOs for one FROM"
+        // fromRate is "how many RUB for one FROM" (e.g. 88 RUB/USD)
+        // toRate is "how many RUB for one TO" (e.g. 95 RUB/EUR)
+        // (RUB/FROM) / (RUB/TO) = TO/FROM. So, this is correct.
+        return fromRate / toRate;
+    }
+    return undefined;
+}
+
 
 // --- CURRENCYAPI.NET PROVIDER ---
 async function getCurrencyApiCurrencies(): Promise<Currency[]> {
@@ -283,6 +303,9 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
     const toRate = to === 'USD' ? 1 : currencyApiRatesCache[to];   
     
     if (fromRate && toRate) {
+        // fromRate is "how many FROM for one USD"
+        // toRate is "how many TO for one USD"
+        // (TO/USD) / (FROM/USD) = TO/FROM. This is correct.
         return toRate / fromRate;
     }
     return undefined;
@@ -400,6 +423,7 @@ function findFixerRate(from: string, to: string): number | undefined {
     const fromRateEur = from === 'EUR' ? 1 : fixerRatesCache[from];
     const toRateEur = to === 'EUR' ? 1 : fixerRatesCache[to];
     if (fromRateEur && toRateEur) {
+        // (TO/EUR) / (FROM/EUR) = TO/FROM. Correct.
         return toRateEur / fromRateEur;
     }
     return undefined;
@@ -435,7 +459,10 @@ function findCoinlayerRate(from: string, to: string): number | undefined {
     const fromRate = from === 'USD' ? 1 : coinlayerRatesCache[from];
     const toRate = to === 'USD' ? 1 : coinlayerRatesCache[to];
     if (fromRate && toRate) {
-        return toRate / fromRate;
+         // fromRate is "how many USD for one FROM" (e.g. 60000 USD/BTC)
+        // toRate is "how many USD for one TO"
+        // (USD/TO) / (USD/FROM) = FROM/TO. This is how many FROM for one TO. We need TO/FROM.
+        return fromRate / toRate;
     }
     return undefined;
 }
@@ -541,10 +568,12 @@ function findNbrbRate(from: string, to: string): number | undefined {
     const toRateInfo = nbrbRatesCache[to];
     const fromRateInfo = nbrbRatesCache[from];
     
+    // rateToBynFor... is "how many BYN for one unit of currency"
     const rateToBynForFROM = from === 'BYN' ? 1 : (fromRateInfo ? fromRateInfo.rate / fromRateInfo.scale : undefined);
     const rateToBynForTO = to === 'BYN' ? 1 : (toRateInfo ? toRateInfo.rate / toRateInfo.scale : undefined);
 
     if (rateToBynForFROM !== undefined && rateToBynForTO !== undefined && rateToBynForTO !== 0) {
+        // (BYN/FROM) / (BYN/TO) = TO/FROM. This is correct.
         return rateToBynForFROM / rateToBynForTO;
     }
     return undefined;
@@ -666,62 +695,60 @@ export function findRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
 
     // Helper to get any currency's rate against USD.
+    // This function returns how many USD one unit of the currency is worth (USD per CODE)
     const getRateAgainstUsd = (code: string): number | undefined => {
         if (code === 'USD') return 1;
 
-        // 1. Authoritative sources first
+        // Authoritative sources first
         if (code === 'BYN') {
+            // findNbrbRate returns TOs per FROM. findNbrbRate('BYN','USD') returns USD per BYN.
             return findNbrbRate('BYN', 'USD');
         }
         if (code === 'RUB') {
-            const cbrUsdData = cbrRatesCache?.Valute?.USD;
-            if (cbrUsdData?.Value) {
-                // CBR gives USD -> RUB rate. We need USD per 1 RUB.
-                return 1 / cbrUsdData.Value;
-            }
+            // findCbrRate returns TOs per FROM. findCbrRate('RUB','USD') returns USD per RUB.
+            return findCbrRate('RUB', 'USD');
         }
     
-        // 2. Crypto sources
+        // Crypto sources
         if (cryptoCodes.includes(code)) {
-            const coinlayerRate = findCoinlayerRate(code, 'USD');
-            if (coinlayerRate !== undefined) return coinlayerRate;
+            // coinlayer rate is USD per CRYPTO. So we need to invert it.
+            const coinlayerRate = findCoinlayerRate('USD', code);
+            if (coinlayerRate !== undefined) return 1 / coinlayerRate;
     
-            const currencyApiRate = findCurrencyApiRate(code, 'USD');
-            if (currencyApiRate !== undefined) return currencyApiRate;
+            // Fallback for crypto
+            const currencyApiRate = findCurrencyApiRate('USD', code);
+             if (currencyApiRate !== undefined) return 1/ currencyApiRate;
 
-            return undefined; // No more fallbacks for crypto
+            return undefined;
         }
     
-        // 3. Fiat sources with fallbacks
-        if (activeDataSource === 'currencyapi') {
-            const currencyApiRate = findCurrencyApiRate(code, 'USD');
-            if (currencyApiRate !== undefined) return currencyApiRate;
+        // Fiat sources based on active source, with fallbacks
+        const primarySourceRate = activeDataSource === 'currencyapi' 
+            ? 1 / findCurrencyApiRate(code, 'USD')!
+            : findNbrbRate(code, 'USD');
+        if (primarySourceRate !== undefined) return primarySourceRate;
 
-            const fixerRate = findFixerRate(code, 'USD');
-            if (fixerRate !== undefined) return fixerRate;
-        }
-
-        // Default to NBRB for its supported currencies or as last resort
-        const nbrbRate = findNbrbRate(code, 'USD');
-        if (nbrbRate !== undefined) return nbrbRate;
+        // Fallbacks
+        const fixerRate = findFixerRate('EUR', 'USD') / findFixerRate('EUR', code)!; // Calculate via EUR
+        if (fixerRate !== undefined) return fixerRate;
         
-        // If NBRB was the selected source and it failed, try others as final fallback
-        if (activeDataSource === 'nbrb') {
-             const currencyApiRate = findCurrencyApiRate(code, 'USD');
-            if (currencyApiRate !== undefined) return currencyApiRate;
-
-            const fixerRate = findFixerRate(code, 'USD');
-            if (fixerRate !== undefined) return fixerRate;
-        }
+        const fallbackSourceRate = activeDataSource === 'currencyapi' 
+            ? findNbrbRate(code, 'USD') 
+            : 1 / findCurrencyApiRate(code, 'USD')!;
+        if (fallbackSourceRate !== undefined) return fallbackSourceRate;
 
         return undefined;
     };
 
-    const fromRate = getRateAgainstUsd(from);
-    const toRate = getRateAgainstUsd(to);
+    const fromRate = getRateAgainstUsd(from); // USD per FROM
+    const toRate = getRateAgainstUsd(to); // USD per TO
     
-    if (fromRate !== undefined && toRate !== undefined && fromRate !== 0) {
-        return toRate / fromRate;
+    if (fromRate !== undefined && toRate !== undefined && toRate !== 0) {
+        // We want TO per FROM.
+        // 1 FROM = fromRate USD.
+        // 1 TO = toRate USD  => 1 USD = 1/toRate TO
+        // So, 1 FROM = fromRate * (1/toRate) TO = (fromRate / toRate) TO.
+        return fromRate / toRate;
     }
 
     return undefined;
