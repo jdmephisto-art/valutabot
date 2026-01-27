@@ -702,20 +702,25 @@ export function findRate(from: string, to: string): number | undefined {
         }
 
         // Default to NBRB for its supported currencies or as last resort
-        return findNbrbRate(code, 'USD');
+        const nbrbRate = findNbrbRate(code, 'USD');
+        if (nbrbRate !== undefined) return nbrbRate;
+        
+        // If NBRB was the selected source and it failed, try others as final fallback
+        if (activeDataSource === 'nbrb') {
+             const currencyApiRate = findCurrencyApiRate(code, 'USD');
+            if (currencyApiRate !== undefined) return currencyApiRate;
+
+            const fixerRate = findFixerRate(code, 'USD');
+            if (fixerRate !== undefined) return fixerRate;
+        }
+
+        return undefined;
     };
 
     const fromRate = getRateAgainstUsd(from);
     const toRate = getRateAgainstUsd(to);
     
     if (fromRate !== undefined && toRate !== undefined && fromRate !== 0) {
-        // We want to find how many TO is 1 FROM.
-        // 1 FROM = fromRate USD
-        // 1 TO   = toRate USD
-        // So: 1 FROM = (fromRate / toRate) TO. No, it's the other way.
-        // 1 USD = 1/fromRate FROM
-        // 1 USD = 1/toRate TO
-        // So 1/fromRate FROM = 1/toRate TO  => 1 FROM = fromRate/toRate TO
         return toRate / fromRate;
     }
 
