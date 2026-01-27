@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   }
 
   // !!! ВАЖНО: Замените 'YOUR_FIXER_API_KEY' на ваш реальный ключ API от Fixer.io !!!
-  const apiKey = 'YOUR_FIXER_API_KEY';
+  const apiKey = '4d77f3071042556fbb6255cc47e4f9c4';
   const baseUrl = 'http://data.fixer.io/api/';
 
   const externalApiParams = new URLSearchParams();
