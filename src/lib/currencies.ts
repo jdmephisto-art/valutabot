@@ -189,8 +189,8 @@ function findCbrRate(from: string, to: string): number | undefined {
     const fromRate = from === 'RUB' ? 1 : (valute[from] ? valute[from].Value / valute[from].Nominal : undefined);
     const toRate = to === 'RUB' ? 1 : (valute[to] ? valute[to].Value / valute[to].Nominal : undefined);
 
-    if (fromRate !== undefined && toRate !== undefined && fromRate !== 0) {
-        return toRate / fromRate;
+    if (fromRate !== undefined && toRate !== undefined && toRate !== 0) {
+        return fromRate / toRate;
     }
     return undefined;
 }
@@ -266,10 +266,11 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
     if (Object.keys(currencyApiRatesCache).length === 0) return undefined;
 
+    // Rates are against USD
     const fromRate = from === 'USD' ? 1 : currencyApiRatesCache[from];
     const toRate = to === 'USD' ? 1 : currencyApiRatesCache[to];   
     
-    if (fromRate && toRate) {
+    if (fromRate && toRate && fromRate !== 0) {
         return toRate / fromRate;
     }
     return undefined;
@@ -386,7 +387,7 @@ function findFixerRate(from: string, to: string): number | undefined {
     if (Object.keys(fixerRatesCache).length === 0) return undefined;
     const fromRateEur = from === 'EUR' ? 1 : fixerRatesCache[from];
     const toRateEur = to === 'EUR' ? 1 : fixerRatesCache[to];
-    if (fromRateEur && toRateEur) {
+    if (fromRateEur && toRateEur && fromRateEur !== 0) {
         return toRateEur / fromRateEur;
     }
     return undefined;
@@ -420,6 +421,7 @@ function findCoinlayerRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
     if (Object.keys(coinlayerRatesCache).length === 0) return undefined;
     
+    // Rates are against USD
     const fromRate = from === 'USD' ? 1 : coinlayerRatesCache[from];
     const toRate = to === 'USD' ? 1 : coinlayerRatesCache[to];
 
@@ -527,10 +529,11 @@ function findNbrbRate(from: string, to: string): number | undefined {
     if (Object.keys(nbrbRatesCache).length === 0) return undefined;
     if (from === to) return 1;
 
+    // Rates are against BYN
     const fromRate = from === 'BYN' ? 1 : (nbrbRatesCache[from] ? nbrbRatesCache[from].rate / nbrbRatesCache[from].scale : undefined);
     const toRate = to === 'BYN' ? 1 : (nbrbRatesCache[to] ? nbrbRatesCache[to].rate / nbrbRatesCache[to].scale : undefined);
 
-    if (fromRate !== undefined && toRate !== undefined && fromRate !== 0) {
+    if (fromRate !== undefined && toRate !== undefined && toRate !== 0) {
         return fromRate / toRate;
     }
     return undefined;
@@ -652,51 +655,49 @@ export function findRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
 
     // --- High-priority pairs (always use the most authoritative source)
-    // BYN is always sourced from NBRB
     if(from === 'BYN' || to === 'BYN'){
         const rate = findNbrbRate(from, to);
         if (rate !== undefined && !isNaN(rate)) return rate;
     }
-    // RUB is always sourced from CBR
-     if(from === 'RUB' || to === 'RUB'){
+    if(from === 'RUB' || to === 'RUB'){
         const rate = findCbrRate(from, to);
         if (rate !== undefined && !isNaN(rate)) return rate;
     }
-    
-    // Crypto/Metals: try Coinlayer first, then fallback to CurrencyAPI
+
+    // Crypto/Metals
     const fromIsCrypto = cryptoCodes.includes(from);
     const toIsCrypto = cryptoCodes.includes(to);
     if(fromIsCrypto || toIsCrypto){
-        let rate = findCoinlayerRate(from, to);
-        if (rate !== undefined && !isNaN(rate)) return rate;
-        
-        rate = findCurrencyApiRate(from, to);
-        if (rate !== undefined && !isNaN(rate)) return rate;
+        const coinlayerRate = findCoinlayerRate(from, to);
+        if (coinlayerRate !== undefined && !isNaN(coinlayerRate)) return coinlayerRate;
+
+        const currencyApiRate = findCurrencyApiRate(from, to);
+        if (currencyApiRate !== undefined && !isNaN(currencyApiRate)) return currencyApiRate;
     }
 
     // --- General Fiat Fallback Logic based on selected source ---
     const selectedSource = getDataSource();
 
-    const checkSource = (source: DataSource | 'fixer') => {
-        switch (source) {
-            case 'currencyapi': return findCurrencyApiRate(from, to);
-            case 'nbrb': return findNbrbRate(from, to);
-            case 'cbr': return findCbrRate(from, to);
-            case 'fixer': return findFixerRate(from, to);
-        }
-    };
-    
-    const priorityOrder: (DataSource | 'fixer')[] = [];
+    const sourcePriority: (DataSource | 'fixer')[] = [];
     if (selectedSource === 'nbrb') {
-        priorityOrder.push('nbrb', 'currencyapi', 'fixer', 'cbr');
+        sourcePriority.push('nbrb', 'currencyapi', 'fixer', 'cbr');
     } else if (selectedSource === 'cbr') {
-        priorityOrder.push('cbr', 'currencyapi', 'fixer', 'nbrb');
+        sourcePriority.push('cbr', 'currencyapi', 'fixer', 'nbrb');
     } else { // 'currencyapi'
-        priorityOrder.push('currencyapi', 'fixer', 'nbrb', 'cbr');
+        sourcePriority.push('currencyapi', 'fixer', 'nbrb', 'cbr');
     }
+    
+    // Create a unique, ordered list of sources to check
+    const sourcesToCheck = [...new Set(sourcePriority)];
 
-    for (const source of [...new Set(priorityOrder)]) {
-        const rate = checkSource(source);
+    for (const source of sourcesToCheck) {
+        let rate: number | undefined;
+        switch (source) {
+            case 'currencyapi': rate = findCurrencyApiRate(from, to); break;
+            case 'nbrb':      rate = findNbrbRate(from, to); break;
+            case 'cbr':       rate = findCbrRate(from, to); break;
+            case 'fixer':     rate = findFixerRate(from, to); break;
+        }
         if (rate !== undefined && !isNaN(rate)) {
             return rate;
         }
