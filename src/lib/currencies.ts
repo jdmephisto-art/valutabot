@@ -1,4 +1,5 @@
 
+
 import type { Currency, ExchangeRate, DataSource } from '@/lib/types';
 import { format, subDays, differenceInDays, addDays, startOfDay, parseISO } from 'date-fns';
 
@@ -186,10 +187,13 @@ function findCbrRate(from: string, to: string): number | undefined {
 
     const valute = cbrRatesCache.Valute;
 
+    // Rates are FIAT/RUB
     const fromRate = from === 'RUB' ? 1 : (valute[from] ? valute[from].Value / valute[from].Nominal : undefined);
     const toRate = to === 'RUB' ? 1 : (valute[to] ? valute[to].Value / valute[to].Nominal : undefined);
 
     if (fromRate !== undefined && toRate !== undefined && toRate !== 0) {
+        // We want FROM/TO. We have FROM/RUB and TO/RUB.
+        // FROM/TO = (FROM/RUB) / (TO/RUB)
         return fromRate / toRate;
     }
     return undefined;
@@ -266,11 +270,13 @@ function findCurrencyApiRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
     if (Object.keys(currencyApiRatesCache).length === 0) return undefined;
 
-    // Rates are against USD
+    // Rates are USD/FIAT
     const fromRate = from === 'USD' ? 1 : currencyApiRatesCache[from];
     const toRate = to === 'USD' ? 1 : currencyApiRatesCache[to];   
     
     if (fromRate && toRate && fromRate !== 0) {
+        // We want FROM/TO. We have USD/FROM and USD/TO.
+        // FROM/TO = (FROM/USD) / (TO/USD) = (1/fromRate) / (1/toRate) = toRate / fromRate
         return toRate / fromRate;
     }
     return undefined;
@@ -304,11 +310,12 @@ async function getCurrencyApiHistoricalRate(from: string, to: string, date: Date
         return undefined;
     }
     
-    const dailyRates = data.rates;
+    const dailyRates = data.rates; // Rates are USD/FIAT
     const fromRate = from === 'USD' ? 1 : dailyRates[from];
     const toRate = to === 'USD' ? 1 : dailyRates[to];
 
     if (fromRate !== undefined && toRate !== undefined && fromRate !== 0) {
+        // We want FROM/TO = toRate / fromRate
         return toRate / fromRate;
     }
 
@@ -385,9 +392,14 @@ function _updateFixerRatesCache(): Promise<void> {
 function findFixerRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
     if (Object.keys(fixerRatesCache).length === 0) return undefined;
+    
+    // Rates are EUR/FIAT
     const fromRateEur = from === 'EUR' ? 1 : fixerRatesCache[from];
     const toRateEur = to === 'EUR' ? 1 : fixerRatesCache[to];
+    
     if (fromRateEur && toRateEur && fromRateEur !== 0) {
+        // We want FROM/TO. We have EUR/FROM and EUR/TO
+        // FROM/TO = (FROM/EUR) / (TO/EUR) = (1/fromRateEur) / (1/toRateEur) = toRateEur / fromRateEur
         return toRateEur / fromRateEur;
     }
     return undefined;
@@ -416,21 +428,6 @@ function _updateCoinlayerRatesCache(): Promise<void> {
     })();
     return coinlayerUpdatePromise;
 }
-
-function findCoinlayerRate(from: string, to: string): number | undefined {
-    if (from === to) return 1;
-    if (Object.keys(coinlayerRatesCache).length === 0) return undefined;
-    
-    // Rates are against USD
-    const fromRate = from === 'USD' ? 1 : coinlayerRatesCache[from];
-    const toRate = to === 'USD' ? 1 : coinlayerRatesCache[to];
-
-    if (fromRate && toRate && fromRate !== 0) {
-        return toRate / fromRate;
-    }
-    return undefined;
-}
-
 
 // --- NBRB PROVIDER ---
 async function ensureNbrbFullCache() {
@@ -529,11 +526,13 @@ function findNbrbRate(from: string, to: string): number | undefined {
     if (Object.keys(nbrbRatesCache).length === 0) return undefined;
     if (from === to) return 1;
 
-    // Rates are against BYN
+    // Rates are FIAT/BYN
     const fromRate = from === 'BYN' ? 1 : (nbrbRatesCache[from] ? nbrbRatesCache[from].rate / nbrbRatesCache[from].scale : undefined);
     const toRate = to === 'BYN' ? 1 : (nbrbRatesCache[to] ? nbrbRatesCache[to].rate / nbrbRatesCache[to].scale : undefined);
 
     if (fromRate !== undefined && toRate !== undefined && toRate !== 0) {
+        // We want FROM/TO. We have FROM/BYN and TO/BYN
+        // FROM/TO = (FROM/BYN) / (TO/BYN)
         return fromRate / toRate;
     }
     return undefined;
@@ -620,17 +619,17 @@ async function getNbrbDynamicsForPeriod(from: string, to: string, startDate: Dat
 
 // --- UNIFIED API ---
 export async function getCurrencies(): Promise<Currency[]> {
-    if (activeDataSource === 'nbrb') {
-        const [nbrbFiat, allApiCurrencies] = await Promise.all([
-            getNbrbCurrencies(),
+    if (activeDataSource === 'nbrb' || activeDataSource === 'cbr') {
+        const [fiatCurrencies, allApiCurrencies] = await Promise.all([
+            activeDataSource === 'nbrb' ? getNbrbCurrencies() : getCurrencyApiCurrencies(), // CBR doesn't have a currency list, so use a comprehensive one.
             getCurrencyApiCurrencies()
         ]);
         const cryptoFromApi = allApiCurrencies.filter(c => cryptoCodes.includes(c.code));
-        const combined = [...nbrbFiat, ...cryptoFromApi];
+        const combined = [...fiatCurrencies, ...cryptoFromApi];
         const unique = Array.from(new Map(combined.map(item => [item.code, item])).values());
         unique.sort((a, b) => a.code.localeCompare(b.code));
         return unique;
-    } else { // currencyapi or cbr
+    } else { // currencyapi
         return getCurrencyApiCurrencies();
     }
 }
@@ -651,61 +650,108 @@ export async function getLatestRates(pairs: string[]): Promise<(Omit<ExchangeRat
     return rates;
 }
 
+/**
+ * Gets the rate of a currency against USD.
+ * This is a helper function to create a common bridge for all conversions.
+ * @param code The currency code.
+ * @returns The rate of the currency against USD (CODE/USD), or undefined if not found.
+ */
+function getRateVsUsd(code: string): number | undefined {
+    if (code === 'USD') return 1;
+
+    const isCrypto = cryptoCodes.includes(code);
+
+    if (isCrypto) {
+        // For crypto, try coinlayer first (rates are COIN/USD), then currencyapi (rates are USD/COIN -> 1/rate)
+        if (coinlayerRatesCache[code]) {
+            return coinlayerRatesCache[code];
+        }
+        if (currencyApiRatesCache[code]) {
+            return 1 / currencyApiRatesCache[code];
+        }
+        return undefined;
+    }
+
+    // --- For FIAT currencies ---
+    const selectedSource = getDataSource();
+    
+    // 1. Try the user's selected source first for directness
+    if (selectedSource === 'currencyapi' && currencyApiRatesCache[code]) {
+        return 1 / currencyApiRatesCache[code]; // Rate is USD/CODE
+    }
+    if (selectedSource === 'nbrb' && nbrbRatesCache[code] && nbrbRatesCache['USD']) {
+        const nbrbRate = nbrbRatesCache[code].rate / nbrbRatesCache[code].scale; // FIAT/BYN
+        const nbrbUsdRate = nbrbRatesCache['USD'].rate / nbrbRatesCache['USD'].scale; // USD/BYN
+        return nbrbRate / nbrbUsdRate; // (FIAT/BYN) / (USD/BYN) = FIAT/USD
+    }
+    if (selectedSource === 'cbr' && cbrRatesCache?.Valute?.[code] && cbrRatesCache?.Valute?.['USD']) {
+        const valute = cbrRatesCache.Valute;
+        const cbrRate = valute[code].Value / valute[code].Nominal; // FIAT/RUB
+        const cbrUsdRate = valute['USD'].Value / valute['USD'].Nominal; // USD/RUB
+        return cbrRate / cbrUsdRate; // (FIAT/RUB) / (USD/RUB) = FIAT/USD
+    }
+
+    // 2. Try fallbacks if selected source fails
+    if (currencyApiRatesCache[code]) {
+        return 1 / currencyApiRatesCache[code]; // Rate is USD/CODE
+    }
+
+    const fixerRate = fixerRatesCache[code]; // EUR/CODE
+    const fixerEurUsdRate = fixerRatesCache['USD']; // EUR/USD
+    if (fixerRate && fixerEurUsdRate) {
+        // We want CODE/USD. We have EUR/CODE and EUR/USD.
+        // CODE/USD = (CODE/EUR) / (USD/EUR) = (1/fixerRate) / (1/fixerEurUsdRate) = fixerEurUsdRate / fixerRate
+        return fixerEurUsdRate / fixerRate;
+    }
+    
+    if (nbrbRatesCache[code] && nbrbRatesCache['USD']) {
+        const nbrbRate = nbrbRatesCache[code].rate / nbrbRatesCache[code].scale; // FIAT/BYN
+        const nbrbUsdRate = nbrbRatesCache['USD'].rate / nbrbRatesCache['USD'].scale; // USD/BYN
+        return nbrbRate / nbrbUsdRate; // (FIAT/BYN) / (USD/BYN) = FIAT/USD
+    }
+
+    const valute = cbrRatesCache?.Valute;
+    if (valute?.[code] && valute?.['USD']) {
+        const cbrRate = valute[code].Value / valute[code].Nominal; // FIAT/RUB
+        const cbrUsdRate = valute['USD'].Value / valute['USD'].Nominal; // USD/RUB
+        return cbrRate / cbrUsdRate; // (FIAT/RUB) / (USD/RUB) = FIAT/USD
+    }
+    
+    return undefined;
+}
+
+
 export function findRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
 
-    // --- High-priority pairs (always use the most authoritative source)
-    if(from === 'BYN' || to === 'BYN'){
-        const rate = findNbrbRate(from, to);
-        if (rate !== undefined && !isNaN(rate)) return rate;
+    // Use priority sources for BYN and RUB first, as they are most accurate for the region
+    if (from === 'BYN' || to === 'BYN') {
+        const nbrbRate = findNbrbRate(from, to);
+        if (nbrbRate !== undefined) return nbrbRate;
     }
-    if(from === 'RUB' || to === 'RUB'){
-        const rate = findCbrRate(from, to);
-        if (rate !== undefined && !isNaN(rate)) return rate;
-    }
-
-    // Crypto/Metals
-    const fromIsCrypto = cryptoCodes.includes(from);
-    const toIsCrypto = cryptoCodes.includes(to);
-    if(fromIsCrypto || toIsCrypto){
-        const coinlayerRate = findCoinlayerRate(from, to);
-        if (coinlayerRate !== undefined && !isNaN(coinlayerRate)) return coinlayerRate;
-
-        const currencyApiRate = findCurrencyApiRate(from, to);
-        if (currencyApiRate !== undefined && !isNaN(currencyApiRate)) return currencyApiRate;
-    }
-
-    // --- General Fiat Fallback Logic based on selected source ---
-    const selectedSource = getDataSource();
-
-    const sourcePriority: (DataSource | 'fixer')[] = [];
-    if (selectedSource === 'nbrb') {
-        sourcePriority.push('nbrb', 'currencyapi', 'fixer', 'cbr');
-    } else if (selectedSource === 'cbr') {
-        sourcePriority.push('cbr', 'currencyapi', 'fixer', 'nbrb');
-    } else { // 'currencyapi'
-        sourcePriority.push('currencyapi', 'fixer', 'nbrb', 'cbr');
+    if (from === 'RUB' || to === 'RUB') {
+        const cbrRate = findCbrRate(from, to);
+        if (cbrRate !== undefined) return cbrRate;
     }
     
-    // Create a unique, ordered list of sources to check
-    const sourcesToCheck = [...new Set(sourcePriority)];
-
-    for (const source of sourcesToCheck) {
-        let rate: number | undefined;
-        switch (source) {
-            case 'currencyapi': rate = findCurrencyApiRate(from, to); break;
-            case 'nbrb':      rate = findNbrbRate(from, to); break;
-            case 'cbr':       rate = findCbrRate(from, to); break;
-            case 'fixer':     rate = findFixerRate(from, to); break;
-        }
-        if (rate !== undefined && !isNaN(rate)) {
-            return rate;
-        }
+    // Universal method using USD as a bridge for all other cases (incl. crypto-fiat)
+    const fromRateVsUsd = getRateVsUsd(from);
+    const toRateVsUsd = getRateVsUsd(to);
+    
+    if (fromRateVsUsd !== undefined && toRateVsUsd !== undefined && toRateVsUsd !== 0) {
+        // We want FROM/TO. We have FROM/USD and TO/USD.
+        // FROM/TO = (FROM/USD) / (TO/USD)
+        return fromRateVsUsd / toRateVsUsd;
     }
 
-    return undefined; // No source could provide a rate.
-}
+    // Final fallback to direct find functions if USD bridge fails
+    const selectedSource = getDataSource();
+    if (selectedSource === 'currencyapi') return findCurrencyApiRate(from, to);
+    if (selectedSource === 'nbrb') return findNbrbRate(from, to);
+    if (selectedSource === 'cbr') return findCbrRate(from, to);
 
+    return undefined;
+}
 
 export async function findRateAsync(from: string, to: string): Promise<number | undefined> {
     await preFetchInitialRates();
@@ -735,8 +781,10 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
             ]);
             
             if (usdToBynRate && usdToCryptoRate) {
-                const bynToCryptoRate = usdToCryptoRate / usdToBynRate;
-                return from === 'BYN' ? bynToCryptoRate : 1 / bynToCryptoRate;
+                // We want BYN/CRYPTO or CRYPTO/BYN
+                // We have BYN/USD and CRYPTO/USD (getCurrencyApiHistoricalRate returns FROM/TO)
+                const bynToCryptoRate = usdToCryptoRate / usdToBynRate; // (CRYPTO/USD) / (BYN/USD) = CRYPTO/BYN
+                return from === 'BYN' ? 1 / bynToCryptoRate : bynToCryptoRate;
             }
             return undefined;
         } else {
@@ -744,9 +792,10 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
         }
     }
 
-    if (activeDataSource === 'nbrb') {
+    const selectedSource = getDataSource();
+    if (selectedSource === 'nbrb' || selectedSource === 'cbr') {
         return getNbrbHistoricalRate(from, to, date);
-    } else { // cbr or currencyapi
+    } else {
         return getCurrencyApiHistoricalRate(from, to, date);
     }
 }
@@ -786,11 +835,11 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
             const commonDates = new Set([...bynMap.keys()].filter(k => cryptoMap.has(k)));
 
             for (const date of commonDates) {
-                const bynRate = bynMap.get(date)!;
-                const cryptoRate = cryptoMap.get(date)!;
+                const bynRate = bynMap.get(date)!; // USD/BYN
+                const cryptoRate = cryptoMap.get(date)!; // CRYPTO/USD
                 if (bynRate === 0) continue;
-                const bynToCryptoRate = cryptoRate / bynRate;
-                result.push({ date, rate: from === 'BYN' ? bynToCryptoRate : 1 / bynToCryptoRate });
+                const cryptoToBynRate = cryptoRate * bynRate; // (CRYPTO/USD) * (USD/BYN) = CRYPTO/BYN
+                result.push({ date, rate: from === 'BYN' ? 1 / cryptoToBynRate : cryptoToBynRate });
             }
             result.sort((a, b) => a.date.localeCompare(b.date, undefined, { numeric: true }));
             return result;
@@ -800,9 +849,10 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
         }
     }
     
-    if (activeDataSource === 'nbrb') {
+    const selectedSource = getDataSource();
+    if (selectedSource === 'nbrb' || selectedSource === 'cbr') {
         return getNbrbDynamicsForPeriod(from, to, startDate, endDate);
-    } else { // cbr or currencyapi
+    } else {
         return getCurrencyApiDynamicsForPeriod(from, to, startDate, endDate);
     }
 }
