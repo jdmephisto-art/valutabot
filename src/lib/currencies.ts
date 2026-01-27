@@ -6,7 +6,7 @@ import { format, subDays, differenceInDays, addDays, startOfDay, parseISO } from
 let activeDataSource: DataSource = 'ru' === 'ru' ? 'nbrb' : 'currencyapi';
 
 // --- Constants ---
-export const cryptoCodes = ['BTC', 'ETH', 'LTC', 'XRP', 'XAU', 'XAG', 'BCH', 'BTG', 'DASH', 'EOS'];
+export const cryptoCodes = ['BTC', 'ETH', 'LTC', 'XRP', 'BCH', 'BTG', 'DASH', 'EOS'];
 const CACHE_TTL_RATES = 15 * 60 * 1000; // 15 minutes
 const CACHE_TTL_CURRENCIES = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -666,13 +666,13 @@ function getRateVsUsd(code: string): number | undefined {
         if (coinlayerRatesCache[code]) {
             return coinlayerRatesCache[code];
         }
-        if (currencyApiRatesCache[code]) {
+        if (currencyApiRatesCache[code] && currencyApiRatesCache[code] !== 0) {
             return 1 / currencyApiRatesCache[code];
         }
         return undefined;
     }
 
-    // --- For FIAT currencies ---
+    // --- For FIAT currencies & Metals ---
     const selectedSource = getDataSource();
     
     // 1. Try the user's selected source first for directness
@@ -682,23 +682,25 @@ function getRateVsUsd(code: string): number | undefined {
     if (selectedSource === 'nbrb' && nbrbRatesCache[code] && nbrbRatesCache['USD']) {
         const nbrbRate = nbrbRatesCache[code].rate / nbrbRatesCache[code].scale; // FIAT/BYN
         const nbrbUsdRate = nbrbRatesCache['USD'].rate / nbrbRatesCache['USD'].scale; // USD/BYN
+        if (nbrbUsdRate === 0) return undefined;
         return nbrbRate / nbrbUsdRate; // (FIAT/BYN) / (USD/BYN) = FIAT/USD
     }
     if (selectedSource === 'cbr' && cbrRatesCache?.Valute?.[code] && cbrRatesCache?.Valute?.['USD']) {
         const valute = cbrRatesCache.Valute;
         const cbrRate = valute[code].Value / valute[code].Nominal; // FIAT/RUB
         const cbrUsdRate = valute['USD'].Value / valute['USD'].Nominal; // USD/RUB
+        if (cbrUsdRate === 0) return undefined;
         return cbrRate / cbrUsdRate; // (FIAT/RUB) / (USD/RUB) = FIAT/USD
     }
 
     // 2. Try fallbacks if selected source fails
-    if (currencyApiRatesCache[code]) {
-        return 1 / currencyApiRatesCache[code]; // Rate is USD/CODE
+    if (currencyApiRatesCache[code] && currencyApiRatesCache[code] !== 0) {
+        return 1 / currencyApiRatesCache[code];
     }
 
     const fixerRate = fixerRatesCache[code]; // EUR/CODE
     const fixerEurUsdRate = fixerRatesCache['USD']; // EUR/USD
-    if (fixerRate && fixerEurUsdRate) {
+    if (fixerRate && fixerEurUsdRate && fixerRate !== 0) {
         // We want CODE/USD. We have EUR/CODE and EUR/USD.
         // CODE/USD = (CODE/EUR) / (USD/EUR) = (1/fixerRate) / (1/fixerEurUsdRate) = fixerEurUsdRate / fixerRate
         return fixerEurUsdRate / fixerRate;
@@ -707,6 +709,7 @@ function getRateVsUsd(code: string): number | undefined {
     if (nbrbRatesCache[code] && nbrbRatesCache['USD']) {
         const nbrbRate = nbrbRatesCache[code].rate / nbrbRatesCache[code].scale; // FIAT/BYN
         const nbrbUsdRate = nbrbRatesCache['USD'].rate / nbrbRatesCache['USD'].scale; // USD/BYN
+        if (nbrbUsdRate === 0) return undefined;
         return nbrbRate / nbrbUsdRate; // (FIAT/BYN) / (USD/BYN) = FIAT/USD
     }
 
@@ -714,6 +717,7 @@ function getRateVsUsd(code: string): number | undefined {
     if (valute?.[code] && valute?.['USD']) {
         const cbrRate = valute[code].Value / valute[code].Nominal; // FIAT/RUB
         const cbrUsdRate = valute['USD'].Value / valute['USD'].Nominal; // USD/RUB
+        if (cbrUsdRate === 0) return undefined;
         return cbrRate / cbrUsdRate; // (FIAT/RUB) / (USD/RUB) = FIAT/USD
     }
     
