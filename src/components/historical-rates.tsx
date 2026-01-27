@@ -106,8 +106,11 @@ export function HistoricalRates() {
 
   const getCalendarDisabledDates = () => {
     const disabled: { before?: Date, after?: Date } = { after: new Date() };
-    if (getDataSource() === 'nbrb') {
+    const source = getDataSource();
+    if (source === 'nbrb') {
         disabled.before = new Date('2021-01-01');
+    } else if (source === 'cbr') {
+        disabled.before = new Date('2002-01-01');
     } else { // currencyapi
         // Free plan only supports up to 2 years of historical data.
         disabled.before = subDays(new Date(), (365 * 2) - 1);
@@ -227,7 +230,7 @@ export function HistoricalRates() {
                 <div className="h-[250px] w-full">
                     <p className="text-xs text-center text-muted-foreground pb-2">{t('history.dynamicsFor', { from: fromCurrency, to: toCurrency })}</p>
                     <ChartContainer config={chartConfig}>
-                        <AreaChart accessibilityLayer data={dynamicsData} margin={{ left: 10, right: 10, top: 10, bottom: 0 }}>
+                        <AreaChart accessibilityLayer data={dynamicsData} margin={{ left: 12, right: 10, top: 10, bottom: 0 }}>
                             <CartesianGrid vertical={false} />
                              <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} interval={'preserveStartEnd'} tickFormatter={(value, index) => {
                                  if (dynamicsData.length > 30) {
@@ -237,7 +240,11 @@ export function HistoricalRates() {
                                  }
                                  return value;
                              }}/>
-                             <YAxis domain={['dataMin - (dataMax - dataMin) * 0.1', 'dataMax + (dataMax - dataMin) * 0.1']} tickLine={false} axisLine={false} tickMargin={8} tickCount={3} tickFormatter={(value) => typeof value === 'number' ? parseFloat(value.toFixed(4)).toString() : ''} />
+                             <YAxis domain={['dataMin - (dataMax - dataMin) * 0.1', 'dataMax + (dataMax - dataMin) * 0.1']} tickLine={false} axisLine={false} tickMargin={8} tickCount={3} tickFormatter={(value) => {
+                                 if (typeof value !== 'number') return '';
+                                 if (value > 10) return parseFloat(value.toFixed(2)).toString();
+                                 return parseFloat(value.toFixed(4)).toString();
+                             }} />
                             <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
                             <Area dataKey="rate" type="natural" fill="var(--color-rate)" fillOpacity={0.4} stroke="var(--color-rate)" />
                         </AreaChart>

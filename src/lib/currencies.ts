@@ -110,6 +110,21 @@ async function cbrApiFetch() {
     }
 }
 
+async function cbrHistoryApiFetch(date: Date) {
+    const formattedDate = format(date, 'dd/MM/yyyy');
+    try {
+        const response = await fetch(`/api/cbr/history?date_req=${formattedDate}`);
+        if (!response.ok) {
+            console.error(`CBR history request failed: ${response.status} ${response.statusText}`);
+            return null;
+        }
+        return response.json();
+    } catch (error) {
+        console.error('Failed to fetch from CBR history API proxy:', error);
+        return null;
+    }
+}
+
 async function fixerApiFetch(endpoint: string, params: Record<string, string> = {}) {
     const queryParams = new URLSearchParams({ endpoint, ...params });
     const url = `/api/fixer?${queryParams.toString()}`;
@@ -197,6 +212,78 @@ function findCbrRate(from: string, to: string): number | undefined {
         return fromRate / toRate;
     }
     return undefined;
+}
+
+async function getCbrHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
+    if (from === to) return 1;
+
+    const data = await cbrHistoryApiFetch(date);
+
+    if (!data?.ValCurs?.Valute) {
+        return undefined;
+    }
+
+    const valute = data.ValCurs.Valute;
+
+    const findRateToRub = (code: string) => {
+        if (code === 'RUB') return 1;
+        const currency = valute.find((v: any) => v.CharCode[0] === code);
+        if (!currency) return undefined;
+        const value = parseFloat(currency.Value[0].replace(',', '.'));
+        const nominal = parseInt(currency.Nominal[0], 10);
+        return value / nominal;
+    };
+
+    const fromRate = findRateToRub(from);
+    const toRate = findRateToRub(to);
+
+    if (fromRate !== undefined && toRate !== undefined && toRate !== 0) {
+        return fromRate / toRate;
+    }
+    return undefined;
+}
+
+async function getCbrDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
+    if (!(startDate instanceof Date) || isNaN(startDate.getTime()) || !(endDate instanceof Date) || isNaN(endDate.getTime())) {
+        return [];
+    }
+    if (startDate > endDate) {
+        return [];
+    }
+
+    const today = startOfDay(new Date());
+    let effectiveStartDate = startOfDay(startDate);
+    let effectiveEndDate = startOfDay(endDate);
+    
+    if (effectiveStartDate > today) {
+        return [];
+    }
+    if (effectiveEndDate > today) {
+        effectiveEndDate = today;
+    }
+    
+    const promises = [];
+    let currentDate = effectiveStartDate;
+    while (currentDate <= effectiveEndDate) {
+        promises.push(getCbrHistoricalRate(from, to, new Date(currentDate)));
+        currentDate = addDays(currentDate, 1);
+    }
+    
+    const settledRates = await Promise.all(promises);
+
+    const validResults = settledRates
+        .map((rate, index) => {
+            if (rate !== undefined) {
+                return {
+                    date: format(addDays(effectiveStartDate, index), 'dd.MM'),
+                    rate: rate,
+                };
+            }
+            return null;
+        })
+        .filter((r): r is { date: string, rate: number } => r !== null);
+        
+    return validResults;
 }
 
 
@@ -763,50 +850,36 @@ export async function findRateAsync(from: string, to: string): Promise<number | 
 }
 
 export async function getHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
-    if (activeDataSource === 'currencyapi') return undefined; // API plan does not support this.
-
-    const fromIsCrypto = cryptoCodes.includes(from);
-    const toIsCrypto = cryptoCodes.includes(to);
+    const source = getDataSource();
 
     if (from === to) return 1;
 
-    if ((fromIsCrypto || toIsCrypto) && from !== 'BYN' && to !== 'BYN') {
-        return getCurrencyApiHistoricalRate(from, to, date);
+    if (source === 'cbr') {
+        return getCbrHistoricalRate(from, to, date);
     }
 
-    if (from === 'BYN' || to === 'BYN') {
-        const otherCode = from === 'BYN' ? to : from;
-        const otherIsCrypto = cryptoCodes.includes(otherCode);
-
-        if (otherIsCrypto) {
-            const [usdToBynRate, usdToCryptoRate] = await Promise.all([
-                getNbrbHistoricalRate('USD', 'BYN', date),
-                getCurrencyApiHistoricalRate('USD', otherCode, date)
-            ]);
-            
-            if (usdToBynRate && usdToCryptoRate) {
-                // We want BYN/CRYPTO or CRYPTO/BYN
-                // We have BYN/USD and CRYPTO/USD (getCurrencyApiHistoricalRate returns FROM/TO)
-                const bynToCryptoRate = usdToCryptoRate / usdToBynRate; // (CRYPTO/USD) / (BYN/USD) = CRYPTO/BYN
-                return from === 'BYN' ? 1 / bynToCryptoRate : bynToCryptoRate;
-            }
-            return undefined;
-        } else {
-            return getNbrbHistoricalRate(from, to, date);
-        }
-    }
-
-    const selectedSource = getDataSource();
-    if (selectedSource === 'nbrb' || selectedSource === 'cbr') {
+    if (source === 'nbrb') {
         return getNbrbHistoricalRate(from, to, date);
-    } else {
+    }
+    
+    // currencyapi (paid feature) is the only one that can handle historical crypto
+    if (source === 'currencyapi') {
         return getCurrencyApiHistoricalRate(from, to, date);
     }
+
+    // Fallback for crypto when main source is not currencyapi
+    const fromIsCrypto = cryptoCodes.includes(from);
+    const toIsCrypto = cryptoCodes.includes(to);
+    if(fromIsCrypto || toIsCrypto) {
+        return getCurrencyApiHistoricalRate(from, to, date);
+    }
+
+    return undefined;
 }
 
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
-    if (activeDataSource === 'currencyapi') return []; // API plan does not support this.
-    
+    const source = getDataSource();
+
     if (from === to) {
         const days = differenceInDays(endDate, startDate) + 1;
         return Array.from({ length: days }).map((_, i) => ({
@@ -815,50 +888,26 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
         }));
     }
 
+    if (source === 'cbr') {
+        return getCbrDynamicsForPeriod(from, to, startDate, endDate);
+    }
+
+    if (source === 'nbrb') {
+        return getNbrbDynamicsForPeriod(from, to, startDate, endDate);
+    }
+
+    if (source === 'currencyapi') {
+        return getCurrencyApiDynamicsForPeriod(from, to, startDate, endDate);
+    }
+
+    // Fallback for crypto
     const fromIsCrypto = cryptoCodes.includes(from);
     const toIsCrypto = cryptoCodes.includes(to);
-
-    if ((fromIsCrypto || toIsCrypto) && from !== 'BYN' && to !== 'BYN') {
+    if(fromIsCrypto || toIsCrypto) {
         return getCurrencyApiDynamicsForPeriod(from, to, startDate, endDate);
     }
 
-    if (from === 'BYN' || to === 'BYN') {
-        const otherCode = from === 'BYN' ? to : from;
-        const otherIsCrypto = cryptoCodes.includes(otherCode);
-
-        if (otherIsCrypto) {
-            const [usdToBynDynamics, usdToCryptoDynamics] = await Promise.all([
-                getNbrbDynamicsForPeriod('USD', 'BYN', startDate, endDate),
-                getCurrencyApiDynamicsForPeriod('USD', otherCode, startDate, endDate)
-            ]);
-
-            const bynMap = new Map(usdToBynDynamics.map(d => [d.date, d.rate]));
-            const cryptoMap = new Map(usdToCryptoDynamics.map(d => [d.date, d.rate]));
-            
-            const result: { date: string; rate: number }[] = [];
-            const commonDates = new Set([...bynMap.keys()].filter(k => cryptoMap.has(k)));
-
-            for (const date of commonDates) {
-                const bynRate = bynMap.get(date)!; // USD/BYN
-                const cryptoRate = cryptoMap.get(date)!; // CRYPTO/USD
-                if (bynRate === 0) continue;
-                const cryptoToBynRate = cryptoRate * bynRate; // (CRYPTO/USD) * (USD/BYN) = CRYPTO/BYN
-                result.push({ date, rate: from === 'BYN' ? 1 / cryptoToBynRate : cryptoToBynRate });
-            }
-            result.sort((a, b) => a.date.localeCompare(b.date, undefined, { numeric: true }));
-            return result;
-
-        } else {
-            return getNbrbDynamicsForPeriod(from, to, startDate, endDate);
-        }
-    }
-    
-    const selectedSource = getDataSource();
-    if (selectedSource === 'nbrb' || selectedSource === 'cbr') {
-        return getNbrbDynamicsForPeriod(from, to, startDate, endDate);
-    } else {
-        return getCurrencyApiDynamicsForPeriod(from, to, startDate, endDate);
-    }
+    return [];
 }
 
 export function preFetchInitialRates() {
