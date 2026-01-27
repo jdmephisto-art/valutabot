@@ -36,7 +36,7 @@ type ActionButtonProps = {
   icon: React.ElementType;
 };
 
-const defaultDisplayedPairs = ['USD/EUR', 'EUR/USD', 'USD/BYN', 'EUR/BYN', 'USD/RUB', 'EUR/RUB'];
+const defaultDisplayedPairs = ['USD/EUR', 'EUR/USD', 'USD/BYN', 'EUR/BYN', 'USD/RUB', 'EUR/RUB', 'BTC/USD', 'ETH/EUR'];
 const DISPLAYED_PAIRS_STORAGE_KEY = 'currencyBotDisplayedPairs';
 
 export function ChatInterface() {
@@ -54,6 +54,9 @@ export function ChatInterface() {
   const componentId = useId();
   const { t, lang, setLang } = useTranslation();
   const isInitialMount = useRef(true);
+
+  const displayedPairsRef = useRef(displayedPairs);
+  displayedPairsRef.current = displayedPairs;
 
   const addMessage = (message: Omit<Message, 'id'>) => {
     setMessages(prev => [...prev, { ...message, id: `${componentId}-${prev.length}` }]);
@@ -161,20 +164,18 @@ export function ChatInterface() {
   
   const handleAddDisplayedPair = (from: string, to: string): boolean => {
     const pair = `${from}/${to}`;
-    if (displayedPairs.includes(pair)) {
+    if (displayedPairsRef.current.includes(pair)) {
         return false;
     }
-    const newPairs = [...displayedPairs, pair];
+    const newPairs = [...displayedPairsRef.current, pair];
     setDisplayedPairs(newPairs);
-    localStorage.setItem(DISPLAYED_PAIRS_STORAGE_KEY, JSON.stringify(newPairs));
     addMessage({ sender: 'bot', text: t('chat.bot.pairAddedToList', { pair }) });
     return true;
   };
 
   const handleRemoveDisplayedPair = (pair: string) => {
-    const newPairs = displayedPairs.filter(p => p !== pair);
+    const newPairs = displayedPairsRef.current.filter(p => p !== pair);
     setDisplayedPairs(newPairs);
-    localStorage.setItem(DISPLAYED_PAIRS_STORAGE_KEY, JSON.stringify(newPairs));
     addMessage({ sender: 'bot', text: t('chat.bot.pairRemovedFromList', { pair }) });
   };
 
