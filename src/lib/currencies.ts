@@ -1,5 +1,5 @@
 import type { Currency, ExchangeRate, DataSource } from '@/lib/types';
-import { format, subDays, differenceInDays, addDays } from 'date-fns';
+import { format, subDays, differenceInDays, addDays, isWeekend } from 'date-fns';
 import { currencyApiPreloadedCurrencies } from './preloaded-data';
 
 let activeDataSource: DataSource = 'nbrb';
@@ -25,6 +25,9 @@ let fixerRatesCache: { [key: string]: number } = {};
 let fixerRatesTimestamp = 0;
 let coinlayerRatesCache: { [key: string]: number } = {};
 let coinlayerRatesTimestamp = 0;
+
+// Historical Cache to prevent redundant network calls
+const historicalCache = new Map<string, number>();
 
 // --- Promise Gates ---
 let nbrbUpdatePromise: Promise<void> | null = null;
@@ -280,44 +283,71 @@ export async function findRateAsync(from: string, to: string): Promise<number | 
 
 export async function getHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
     if (from === to) return 1;
+    
     const formattedDate = format(date, 'yyyy-MM-dd');
-    const dCbr = format(date, 'dd.MM.yyyy');
+    const dCbr = format(date, 'dd/MM/yyyy');
     const dNbrb = format(date, 'yyyy-M-d');
 
-    const getValVsUsd = async (code: string): Promise<number | undefined> => {
+    const getValVsUsd = async (code: string, dateObj: Date): Promise<number | undefined> => {
         if (code === 'USD') return 1;
+        const cacheKey = `${code}_${format(dateObj, 'yyyyMMdd')}`;
+        if (historicalCache.has(cacheKey)) return historicalCache.get(cacheKey);
+
+        const fDate = format(dateObj, 'yyyy-MM-dd');
+        const cbrDate = format(dateObj, 'dd/MM/yyyy');
+        const nbrbDate = format(dateObj, 'yyyy-M-d');
 
         // A. Crypto (Coinlayer)
         if (actualCrypto.includes(code)) {
-            const data = await coinlayerApiFetch(formattedDate, { symbols: code });
-            return data?.success ? data.rates[code] : undefined;
+            const data = await coinlayerApiFetch(fDate, { symbols: code });
+            if (data?.success && data.rates[code]) {
+                historicalCache.set(cacheKey, data.rates[code]);
+                return data.rates[code];
+            }
+            return undefined;
         }
 
         // B. Metals (CBR)
         if (metalCodes.includes(code)) {
             const mCode = metalMap[code];
+            // Fetch with a 3-day range to handle weekends (banks don't set rates on weekends)
+            const d1 = format(subDays(dateObj, 3), 'dd.MM.yyyy');
+            const d2 = format(dateObj, 'dd.MM.yyyy');
+            
             const [mRes, uRes] = await Promise.all([
-                fetch(`/api/cbr/metals?date_req1=${dCbr}&date_req2=${dCbr}`).then(r => r.json()).catch(() => null),
-                fetch(`/api/cbr/history?date_req=${dCbr}`).then(r => r.json()).catch(() => null)
+                fetch(`/api/cbr/metals?date_req1=${d1}&date_req2=${d2}`).then(r => r.json()).catch(() => null),
+                fetch(`/api/cbr/history?date_req=${cbrDate}`).then(r => r.json()).catch(() => null)
             ]);
-            const rubG = mRes?.Metall?.Record?.find((r: any) => r.$.Code === mCode)?.Buy[0].replace(',', '.');
+            
+            let rubG: string | undefined;
+            if (mRes?.Metall?.Record) {
+                const records = Array.isArray(mRes.Metall.Record) ? mRes.Metall.Record : [mRes.Metall.Record];
+                const targetRecord = records.filter((r: any) => r.$.Code === mCode).sort((a: any, b: any) => b.$.Date.localeCompare(a.$.Date))[0];
+                rubG = targetRecord?.Buy[0].replace(',', '.');
+            }
+
             const uVal = uRes?.ValCurs?.Valute?.find((v: any) => v.CharCode[0] === 'USD');
+            
             if (rubG && uVal) {
                 const rubU = parseFloat(uVal.Value[0].replace(',', '.')) / parseInt(uVal.Nominal[0], 10);
-                return (parseFloat(rubG) * 31.1035) / rubU;
+                const val = (parseFloat(rubG) * 31.1035) / rubU;
+                historicalCache.set(cacheKey, val);
+                return val;
             }
             return undefined;
         }
 
-        // C. Fiat - Try NBRB (Best for historical BYN/RUB context)
-        const nbrbVal = await nbrbApiFetch(`rates/${code}?onDate=${dNbrb}&parammode=2`).catch(() => null);
-        const nbrbUsd = await nbrbApiFetch(`rates/USD?onDate=${dNbrb}&parammode=2`).catch(() => null);
+        // C. Fiat - Try NBRB
+        const nbrbVal = await nbrbApiFetch(`rates/${code}?onDate=${nbrbDate}&parammode=2`).catch(() => null);
+        const nbrbUsd = await nbrbApiFetch(`rates/USD?onDate=${nbrbDate}&parammode=2`).catch(() => null);
         if (nbrbVal && nbrbUsd) {
-            return (nbrbVal.Cur_OfficialRate / nbrbVal.Cur_Scale) / (nbrbUsd.Cur_OfficialRate / nbrbUsd.Cur_Scale);
+            const val = (nbrbVal.Cur_OfficialRate / nbrbVal.Cur_Scale) / (nbrbUsd.Cur_OfficialRate / nbrbUsd.Cur_Scale);
+            historicalCache.set(cacheKey, val);
+            return val;
         }
 
-        // D. Fiat - Try CBR
-        const cbrRes = await fetch(`/api/cbr/history?date_req=${dCbr}`).then(r => r.json()).catch(() => null);
+        // D. Fiat - Try CBR (handle weekends by searching history back)
+        const cbrRes = await fetch(`/api/cbr/history?date_req=${cbrDate}`).then(r => r.json()).catch(() => null);
         const valutes = cbrRes?.ValCurs?.Valute;
         if (valutes) {
             const v = valutes.find((i: any) => i.CharCode[0] === code);
@@ -325,27 +355,32 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
             if (v && u) {
                 const rV = parseFloat(v.Value[0].replace(',', '.')) / parseInt(v.Nominal[0], 10);
                 const rU = parseFloat(u.Value[0].replace(',', '.')) / parseInt(u.Nominal[0], 10);
-                return rV / rU;
+                const val = rV / rU;
+                historicalCache.set(cacheKey, val);
+                return val;
             }
         }
 
-        // E. Fiat - Try Fixer (Last fallback)
-        const fData = await fixerApiFetch(formattedDate, { symbols: `${code},USD` }).catch(() => null);
+        // E. Fiat - Try Fixer
+        const fData = await fixerApiFetch(fDate, { symbols: `${code},USD` }).catch(() => null);
         if (fData?.success && fData.rates[code] && fData.rates['USD']) {
-            return fData.rates[code] / fData.rates['USD'];
+            const val = fData.rates[code] / fData.rates['USD'];
+            historicalCache.set(cacheKey, val);
+            return val;
         }
 
         return undefined;
     };
 
-    const f = await getValVsUsd(from);
-    const t = await getValVsUsd(to);
+    const f = await getValVsUsd(from, date);
+    const t = await getValVsUsd(to, date);
+    
     return (f !== undefined && t !== undefined && t !== 0) ? f / t : undefined;
 }
 
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
-    const days = Math.min(differenceInDays(endDate, startDate) + 1, 30);
-    const promises = Array.from({ length: days }).map((_, i) => getHistoricalRate(from, to, addDays(startDate, i)));
+    const daysCount = Math.min(differenceInDays(endDate, startDate) + 1, 31);
+    const promises = Array.from({ length: daysCount }).map((_, i) => getHistoricalRate(from, to, addDays(startDate, i)));
     const results = await Promise.all(promises);
     return results.map((r, i) => r !== undefined ? { date: format(addDays(startDate, i), 'dd.MM'), rate: r } : null).filter((i): i is any => i !== null);
 }
