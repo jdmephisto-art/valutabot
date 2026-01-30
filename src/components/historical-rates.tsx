@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -166,10 +165,17 @@ export function HistoricalRates() {
             {dynamicsData.length > 0 && (
                 <div className="h-[250px] w-full pt-4">
                     <ChartContainer config={chartConfig}>
-                        <AreaChart data={dynamicsData} margin={{ left: 30, right: 10, top: 10, bottom: 0 }}>
+                        <AreaChart data={dynamicsData} margin={{ left: 45, right: 10, top: 10, bottom: 0 }}>
                             <CartesianGrid vertical={false} />
                             <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} />
-                            <YAxis tickLine={false} axisLine={false} tickMargin={8} tickFormatter={(val) => val > 10 ? val.toFixed(2) : val.toFixed(4)} width={45} />
+                            <YAxis 
+                                tickLine={false} 
+                                axisLine={false} 
+                                tickMargin={8} 
+                                tickFormatter={(val) => val > 10 ? val.toFixed(2) : val.toFixed(4)} 
+                                width={60}
+                                domain={['auto', 'auto']}
+                            />
                             <ChartTooltip content={<ChartTooltipContent />} />
                             <Area dataKey="rate" type="natural" fill="var(--color-rate)" stroke="var(--color-rate)" fillOpacity={0.4} />
                         </AreaChart>

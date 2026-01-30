@@ -198,7 +198,6 @@ function getRateVsUsd(code: string): number | undefined {
     if (coinlayerRatesCache[code]) return coinlayerRatesCache[code];
 
     const ds = getDataSource();
-    // Мы всегда проверяем все кэши, чтобы конвертация работала независимо от выбранного источника
     if (nbrbRatesCache[code] && nbrbRatesCache['USD']) {
         const rate = nbrbRatesCache[code].rate / nbrbRatesCache[code].scale;
         const usd = nbrbRatesCache['USD'].rate / nbrbRatesCache['USD'].scale;
@@ -259,7 +258,6 @@ export async function getCurrencies(): Promise<Currency[]> {
     const combined = [...apiList, ...nbrbList];
     const unique = Array.from(new Map(combined.map(c => [c.code, c])).values());
 
-    // Force add critical codes if missing
     const criticalCodes = ['BTC', 'ETH', 'XAU', 'XAG', 'XPT', 'XPD', 'USD', 'EUR', 'RUB', 'BYN'];
     criticalCodes.forEach(code => {
         if (!unique.find(c => c.code === code)) {
@@ -281,17 +279,24 @@ export async function getLatestRates(pairs: string[]): Promise<ExchangeRate[]> {
 
 export async function findRateAsync(from: string, to: string): Promise<number | undefined> {
     await preFetchInitialRates();
-    return findRate(from, to);
+    let rate = findRate(from, to);
+    
+    // Если курс не найден (особенно для металлов), пробуем дождаться альтернативных источников
+    if (rate === undefined) {
+        if (cryptoCodes.includes(from) || cryptoCodes.includes(to)) {
+            await Promise.all([_updateCurrencyApiRatesCache(), _updateFixerRatesCache(), _updateCoinlayerRatesCache()]);
+            rate = findRate(from, to);
+        }
+    }
+    return rate;
 }
 
 export async function getHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
     if (from === to) return 1;
     const ds = getDataSource();
 
-    // NBRB History
     if (ds === 'nbrb') {
         const formattedDate = format(date, 'yyyy-M-d');
-        // Используем parammode=2, чтобы искать по буквенному коду
         const [fromData, toData] = await Promise.all([
             from === 'BYN' ? { Cur_OfficialRate: 1, Cur_Scale: 1 } : nbrbApiFetch(`rates/${from}?onDate=${formattedDate}&parammode=2`),
             to === 'BYN' ? { Cur_OfficialRate: 1, Cur_Scale: 1 } : nbrbApiFetch(`rates/${to}?onDate=${formattedDate}&parammode=2`)
@@ -301,7 +306,6 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
         }
     }
 
-    // CBR History
     if (ds === 'cbr') {
         const formattedDate = format(date, 'dd/MM/yyyy');
         try {
@@ -325,7 +329,6 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
         }
     }
 
-    // Fallback to CurrencyAPI
     const formattedDate = format(date, 'yyyy-MM-dd');
     const data = await currencyApiNetFetch('history', { base: 'USD', date: formattedDate });
     if (data?.rates) {
@@ -339,16 +342,12 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
 
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
     const days = differenceInDays(endDate, startDate) + 1;
-    // Ограничиваем количество дней, чтобы не перегружать API
     const safeDays = Math.min(days, 60); 
     const promises = Array.from({ length: safeDays }).map((_, i) => getHistoricalRate(from, to, addDays(startDate, i)));
     const results = await Promise.all(promises);
     return results.map((r, i) => r !== undefined ? { date: format(addDays(startDate, i), 'dd.MM'), rate: r } : null).filter((i): i is any => i !== null);
 }
 
-/**
- * Оптимизированная загрузка: запускает все обновления, но ожидает только текущий источник.
- */
 export async function preFetchInitialRates() {
     const nbrbPromise = _updateNbrbRatesCache();
     const currencyApiPromise = _updateCurrencyApiRatesCache();
@@ -356,12 +355,10 @@ export async function preFetchInitialRates() {
     const fixerPromise = _updateFixerRatesCache();
     const coinlayerPromise = _updateCoinlayerRatesCache();
 
-    // Мы дожидаемся только того источника, который сейчас активен
     const ds = getDataSource();
     if (ds === 'nbrb') await nbrbPromise;
     else if (ds === 'cbr') await cbrPromise;
     else await currencyApiPromise;
 
-    // Крипта всегда важна, поэтому дождемся и её (она обычно быстрая)
-    await coinlayerPromise;
+    await Promise.all([coinlayerPromise, fixerPromise]);
 }
