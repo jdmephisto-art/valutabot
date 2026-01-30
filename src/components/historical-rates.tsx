@@ -10,8 +10,8 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { getDynamicsForPeriod, getHistoricalRate, getDataSource, cryptoCodes } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
-import { format, subDays, differenceInDays, addDays } from 'date-fns';
-import { CalendarIcon, TrendingDown, TrendingUp, Info } from 'lucide-react';
+import { format, subDays } from 'date-fns';
+import { CalendarIcon, TrendingDown, TrendingUp } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useToast } from '@/hooks/use-toast';
@@ -115,11 +115,6 @@ export function HistoricalRates() {
     return disabled;
   }
 
-  // Check if both currencies are fiat when datasource is currencyapi
-  const isFiatHistoryUnavailable = dataSource === 'currencyapi' && 
-                                   !cryptoCodes.includes(fromCurrency) && 
-                                   !cryptoCodes.includes(toCurrency);
-
   const chartConfig = { rate: { label: 'Rate', color: 'hsl(var(--primary))' } };
 
   return (
@@ -129,12 +124,6 @@ export function HistoricalRates() {
         <CardDescription>{t('history.description', { source: dataSource.toUpperCase() })}</CardDescription>
       </CardHeader>
       <CardContent>
-        {isFiatHistoryUnavailable && (
-            <div className="mb-4 flex flex-col items-center justify-center text-center p-4 bg-muted/50 rounded-lg">
-                <Info className="h-6 w-6 text-muted-foreground mb-2" />
-                <p className="text-xs text-muted-foreground">{t('history.apiPlanErrorDesc')}</p>
-            </div>
-        )}
         <Tabs defaultValue="dynamics" onValueChange={handleTabChange}>
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="dynamics">{t('history.tabDynamics')}</TabsTrigger>
