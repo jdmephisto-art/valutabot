@@ -29,15 +29,14 @@ export async function GET(request: NextRequest) {
 
     const jsonData = await parseStringPromise(xmlText);
     
-    // Если запрошен диапазон для истории
     if (dateFrom && dateTo) {
         return NextResponse.json(jsonData);
     }
 
-    // Если запрошены текущие курсы (берем самые свежие)
     const rates: Record<string, number> = {};
     if (jsonData?.Metall?.Record) {
-        const sortedRecords = [...jsonData.Metall.Record].sort((a: any, b: any) => {
+        const records = Array.isArray(jsonData.Metall.Record) ? jsonData.Metall.Record : [jsonData.Metall.Record];
+        const sortedRecords = [...records].sort((a: any, b: any) => {
             const dateA = a.$.Date.split('.').reverse().join('');
             const dateB = b.$.Date.split('.').reverse().join('');
             return dateA.localeCompare(dateB);
@@ -45,8 +44,10 @@ export async function GET(request: NextRequest) {
 
         sortedRecords.forEach((rec: any) => {
             const code = rec.$.Code;
-            const price = parseFloat(rec.Buy[0].replace(',', '.'));
-            rates[code] = price; // Цена в рублях за грамм
+            if (rec.Buy && rec.Buy[0]) {
+                const price = parseFloat(rec.Buy[0].replace(',', '.'));
+                rates[code] = price;
+            }
         });
     }
     

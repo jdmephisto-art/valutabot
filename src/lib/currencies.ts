@@ -109,12 +109,18 @@ function _updateNbrbRatesCache(): Promise<void> {
     nbrbUpdatePromise = (async () => {
         try {
             const data = await nbrbApiFetch('rates?periodicity=0');
-            if (data) {
+            if (data && Array.isArray(data)) {
                 const temp: any = {};
-                data.forEach((r: any) => temp[r.Cur_Abbreviation] = { rate: r.Cur_OfficialRate, scale: r.Cur_Scale });
+                data.forEach((r: any) => {
+                    if (r.Cur_Abbreviation) {
+                        temp[r.Cur_Abbreviation] = { rate: r.Cur_OfficialRate, scale: r.Cur_Scale };
+                    }
+                });
                 nbrbRatesCache = temp;
                 nbrbRatesTimestamp = Date.now();
             }
+        } catch (e) {
+            console.error("Failed to update NBRB cache", e);
         } finally {
             nbrbUpdatePromise = null;
         }
@@ -133,6 +139,8 @@ function _updateCurrencyApiRatesCache(): Promise<void> {
                 currencyApiRatesCache['USD'] = 1;
                 currencyApiRatesTimestamp = Date.now();
             }
+        } catch (e) {
+            console.error("Failed to update CurrencyAPI cache", e);
         } finally {
             currencyApiUpdatePromise = null;
         }
@@ -150,6 +158,8 @@ function _updateCbrRatesCache(): Promise<void> {
                 cbrRatesCache = data;
                 cbrRatesTimestamp = Date.now();
             }
+        } catch (e) {
+            console.error("Failed to update CBR cache", e);
         } finally {
             cbrUpdatePromise = null;
         }
@@ -168,6 +178,8 @@ function _updateCbrMetalsCache(): Promise<void> {
                 cbrMetalsCache = data;
                 cbrMetalsTimestamp = Date.now();
             }
+        } catch (e) {
+            console.error("Failed to update CBR Metals cache", e);
         } finally {
             cbrMetalsUpdatePromise = null;
         }
@@ -185,6 +197,8 @@ function _updateFixerRatesCache(): Promise<void> {
                 fixerRatesCache = data.rates;
                 fixerRatesTimestamp = Date.now();
             }
+        } catch (e) {
+            console.error("Failed to update Fixer cache", e);
         } finally {
             fixerUpdatePromise = null;
         }
@@ -202,6 +216,8 @@ function _updateCoinlayerRatesCache(): Promise<void> {
                 coinlayerRatesCache = data.rates;
                 coinlayerRatesTimestamp = Date.now();
             }
+        } catch (e) {
+            console.error("Failed to update Coinlayer cache", e);
         } finally {
             coinlayerUpdatePromise = null;
         }
@@ -227,10 +243,14 @@ function getRateVsUsd(code: string): number | undefined {
 
     // 3. Main Sources
     if (nbrbRatesCache[code] && nbrbRatesCache['USD']) {
-        return (nbrbRatesCache[code].rate / nbrbRatesCache[code].scale) / (nbrbRatesCache['USD'].rate / nbrbRatesCache['USD'].scale);
+        const val = (nbrbRatesCache[code].rate / nbrbRatesCache[code].scale) / (nbrbRatesCache['USD'].rate / nbrbRatesCache['USD'].scale);
+        if (metalCodes.includes(code)) return val * 31.1035;
+        return val;
     }
     if (cbrRatesCache?.Valute?.[code] && cbrRatesCache?.Valute?.['USD']) {
-        return (cbrRatesCache.Valute[code].Value / cbrRatesCache.Valute[code].Nominal) / (cbrRatesCache.Valute['USD'].Value / cbrRatesCache.Valute['USD'].Nominal);
+        const val = (cbrRatesCache.Valute[code].Value / cbrRatesCache.Valute[code].Nominal) / (cbrRatesCache.Valute['USD'].Value / cbrRatesCache.Valute['USD'].Nominal);
+        if (metalCodes.includes(code)) return val * 31.1035;
+        return val;
     }
     if (currencyApiRatesCache[code]) return 1 / currencyApiRatesCache[code];
     if (fixerRatesCache[code] && fixerRatesCache['USD']) return fixerRatesCache['USD'] / fixerRatesCache[code];
@@ -310,8 +330,11 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
             let rubG: string | undefined;
             if (mRes?.Metall?.Record) {
                 const records = Array.isArray(mRes.Metall.Record) ? mRes.Metall.Record : [mRes.Metall.Record];
-                const targetRecord = records.filter((r: any) => r.$.Code === mCode).sort((a: any, b: any) => b.$.Date.localeCompare(a.$.Date))[0];
-                rubG = targetRecord?.Buy[0].replace(',', '.');
+                const parseDateStr = (d: string) => d.split('.').reverse().join('');
+                const targetRecord = records
+                    .filter((r: any) => r.$.Code === mCode)
+                    .sort((a: any, b: any) => parseDateStr(b.$.Date).localeCompare(parseDateStr(a.$.Date)))[0];
+                rubG = targetRecord?.Buy?.[0]?.replace(',', '.');
             }
             const uVal = uRes?.ValCurs?.Valute?.find((v: any) => v.CharCode[0] === 'USD');
             if (rubG && uVal) {
@@ -358,7 +381,6 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
     const daysCount = Math.min(differenceInDays(endDate, startDate) + 1, 31);
     const results: { date: string; rate: number }[] = [];
     
-    // Sequential fetching to avoid API rate limiting
     for (let i = 0; i < daysCount; i++) {
         const d = addDays(startDate, i);
         const r = await getHistoricalRate(from, to, d);
@@ -371,7 +393,6 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
 
 export async function preFetchInitialRates() {
     const ds = getDataSource();
-    // Always fetch coinlayer, fixer and CBR metals/rates as they are critical for assets/crypto conversion
     const tasks = [
         _updateCoinlayerRatesCache(), 
         _updateFixerRatesCache(), 
