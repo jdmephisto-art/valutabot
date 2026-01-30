@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
-import { getDynamicsForPeriod, getHistoricalRate, getDataSource } from '@/lib/currencies';
+import { getDynamicsForPeriod, getHistoricalRate, getDataSource, cryptoCodes } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
 import { format, subDays, differenceInDays, addDays } from 'date-fns';
 import { CalendarIcon, TrendingDown, TrendingUp, Info } from 'lucide-react';
@@ -50,6 +50,12 @@ export function HistoricalRates() {
         setDynamicsData([]);
         const data = await getDynamicsForPeriod(fromCurrency, toCurrency, dynamicsRange.from, dynamicsRange.to);
         setDynamicsData(data);
+        if (data.length === 0) {
+            toast({
+                variant: 'destructive',
+                title: t('history.noDynamics'),
+            });
+        }
         setFetchingDynamics(false);
     }
   };
@@ -60,6 +66,12 @@ export function HistoricalRates() {
       setSingleRate(undefined);
       const rate = await getHistoricalRate(fromCurrency, toCurrency, date);
       setSingleRate(rate === undefined ? null : rate);
+      if (rate === undefined) {
+          toast({
+              variant: 'destructive',
+              title: t('history.noRate'),
+          });
+      }
       setFetchingSingle(false);
     }
   };
@@ -74,6 +86,10 @@ export function HistoricalRates() {
         setRangeResult({ startRate, endRate });
       } else {
         setRangeResult(null);
+        toast({
+            variant: 'destructive',
+            title: t('history.noRate'),
+        });
       }
       setFetchingRange(false);
     }
@@ -99,22 +115,10 @@ export function HistoricalRates() {
     return disabled;
   }
 
-  if (dataSource === 'currencyapi') {
-      return (
-          <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
-              <CardHeader>
-                  <CardTitle className="text-lg font-semibold">{t('history.title')}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                  <div className="flex flex-col items-center justify-center text-center p-4 bg-muted/50 rounded-lg">
-                      <Info className="h-10 w-10 text-muted-foreground mb-4" />
-                      <h3 className="font-semibold mb-2">{t('history.apiPlanErrorTitle')}</h3>
-                      <p className="text-sm text-muted-foreground">{t('history.apiPlanErrorDesc')}</p>
-                  </div>
-              </CardContent>
-          </Card>
-      );
-  }
+  // Check if both currencies are fiat when datasource is currencyapi
+  const isFiatHistoryUnavailable = dataSource === 'currencyapi' && 
+                                   !cryptoCodes.includes(fromCurrency) && 
+                                   !cryptoCodes.includes(toCurrency);
 
   const chartConfig = { rate: { label: 'Rate', color: 'hsl(var(--primary))' } };
 
@@ -122,9 +126,15 @@ export function HistoricalRates() {
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
       <CardHeader>
         <CardTitle className="text-lg font-semibold">{t('history.title')}</CardTitle>
-        <CardDescription>{t('history.description', { source: getDataSource().toUpperCase() })}</CardDescription>
+        <CardDescription>{t('history.description', { source: dataSource.toUpperCase() })}</CardDescription>
       </CardHeader>
       <CardContent>
+        {isFiatHistoryUnavailable && (
+            <div className="mb-4 flex flex-col items-center justify-center text-center p-4 bg-muted/50 rounded-lg">
+                <Info className="h-6 w-6 text-muted-foreground mb-2" />
+                <p className="text-xs text-muted-foreground">{t('history.apiPlanErrorDesc')}</p>
+            </div>
+        )}
         <Tabs defaultValue="dynamics" onValueChange={handleTabChange}>
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="dynamics">{t('history.tabDynamics')}</TabsTrigger>
@@ -140,9 +150,9 @@ export function HistoricalRates() {
             <div className="grid grid-cols-2 gap-2">
                 <Popover open={dynamicsStartPopoverOpen} onOpenChange={setDynamicsStartPopoverOpen}>
                     <PopoverTrigger asChild>
-                        <Button variant={"outline"} className="w-full justify-start text-left font-normal">
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {dynamicsRange?.from ? format(dynamicsRange.from, "LLL dd, y", { locale: dateLocale }) : t('history.startDate')}
+                        <Button variant={"outline"} className="w-full justify-start text-left font-normal px-2">
+                            <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                            <span className="truncate">{dynamicsRange?.from ? format(dynamicsRange.from, "MMM dd, yy", { locale: dateLocale }) : t('history.startDate')}</span>
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
@@ -151,9 +161,9 @@ export function HistoricalRates() {
                 </Popover>
                 <Popover open={dynamicsEndPopoverOpen} onOpenChange={setDynamicsEndPopoverOpen}>
                     <PopoverTrigger asChild>
-                        <Button variant={"outline"} className="w-full justify-start text-left font-normal">
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {dynamicsRange?.to ? format(dynamicsRange.to, "LLL dd, y", { locale: dateLocale }) : t('history.endDate')}
+                        <Button variant={"outline"} className="w-full justify-start text-left font-normal px-2">
+                            <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                            <span className="truncate">{dynamicsRange?.to ? format(dynamicsRange.to, "MMM dd, yy", { locale: dateLocale }) : t('history.endDate')}</span>
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
@@ -217,9 +227,9 @@ export function HistoricalRates() {
              <div className="grid grid-cols-2 gap-2">
                 <Popover open={rangeStartPopoverOpen} onOpenChange={setRangeStartPopoverOpen}>
                     <PopoverTrigger asChild>
-                        <Button variant={"outline"} className="w-full justify-start text-left font-normal">
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {range?.from ? format(range.from, "LLL dd, y", { locale: dateLocale }) : t('history.startDate')}
+                        <Button variant={"outline"} className="w-full justify-start text-left font-normal px-2">
+                            <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                            <span className="truncate">{range?.from ? format(range.from, "MMM dd, yy", { locale: dateLocale }) : t('history.startDate')}</span>
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
@@ -228,9 +238,9 @@ export function HistoricalRates() {
                 </Popover>
                 <Popover open={rangeEndPopoverOpen} onOpenChange={setRangeEndPopoverOpen}>
                     <PopoverTrigger asChild>
-                        <Button variant={"outline"} className="w-full justify-start text-left font-normal">
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {range?.to ? format(range.to, "LLL dd, y", { locale: dateLocale }) : t('history.endDate')}
+                        <Button variant={"outline"} className="w-full justify-start text-left font-normal px-2">
+                            <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                            <span className="truncate">{range?.to ? format(range.to, "MMM dd, yy", { locale: dateLocale }) : t('history.endDate')}</span>
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
