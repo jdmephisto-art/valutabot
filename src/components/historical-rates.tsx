@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -11,7 +11,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { getDynamicsForPeriod, getHistoricalRate, getDataSource } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
-import { format, subDays, differenceInDays, addDays, startOfDay, parseISO } from 'date-fns';
+import { format, subDays, differenceInDays, addDays } from 'date-fns';
 import { CalendarIcon, TrendingDown, TrendingUp, Info } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import { useCurrencies } from '@/hooks/use-currencies';
@@ -19,36 +19,31 @@ import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/hooks/use-translation';
 import { CurrencyCombobox } from './currency-combobox';
 
-
 export function HistoricalRates() {
   const dataSource = getDataSource();
   const { currencies } = useCurrencies();
   const { toast } = useToast();
-  const { t, lang, dateLocale } = useTranslation();
+  const { t, dateLocale } = useTranslation();
   const [fromCurrency, setFromCurrency] = useState('USD');
   const [toCurrency, setToCurrency] = useState('EUR');
   const [activeTab, setActiveTab] = useState('dynamics');
 
-  // State for single date
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [singleRate, setSingleRate] = useState<number | null | undefined>(undefined);
   const [fetchingSingle, setFetchingSingle] = useState(false);
   const [singleDatePopoverOpen, setSingleDatePopoverOpen] = useState(false);
 
-  // State for date range
   const [range, setRange] = useState<DateRange | undefined>();
   const [rangeResult, setRangeResult] = useState<{ startRate: number; endRate: number } | null | undefined>(undefined);
   const [fetchingRange, setFetchingRange] = useState(false);
   const [rangeStartPopoverOpen, setRangeStartPopoverOpen] = useState(false);
   const [rangeEndPopoverOpen, setRangeEndPopoverOpen] = useState(false);
 
-  // State for historical dynamics
   const [dynamicsRange, setDynamicsRange] = useState<DateRange | undefined>({ from: subDays(new Date(), 29), to: new Date() });
   const [dynamicsData, setDynamicsData] = useState<any[]>([]);
   const [fetchingDynamics, setFetchingDynamics] = useState(false);
   const [dynamicsStartPopoverOpen, setDynamicsStartPopoverOpen] = useState(false);
   const [dynamicsEndPopoverOpen, setDynamicsEndPopoverOpen] = useState(false);
-
 
   const handleFetchDynamics = async () => {
     if (dynamicsRange?.from && dynamicsRange.to) {
@@ -92,18 +87,6 @@ export function HistoricalRates() {
     setDynamicsData([]);
   }
 
-  const handleDynamicsRangeSelect = (range: DateRange | undefined) => {
-    if (getDataSource() === 'currencyapi' && range?.from && range.to && differenceInDays(range.to, range.from) > 30) {
-        toast({
-            variant: 'destructive',
-            title: t('history.rangeTooLarge'),
-            description: t('history.rangeTooLargeDesc')
-        });
-        return;
-    }
-    setDynamicsRange(range);
-  }
-
   const getCalendarDisabledDates = () => {
     const disabled: { before?: Date, after?: Date } = { after: new Date() };
     const source = getDataSource();
@@ -111,8 +94,7 @@ export function HistoricalRates() {
         disabled.before = new Date('2021-01-01');
     } else if (source === 'cbr') {
         disabled.before = new Date('2002-01-01');
-    } else { // currencyapi
-        // Free plan only supports up to 2 years of historical data.
+    } else {
         disabled.before = subDays(new Date(), (365 * 2) - 1);
     }
     return disabled;
@@ -128,40 +110,14 @@ export function HistoricalRates() {
                   <div className="flex flex-col items-center justify-center text-center p-4 bg-muted/50 rounded-lg">
                       <Info className="h-10 w-10 text-muted-foreground mb-4" />
                       <h3 className="font-semibold mb-2">{t('history.apiPlanErrorTitle')}</h3>
-                      <p className="text-sm text-muted-foreground">
-                          {t('history.apiPlanErrorDesc')}
-                      </p>
+                      <p className="text-sm text-muted-foreground">{t('history.apiPlanErrorDesc')}</p>
                   </div>
               </CardContent>
           </Card>
       );
   }
 
-
-  const renderCurrencySelects = () => (
-    <div className="flex items-center gap-2 mb-4">
-      <div className="flex-1 min-w-0">
-        <CurrencyCombobox
-          value={fromCurrency}
-          onChange={setFromCurrency}
-          placeholder={t('converter.from')}
-          disabled={currencies.length === 0}
-        />
-      </div>
-      <div className="flex-1 min-w-0">
-        <CurrencyCombobox
-          value={toCurrency}
-          onChange={setToCurrency}
-          placeholder={t('converter.to')}
-          disabled={currencies.length === 0}
-        />
-      </div>
-    </div>
-  );
-  
-  const chartConfig = {
-    rate: { label: 'Rate', color: 'hsl(var(--primary))' },
-  };
+  const chartConfig = { rate: { label: 'Rate', color: 'hsl(var(--primary))' } };
 
   return (
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
@@ -178,186 +134,112 @@ export function HistoricalRates() {
           </TabsList>
           
           <TabsContent value="dynamics" className="space-y-4 pt-4">
-            {renderCurrencySelects()}
+            <div className="flex items-center gap-2 mb-4">
+              <div className="flex-1 min-w-0"><CurrencyCombobox value={fromCurrency} onChange={setFromCurrency} /></div>
+              <div className="flex-1 min-w-0"><CurrencyCombobox value={toCurrency} onChange={setToCurrency} /></div>
+            </div>
             <div className="grid grid-cols-2 gap-2">
                 <Popover open={dynamicsStartPopoverOpen} onOpenChange={setDynamicsStartPopoverOpen}>
                     <PopoverTrigger asChild>
-                        <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dynamicsRange?.from && "text-muted-foreground")}>
+                        <Button variant={"outline"} className="w-full justify-start text-left font-normal">
                             <CalendarIcon className="mr-2 h-4 w-4" />
-                            {dynamicsRange?.from ? format(dynamicsRange.from, "LLL dd, y", { locale: dateLocale }) : <span>{t('history.startDate')}</span>}
+                            {dynamicsRange?.from ? format(dynamicsRange.from, "LLL dd, y", { locale: dateLocale }) : t('history.startDate')}
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                            initialFocus
-                            mode="single"
-                            selected={dynamicsRange?.from}
-                            onSelect={(day) => {
-                                handleDynamicsRangeSelect({ ...dynamicsRange, from: day });
-                                setDynamicsStartPopoverOpen(false);
-                            }}
-                            disabled={(date) => (dynamicsRange?.to ? date > dynamicsRange.to : false) || (getCalendarDisabledDates().before ? date < getCalendarDisabledDates().before! : false) || (getCalendarDisabledDates().after ? date > getCalendarDisabledDates().after! : false)}
-                            locale={dateLocale}
-                        />
+                        <Calendar mode="single" selected={dynamicsRange?.from} onSelect={(d) => { setDynamicsRange({ ...dynamicsRange, from: d }); setDynamicsStartPopoverOpen(false); }} disabled={(d) => d > new Date() || (getCalendarDisabledDates().before ? d < getCalendarDisabledDates().before! : false)} locale={dateLocale} />
                     </PopoverContent>
                 </Popover>
                 <Popover open={dynamicsEndPopoverOpen} onOpenChange={setDynamicsEndPopoverOpen}>
                     <PopoverTrigger asChild>
-                        <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dynamicsRange?.to && "text-muted-foreground")}>
+                        <Button variant={"outline"} className="w-full justify-start text-left font-normal">
                             <CalendarIcon className="mr-2 h-4 w-4" />
-                            {dynamicsRange?.to ? format(dynamicsRange.to, "LLL dd, y", { locale: dateLocale }) : <span>{t('history.endDate')}</span>}
+                            {dynamicsRange?.to ? format(dynamicsRange.to, "LLL dd, y", { locale: dateLocale }) : t('history.endDate')}
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                            initialFocus
-                            mode="single"
-                            selected={dynamicsRange?.to}
-                            onSelect={(day) => {
-                                handleDynamicsRangeSelect({ ...dynamicsRange, to: day });
-                                setDynamicsEndPopoverOpen(false);
-                            }}
-                            disabled={(date) => (dynamicsRange?.from ? date < dynamicsRange.from : false) || (getCalendarDisabledDates().before ? date < getCalendarDisabledDates().before! : false) || (getCalendarDisabledDates().after ? date > getCalendarDisabledDates().after! : false)}
-                            locale={dateLocale}
-                        />
+                        <Calendar mode="single" selected={dynamicsRange?.to} onSelect={(d) => { setDynamicsRange({ ...dynamicsRange, to: d }); setDynamicsEndPopoverOpen(false); }} disabled={(d) => d > new Date() || (dynamicsRange?.from ? d < dynamicsRange.from : false)} locale={dateLocale} />
                     </PopoverContent>
                 </Popover>
             </div>
-            <Button onClick={handleFetchDynamics} className="w-full" disabled={fetchingDynamics || !dynamicsRange?.from || !dynamicsRange?.to}>
-                {fetchingDynamics ? t('latestRates.loading') : t('history.showDynamics')}
-            </Button>
+            <Button onClick={handleFetchDynamics} className="w-full" disabled={fetchingDynamics || !dynamicsRange?.from || !dynamicsRange?.to}>{fetchingDynamics ? t('latestRates.loading') : t('history.showDynamics')}</Button>
             {dynamicsData.length > 0 && (
-                <div className="h-[250px] w-full">
-                    <p className="text-xs text-center text-muted-foreground pb-2">{t('history.dynamicsFor', { from: fromCurrency, to: toCurrency })}</p>
+                <div className="h-[250px] w-full pt-4">
                     <ChartContainer config={chartConfig}>
-                        <AreaChart accessibilityLayer data={dynamicsData} margin={{ left: 12, right: 10, top: 10, bottom: 0 }}>
+                        <AreaChart data={dynamicsData} margin={{ left: 30, right: 10, top: 10, bottom: 0 }}>
                             <CartesianGrid vertical={false} />
-                             <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} interval={'preserveStartEnd'} tickFormatter={(value, index) => {
-                                 if (dynamicsData.length > 30) {
-                                     // Show fewer ticks for large ranges
-                                    if (index % Math.floor(dynamicsData.length / 10) === 0) return value;
-                                    return '';
-                                 }
-                                 return value;
-                             }}/>
-                             <YAxis domain={['dataMin - (dataMax - dataMin) * 0.1', 'dataMax + (dataMax - dataMin) * 0.1']} tickLine={false} axisLine={false} tickMargin={8} tickCount={3} tickFormatter={(value) => {
-                                 if (typeof value !== 'number') return '';
-                                 if (value > 10) return parseFloat(value.toFixed(2)).toString();
-                                 return parseFloat(value.toFixed(4)).toString();
-                             }} />
-                            <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
-                            <Area dataKey="rate" type="natural" fill="var(--color-rate)" fillOpacity={0.4} stroke="var(--color-rate)" />
+                            <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} />
+                            <YAxis tickLine={false} axisLine={false} tickMargin={8} tickFormatter={(val) => val > 10 ? val.toFixed(2) : val.toFixed(4)} width={45} />
+                            <ChartTooltip content={<ChartTooltipContent />} />
+                            <Area dataKey="rate" type="natural" fill="var(--color-rate)" stroke="var(--color-rate)" fillOpacity={0.4} />
                         </AreaChart>
                     </ChartContainer>
                 </div>
             )}
-             {!fetchingDynamics && dynamicsData.length === 0 && activeTab === 'dynamics' && <p className="text-xs text-center text-muted-foreground pt-2">{t('history.noDynamics')}</p>}
           </TabsContent>
 
           <TabsContent value="single" className="space-y-4 pt-4">
-            {renderCurrencySelects()}
+             <div className="flex items-center gap-2 mb-4">
+              <div className="flex-1 min-w-0"><CurrencyCombobox value={fromCurrency} onChange={setFromCurrency} /></div>
+              <div className="flex-1 min-w-0"><CurrencyCombobox value={toCurrency} onChange={setToCurrency} /></div>
+            </div>
             <Popover open={singleDatePopoverOpen} onOpenChange={setSingleDatePopoverOpen}>
               <PopoverTrigger asChild>
-                <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
+                <Button variant={"outline"} className="w-full justify-start text-left font-normal">
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {date ? format(date, "PPP", { locale: dateLocale }) : <span>{t('history.selectDate')}</span>}
+                  {date ? format(date, "PPP", { locale: dateLocale }) : t('history.selectDate')}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0">
-                  <Calendar 
-                    mode="single" 
-                    selected={date} 
-                    onSelect={(day) => {
-                        setDate(day);
-                        setSingleDatePopoverOpen(false);
-                    }} 
-                    initialFocus 
-                    disabled={getCalendarDisabledDates()} 
-                    locale={dateLocale} 
-                 />
+                  <Calendar mode="single" selected={date} onSelect={(d) => { setDate(d); setSingleDatePopoverOpen(false); }} disabled={getCalendarDisabledDates()} locale={dateLocale} />
               </PopoverContent>
             </Popover>
-            <Button onClick={handleFetchSingleRate} className="w-full" disabled={fetchingSingle || !date}>
-                {fetchingSingle ? t('latestRates.loading') : t('history.getRate')}
-            </Button>
-            {singleRate !== null && singleRate !== undefined && (
+            <Button onClick={handleFetchSingleRate} className="w-full" disabled={fetchingSingle || !date}>{fetchingSingle ? t('latestRates.loading') : t('history.getRate')}</Button>
+            {singleRate !== undefined && singleRate !== null && (
               <div className="text-center p-4 bg-muted/50 rounded-lg">
                 <p className="text-sm text-muted-foreground">{t('history.rateOn', { date: date ? format(date, "PPP", { locale: dateLocale }) : '' })}</p>
                 <p className="text-2xl font-bold font-mono">{singleRate.toFixed(4)}</p>
               </div>
             )}
-             {singleRate === null && <p className="text-xs text-center text-muted-foreground pt-2">{t('history.noRate')}</p>}
           </TabsContent>
 
           <TabsContent value="range" className="space-y-4 pt-4">
-             {renderCurrencySelects()}
+             <div className="flex items-center gap-2 mb-4">
+              <div className="flex-1 min-w-0"><CurrencyCombobox value={fromCurrency} onChange={setFromCurrency} /></div>
+              <div className="flex-1 min-w-0"><CurrencyCombobox value={toCurrency} onChange={setToCurrency} /></div>
+            </div>
              <div className="grid grid-cols-2 gap-2">
                 <Popover open={rangeStartPopoverOpen} onOpenChange={setRangeStartPopoverOpen}>
                     <PopoverTrigger asChild>
-                        <Button id="start-date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !range?.from && "text-muted-foreground")}>
+                        <Button variant={"outline"} className="w-full justify-start text-left font-normal">
                             <CalendarIcon className="mr-2 h-4 w-4" />
-                            {range?.from ? format(range.from, "LLL dd, y", { locale: dateLocale }) : <span>{t('history.startDate')}</span>}
+                            {range?.from ? format(range.from, "LLL dd, y", { locale: dateLocale }) : t('history.startDate')}
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar 
-                            initialFocus 
-                            mode="single" 
-                            selected={range?.from} 
-                            onSelect={(day) => {
-                                setRange(prev => ({ ...prev, from: day }));
-                                setRangeStartPopoverOpen(false);
-                            }}
-                            disabled={(date) => (range?.to ? date > range.to : false) || (getCalendarDisabledDates().before ? date < getCalendarDisabledDates().before! : false) || (getCalendarDisabledDates().after ? date > getCalendarDisabledDates().after! : false)}
-                            locale={dateLocale}
-                        />
+                        <Calendar mode="single" selected={range?.from} onSelect={(d) => { setRange({ ...range, from: d }); setRangeStartPopoverOpen(false); }} disabled={getCalendarDisabledDates()} locale={dateLocale} />
                     </PopoverContent>
                 </Popover>
-                 <Popover open={rangeEndPopoverOpen} onOpenChange={setRangeEndPopoverOpen}>
+                <Popover open={rangeEndPopoverOpen} onOpenChange={setRangeEndPopoverOpen}>
                     <PopoverTrigger asChild>
-                        <Button id="end-date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !range?.to && "text-muted-foreground")}>
+                        <Button variant={"outline"} className="w-full justify-start text-left font-normal">
                             <CalendarIcon className="mr-2 h-4 w-4" />
-                            {range?.to ? format(range.to, "LLL dd, y", { locale: dateLocale }) : <span>{t('history.endDate')}</span>}
+                            {range?.to ? format(range.to, "LLL dd, y", { locale: dateLocale }) : t('history.endDate')}
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar 
-                            initialFocus 
-                            mode="single" 
-                            selected={range?.to} 
-                            onSelect={(day) => {
-                                setRange(prev => ({ ...prev, to: day }));
-                                setRangeEndPopoverOpen(false);
-                            }}
-                            disabled={(date) => (range?.from ? date < range.from : false) || (getCalendarDisabledDates().before ? date < getCalendarDisabledDates().before! : false) || (getCalendarDisabledDates().after ? date > getCalendarDisabledDates().after! : false)}
-                            locale={dateLocale}
-                        />
+                        <Calendar mode="single" selected={range?.to} onSelect={(d) => { setRange({ ...range, to: d }); setRangeEndPopoverOpen(false); }} disabled={(d) => d > new Date() || (range?.from ? d < range.from : false)} locale={dateLocale} />
                     </PopoverContent>
                 </Popover>
              </div>
-             <Button onClick={handleFetchRangeRate} className="w-full" disabled={fetchingRange || !range?.from || !range?.to}>
-                {fetchingRange ? t('latestRates.loading') : t('history.compareRates')}
-            </Button>
+             <Button onClick={handleFetchRangeRate} className="w-full" disabled={fetchingRange || !range?.from || !range?.to}>{fetchingRange ? t('latestRates.loading') : t('history.compareRates')}</Button>
              {rangeResult && (
                 <div className="p-4 bg-muted/50 rounded-lg space-y-2">
-                    <div className="flex justify-between items-center">
-                        <span className="text-sm text-muted-foreground">{t('history.start', { date: range?.from ? format(range.from, "LLL dd", { locale: dateLocale }) : '' })}</span>
-                        <span className="font-mono font-medium">{rangeResult.startRate.toFixed(4)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-sm text-muted-foreground">{t('history.end', { date: range?.to ? format(range.to, "LLL dd", { locale: dateLocale }) : '' })}</span>
-                        <span className="font-mono font-medium">{rangeResult.endRate.toFixed(4)}</span>
-                    </div>
-                    <div className="flex justify-between items-center pt-2 border-t">
-                        <span className="text-sm font-semibold">{t('history.change')}</span>
-                        <span className={cn("font-semibold flex items-center gap-1", rangeResult.endRate >= rangeResult.startRate ? 'text-positive' : 'text-negative')}>
-                            {rangeResult.endRate >= rangeResult.startRate ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
-                            {(((rangeResult.endRate - rangeResult.startRate) / rangeResult.startRate) * 100).toFixed(2)}%
-                        </span>
-                    </div>
+                    <div className="flex justify-between items-center"><span className="text-sm text-muted-foreground">{t('history.start', { date: range?.from ? format(range.from, "LLL dd", { locale: dateLocale }) : '' })}</span><span className="font-mono font-medium">{rangeResult.startRate.toFixed(4)}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-sm text-muted-foreground">{t('history.end', { date: range?.to ? format(range.to, "LLL dd", { locale: dateLocale }) : '' })}</span><span className="font-mono font-medium">{rangeResult.endRate.toFixed(4)}</span></div>
+                    <div className="flex justify-between items-center pt-2 border-t"><span className="text-sm font-semibold">{t('history.change')}</span><span className={cn("font-semibold flex items-center gap-1", rangeResult.endRate >= rangeResult.startRate ? 'text-positive' : 'text-negative')}>{rangeResult.endRate >= rangeResult.startRate ? <TrendingUp size={16} /> : <TrendingDown size={16} />}{(((rangeResult.endRate - rangeResult.startRate) / rangeResult.startRate) * 100).toFixed(2)}%</span></div>
                 </div>
              )}
-             {rangeResult === null && <p className="text-xs text-center text-muted-foreground pt-2">{t('history.noRate')}</p>}
           </TabsContent>
         </Tabs>
       </CardContent>
