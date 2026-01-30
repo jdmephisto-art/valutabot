@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
-import { getDynamicsForPeriod, getHistoricalRate, getDataSource, cryptoCodes } from '@/lib/currencies';
+import { getDynamicsForPeriod, getHistoricalRate, getDataSource } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
 import { format, subDays } from 'date-fns';
 import { CalendarIcon, TrendingDown, TrendingUp } from 'lucide-react';
