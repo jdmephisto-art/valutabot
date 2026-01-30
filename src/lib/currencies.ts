@@ -23,6 +23,9 @@ let currencyApiRatesTimestamp = 0;
 let cbrRatesCache: any | null = null;
 let cbrRatesTimestamp = 0;
 
+let cbrMetalsCache: Record<string, number> = {};
+let cbrMetalsTimestamp = 0;
+
 let fixerRatesCache: { [key: string]: number } = {};
 let fixerRatesTimestamp = 0;
 
@@ -33,6 +36,7 @@ let coinlayerRatesTimestamp = 0;
 let nbrbUpdatePromise: Promise<void> | null = null;
 let currencyApiUpdatePromise: Promise<void> | null = null;
 let cbrUpdatePromise: Promise<void> | null = null;
+let cbrMetalsUpdatePromise: Promise<void> | null = null;
 let fixerUpdatePromise: Promise<void> | null = null;
 let coinlayerUpdatePromise: Promise<void> | null = null;
 
@@ -159,6 +163,24 @@ function _updateCbrRatesCache(): Promise<void> {
     return cbrUpdatePromise;
 }
 
+function _updateCbrMetalsCache(): Promise<void> {
+    if (isCacheValid(cbrMetalsTimestamp, CACHE_TTL_RATES) && Object.keys(cbrMetalsCache).length > 0) return Promise.resolve();
+    if (cbrMetalsUpdatePromise) return cbrMetalsUpdatePromise;
+    cbrMetalsUpdatePromise = (async () => {
+        try {
+            const response = await fetch('/api/cbr/metals');
+            if (response.ok) {
+                const data = await response.json();
+                cbrMetalsCache = data;
+                cbrMetalsTimestamp = Date.now();
+            }
+        } finally {
+            cbrMetalsUpdatePromise = null;
+        }
+    })();
+    return cbrMetalsUpdatePromise;
+}
+
 function _updateFixerRatesCache(): Promise<void> {
     if (isCacheValid(fixerRatesTimestamp, CACHE_TTL_RATES) && Object.keys(fixerRatesCache).length > 0) return Promise.resolve();
     if (fixerUpdatePromise) return fixerUpdatePromise;
@@ -195,9 +217,22 @@ function _updateCoinlayerRatesCache(): Promise<void> {
 
 function getRateVsUsd(code: string): number | undefined {
     if (code === 'USD') return 1;
+
+    // Check Coinlayer (Crypto)
     if (coinlayerRatesCache[code]) return coinlayerRatesCache[code];
 
-    const ds = getDataSource();
+    // Check CBR Metals (XAU, XAG, XPT, XPD)
+    const metalCodeMap: Record<string, string> = { 'XAU': '1', 'XAG': '2', 'XPT': '3', 'XPD': '4' };
+    if (metalCodeMap[code] && cbrMetalsCache[metalCodeMap[code]]) {
+        const rubPerGram = cbrMetalsCache[metalCodeMap[code]];
+        if (cbrRatesCache?.Valute?.['USD']) {
+            const rubPerUsd = cbrRatesCache.Valute['USD'].Value / cbrRatesCache.Valute['USD'].Nominal;
+            // 1 Troy Ounce = 31.1035 grams. Result is USD per Ounce.
+            return (rubPerGram * 31.1035) / rubPerUsd;
+        }
+    }
+
+    // Standard Currencies
     if (nbrbRatesCache[code] && nbrbRatesCache['USD']) {
         const rate = nbrbRatesCache[code].rate / nbrbRatesCache[code].scale;
         const usd = nbrbRatesCache['USD'].rate / nbrbRatesCache['USD'].scale;
@@ -281,11 +316,16 @@ export async function findRateAsync(from: string, to: string): Promise<number | 
     await preFetchInitialRates();
     let rate = findRate(from, to);
     
-    // Если курс не найден (особенно для металлов), пробуем дождаться альтернативных источников
     if (rate === undefined) {
         if (cryptoCodes.includes(from) || cryptoCodes.includes(to)) {
-            await Promise.all([_updateCurrencyApiRatesCache(), _updateFixerRatesCache(), _updateCoinlayerRatesCache()]);
-            rate = findRate(from, to);
+             await Promise.all([
+                 _updateCurrencyApiRatesCache(), 
+                 _updateFixerRatesCache(), 
+                 _updateCoinlayerRatesCache(),
+                 _updateCbrMetalsCache(),
+                 _updateCbrRatesCache()
+             ]);
+             rate = findRate(from, to);
         }
     }
     return rate;
@@ -352,12 +392,13 @@ export async function preFetchInitialRates() {
     const nbrbPromise = _updateNbrbRatesCache();
     const currencyApiPromise = _updateCurrencyApiRatesCache();
     const cbrPromise = _updateCbrRatesCache();
+    const cbrMetalsPromise = _updateCbrMetalsCache();
     const fixerPromise = _updateFixerRatesCache();
     const coinlayerPromise = _updateCoinlayerRatesCache();
 
     const ds = getDataSource();
     if (ds === 'nbrb') await nbrbPromise;
-    else if (ds === 'cbr') await cbrPromise;
+    else if (ds === 'cbr') await Promise.all([cbrPromise, cbrMetalsPromise]);
     else await currencyApiPromise;
 
     await Promise.all([coinlayerPromise, fixerPromise]);
