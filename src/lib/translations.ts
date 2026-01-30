@@ -390,7 +390,8 @@ const enCurrencyNames = {
   "VEF": "Venezuelan Bolívar Fuerte (Old)", "VES": "Venezuelan Bolívar Soberano",
   "VND": "Vietnamese Dong", "VUV": "Vanuatu Vatu", "WST": "Samoan Tala",
   "XAF": "CFA Franc BEAC", "XAG": "Silver Ounce", "XAU": "Gold Ounce",
-  "XCD": "East Caribbean Dollar", "XDR": "Special Drawing Rights", "XOF": "CFA Franc BCEAO",
+  "XPT": "Platinum Ounce", "XPD": "Palladium Ounce", "XCD": "East Caribbean Dollar",
+  "XDR": "Special Drawing Rights", "XOF": "CFA Franc BCEAO",
   "XPD": "Palladium Ounce", "XPF": "CFP Franc", "XPT": "Platinum Ounce", "XRP": "Ripple",
   "YER": "Yemeni Rial", "ZAR": "South African Rand", "ZMW": "Zambian Kwacha",
   "ZWL": "Zimbabwean Dollar",
@@ -443,7 +444,7 @@ const ruCurrencyNames = {
   "SHP": "Фунт острова Святой Елены", "SLL": "Сьерра-леонский леоне", "SOS": "Сомалийский шиллинг",
   "SRD": "Суринамский доллар", "SSP": "Южносуданский фунт", "STD": "Добра Сан-Томе и Принсипи (до 2018)",
   "STN": "Добра Сан-Томе и Принсипи", "SVC": "Сальвадорский колон", "SYP": "Сирийский фунт",
-  "SZL": "Свазилендский лилангени", "THB": "Таиландский бат", "TJS": "Таджикский сомони",
+  "SZL": "Swazi Lilangeni", "THB": "Thai Baht", "TJS": "Tajikistani Somoni",
   "TMT": "Новый туркменский манат", "TND": "Тунисский динар", "TOP": "Тонганская паанга",
   "TRY": "Турецкая лира", "TTD": "Доллар Тринидада и Тобаго", "TWD": "Новый тайваньский доллар",
   "TZS": "Танзанийский шиллинг", "UAH": "Украинская гривна", "UGX": "Угандийский шиллинг",
@@ -451,7 +452,8 @@ const ruCurrencyNames = {
   "VEF": "Венесуэльский боливар фуэрте (старый)", "VES": "Венесуэльский боливар",
   "VND": "Вьетнамский донг", "VUV": "Вату Вануату", "WST": "Самоанская тала",
   "XAF": "Франк КФА BEAC", "XAG": "Серебро (унция)", "XAU": "Золото (унция)",
-  "XCD": "Восточно-карибский доллар", "XDR": "СДР (Специальные права заимствования)", "XOF": "Франк КФА BCEAO",
+  "XPT": "Платина (унция)", "XPD": "Палладий (унция)", "XCD": "Восточно-карибский доллар",
+  "XDR": "СДР (Специальные права заимствования)", "XOF": "Франк КФА BCEAO",
   "XPD": "Палладий (унция)", "XPF": "Франк КФП", "XPT": "Платина (унция)", "XRP": "Риппл",
   "YER": "Йеменский риал", "ZAR": "Южноафриканский рэнд", "ZMW": "Замбийская квача",
   "ZWL": "Зимбабвийский доллар"
@@ -461,5 +463,3 @@ export const currencyNames = {
   en: enCurrencyNames,
   ru: ruCurrencyNames,
 };
-
-    
