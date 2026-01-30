@@ -1,10 +1,10 @@
 import type { Currency, ExchangeRate, DataSource } from '@/lib/types';
 import { format, subDays, differenceInDays, addDays, startOfDay, parseISO } from 'date-fns';
+import { currencyApiPreloadedCurrencies } from './preloaded-data';
 
 let activeDataSource: DataSource = 'nbrb';
 
 // --- Constants ---
-// Мы включаем металлы в список "крипто-активов", чтобы они отображались в соответствующем разделе UI
 export const cryptoCodes = ['BTC', 'ETH', 'LTC', 'XRP', 'BCH', 'BTG', 'DASH', 'EOS', 'XAU', 'XAG', 'XPT', 'XPD'];
 const CACHE_TTL_RATES = 15 * 60 * 1000; // 15 minutes
 const CACHE_TTL_CURRENCIES = 24 * 60 * 60 * 1000; // 24 hours
@@ -12,8 +12,6 @@ const CACHE_TTL_CURRENCIES = 24 * 60 * 60 * 1000; // 24 hours
 // --- Caches & Timestamps ---
 let nbrbCurrenciesCache: Currency[] | null = null;
 let nbrbCurrenciesTimestamp = 0;
-let nbrbFullCurrencyInfoCache: any[] | null = null;
-let nbrbFullCurrencyInfoTimestamp = 0;
 let nbrbRatesCache: { [key: string]: { rate: number, scale: number } } = {};
 let nbrbRatesTimestamp = 0;
 
@@ -41,7 +39,6 @@ let cbrMetalsUpdatePromise: Promise<void> | null = null;
 let fixerUpdatePromise: Promise<void> | null = null;
 let coinlayerUpdatePromise: Promise<void> | null = null;
 
-// --- Cache Helper ---
 function isCacheValid(timestamp: number, ttl: number): boolean {
     return timestamp > 0 && (Date.now() - timestamp) < ttl;
 }
@@ -88,16 +85,6 @@ async function cbrMetalsApiFetch() {
     }
 }
 
-async function cbrHistoryApiFetch(date: Date) {
-    const formattedDate = format(date, 'dd/MM/yyyy');
-    try {
-        const response = await fetch(`/api/cbr/history?date_req=${formattedDate}`);
-        return response.ok ? response.json() : null;
-    } catch {
-        return null;
-    }
-}
-
 async function fixerApiFetch(endpoint: string, params: Record<string, string> = {}) {
     const queryParams = new URLSearchParams({ endpoint, ...params });
     const url = `/api/fixer?${queryParams.toString()}`;
@@ -129,7 +116,7 @@ async function nbrbApiFetch(endpoint: string) {
     }
 }
 
-// --- CBR PROVIDERS ---
+// --- UPDATERS ---
 function _updateCbrRatesCache(): Promise<void> {
     if (isCacheValid(cbrRatesTimestamp, CACHE_TTL_RATES) && cbrRatesCache) return Promise.resolve();
     if (cbrUpdatePromise) return cbrUpdatePromise;
@@ -164,28 +151,30 @@ function _updateCbrMetalsCache(): Promise<void> {
     return cbrMetalsUpdatePromise;
 }
 
-// --- CURRENCYAPI PROVIDER ---
 async function getCurrencyApiCurrencies(): Promise<Currency[]> {
     if (isCacheValid(currencyApiCurrenciesTimestamp, CACHE_TTL_CURRENCIES) && currencyApiCurrenciesCache) {
         return currencyApiCurrenciesCache;
     }
+    
+    let result = [...currencyApiPreloadedCurrencies];
     const data = await currencyApiNetFetch('currencies');
+    
     if (data?.currencies) {
-        let result: Currency[] = Object.entries(data.currencies).map(([code, name]: [string, any]) => ({
+        result = Object.entries(data.currencies).map(([code, name]: [string, any]) => ({
             code,
             name: name as string
         }));
-        // Добавляем отсутствующие активы вручную
+        
         const extra = { 'XAU': 'Gold', 'XAG': 'Silver', 'XPT': 'Platinum', 'XPD': 'Palladium', 'ETH': 'Ethereum', 'BTC': 'Bitcoin' };
         Object.entries(extra).forEach(([code, name]) => {
             if (!result.find(c => c.code === code)) result.push({ code, name });
         });
-        result.sort((a, b) => a.code.localeCompare(b.code));
-        currencyApiCurrenciesCache = result;
-        currencyApiCurrenciesTimestamp = Date.now();
-        return result;
     }
-    return [{ code: 'USD', name: 'US Dollar' }];
+    
+    result.sort((a, b) => a.code.localeCompare(b.code));
+    currencyApiCurrenciesCache = result;
+    currencyApiCurrenciesTimestamp = Date.now();
+    return result;
 }
 
 function _updateCurrencyApiRatesCache(): Promise<void> {
@@ -206,7 +195,6 @@ function _updateCurrencyApiRatesCache(): Promise<void> {
     return currencyApiUpdatePromise;
 }
 
-// --- NBRB PROVIDER ---
 async function getNbrbCurrencies(): Promise<Currency[]> {
     if (isCacheValid(nbrbCurrenciesTimestamp, CACHE_TTL_CURRENCIES) && nbrbCurrenciesCache) return nbrbCurrenciesCache;
     const data = await nbrbApiFetch('currencies');
@@ -240,7 +228,6 @@ function _updateNbrbRatesCache(): Promise<void> {
     return nbrbUpdatePromise;
 }
 
-// --- FIXER & COINLAYER ---
 function _updateFixerRatesCache(): Promise<void> {
     if (isCacheValid(fixerRatesTimestamp, CACHE_TTL_RATES) && Object.keys(fixerRatesCache).length > 0) return Promise.resolve();
     if (fixerUpdatePromise) return fixerUpdatePromise;
@@ -275,25 +262,20 @@ function _updateCoinlayerRatesCache(): Promise<void> {
     return coinlayerUpdatePromise;
 }
 
-// --- UNIVERSAL RATE CALCULATOR ---
 function getRateVsUsd(code: string): number | undefined {
     if (code === 'USD') return 1;
 
-    // 1. Металлы от ЦБ РФ (в приоритете для точности в РФ)
     const metalsMap: Record<string, string> = { 'XAU': '1', 'XAG': '2', 'XPT': '3', 'XPD': '4' };
     if (metalsMap[code] && cbrMetalsCache[metalsMap[code]]) {
         const rubPerGram = cbrMetalsCache[metalsMap[code]];
         const usdRub = cbrRatesCache?.Valute?.['USD']?.Value;
         if (usdRub) {
-            // ЦБ дает RUB/грамм. Мировой стандарт: USD/унция. 1 унция = 31.1035 грамм.
             return (rubPerGram * 31.1035) / usdRub;
         }
     }
 
-    // 2. Криптовалюты (Coinlayer)
     if (coinlayerRatesCache[code]) return coinlayerRatesCache[code];
 
-    // 3. Фиат (НБРБ, ЦБ РФ, CurrencyAPI)
     const ds = getDataSource();
     if (ds === 'nbrb' && nbrbRatesCache[code] && nbrbRatesCache['USD']) {
         const rate = nbrbRatesCache[code].rate / nbrbRatesCache[code].scale;
@@ -306,12 +288,10 @@ function getRateVsUsd(code: string): number | undefined {
         return rate / usd;
     }
 
-    // 4. Фолбэк на CurrencyAPI (USD/CODE -> пересчитываем в CODE/USD)
     if (currencyApiRatesCache[code] && currencyApiRatesCache[code] !== 0) {
         return 1 / currencyApiRatesCache[code];
     }
 
-    // 5. Фолбэк на Fixer (EUR/CODE и EUR/USD)
     if (fixerRatesCache[code] && fixerRatesCache['USD']) {
         return fixerRatesCache['USD'] / fixerRatesCache[code];
     }
@@ -335,8 +315,19 @@ export async function getCurrencies(): Promise<Currency[]> {
         getCurrencyApiCurrencies(),
         getNbrbCurrencies()
     ]);
+    
     const combined = [...apiCurrencies, ...nbrbCurrencies];
     const unique = Array.from(new Map(combined.map(c => [c.code, c])).values());
+    
+    // Принудительно гарантируем наличие критически важных активов в списке
+    const criticalCodes = ['BTC', 'ETH', 'XAU', 'XAG', 'USD', 'EUR', 'RUB', 'BYN'];
+    criticalCodes.forEach(code => {
+        if (!unique.find(c => c.code === code)) {
+             const preloaded = currencyApiPreloadedCurrencies.find(pc => pc.code === code);
+             unique.push({ code, name: preloaded?.name || code }); 
+        }
+    });
+    
     return unique.sort((a, b) => a.code.localeCompare(b.code));
 }
 
@@ -355,21 +346,6 @@ export async function findRateAsync(from: string, to: string): Promise<number | 
 
 export async function getHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
     if (from === to) return 1;
-    const ds = getDataSource();
-    if (ds === 'cbr') {
-        const data = await cbrHistoryApiFetch(date);
-        if (!data?.ValCurs?.Valute) return undefined;
-        const val = data.ValCurs.Valute;
-        const findVal = (c: string) => {
-            if (c === 'RUB') return 1;
-            const item = val.find((v: any) => v.CharCode[0] === c);
-            return item ? parseFloat(item.Value[0].replace(',', '.')) / parseInt(item.Nominal[0]) : undefined;
-        };
-        const f = findVal(from);
-        const t = findVal(to);
-        return (f && t) ? f / t : undefined;
-    }
-    // Для других источников или крипты используем CurrencyAPI History (требует платный ключ, но это лучший фолбэк)
     const formattedDate = format(date, 'yyyy-MM-dd');
     const data = await currencyApiNetFetch('history', { base: 'USD', date: formattedDate });
     if (data?.rates) {
