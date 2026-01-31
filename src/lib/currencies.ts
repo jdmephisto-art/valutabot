@@ -98,7 +98,7 @@ async function coinlayerApiFetch(endpoint: string, params: Record<string, string
     try {
         const response = await fetch(url);
         if (!response.ok) {
-            console.error(`Coinlayer API fetch error: ${response.status}`);
+            console.error(`Coinlayer API fetch error: ${response.status} for ${endpoint}`);
             return null;
         }
         return await response.json();
@@ -189,7 +189,7 @@ function _updateCbrMetalsCache(): Promise<void> {
             cbrMetalsUpdatePromise = null;
         }
     })();
-    return nbrbUpdatePromise; // Note: reuse promise flag concept but for metals
+    return cbrMetalsUpdatePromise;
 }
 
 function _updateFixerRatesCache(): Promise<void> {
@@ -242,6 +242,7 @@ function getRateVsUsd(code: string): number | undefined {
         const rubPerGram = cbrMetalsCache[mCode];
         if (cbrRatesCache?.Valute?.['USD']) {
             const rubPerUsd = cbrRatesCache.Valute['USD'].Value / cbrRatesCache.Valute['USD'].Nominal;
+            // Пересчет из руб/грамм в USD/унция (1 унция = 31.1035 грамм)
             return (rubPerGram * 31.1035) / rubPerUsd;
         }
     }
@@ -255,6 +256,8 @@ function getRateVsUsd(code: string): number | undefined {
         const uRate = cbrRatesCache.Valute['USD'].Value / cbrRatesCache.Valute['USD'].Nominal;
         return vRate / uRate;
     }
+    
+    // Резервные фиатные API
     if (currencyApiRatesCache[code]) return 1 / currencyApiRatesCache[code];
     if (fixerRatesCache[code] && fixerRatesCache['USD']) return fixerRatesCache['USD'] / fixerRatesCache[code];
 
@@ -295,7 +298,7 @@ export async function findRateAsync(from: string, to: string): Promise<number | 
 }
 
 export async function getHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
-    console.log(`[API Request] Historical Rate: ${from}/${to} on ${format(date, 'yyyy-MM-dd')}`);
+    console.log(`[API Request] Запрос к API истории: ${from}/${to} на ${format(date, 'yyyy-MM-dd')}`);
     
     if (from === to) return 1;
 
@@ -312,21 +315,22 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
         if (actualCrypto.includes(code)) {
             console.log(`[API Request] Fetching crypto history for ${code} on ${fDate}`);
             const data = await coinlayerApiFetch(fDate, { symbols: code });
-            if (data?.success && data.rates && data.rates[code]) {
+            if (data?.success && data.rates && data.rates[code] !== undefined) {
                 const val = data.rates[code];
                 historicalCache.set(cacheKey, val);
                 return val;
             } else {
-                console.warn(`[API Response] Crypto history NOT found for ${code}`, data);
+                console.warn(`[API Response] Данные крипты НЕ получены для ${code} на ${fDate}`, data);
+                return undefined;
             }
         }
 
         // B. Драгметаллы (ЦБ РФ)
         if (metalCodes.includes(code)) {
             const mCode = metalMap[code];
+            // Пытаемся получить данные за диапазон, так как ЦБ может не иметь записи на конкретный день
             const d1 = format(subDays(dateObj, 5), 'dd.MM.yyyy');
             const d2 = format(dateObj, 'dd.MM.yyyy');
-            console.log(`[API Request] Fetching metals history for ${code} range ${d1}-${d2}`);
             
             const [mRes, uRes] = await Promise.all([
                 fetch(`/api/cbr/metals?date_req1=${d1}&date_req2=${d2}`).then(r => r.json()).catch(() => null),
@@ -351,13 +355,15 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
         }
 
         // C. Фиатные (NBRB или CBR)
-        const nbrbVal = await nbrbApiFetch(`rates/${code}?onDate=${fDate}&parammode=2`).catch(() => null);
-        const nbrbUsd = await nbrbApiFetch(`rates/USD?onDate=${fDate}&parammode=2`).catch(() => null);
-        if (nbrbVal && nbrbUsd) {
-            const val = (nbrbVal.Cur_OfficialRate / nbrbVal.Cur_Scale) / (nbrbUsd.Cur_OfficialRate / nbrbUsd.Cur_Scale);
-            historicalCache.set(cacheKey, val);
-            return val;
-        }
+        try {
+            const nbrbVal = await nbrbApiFetch(`rates/${code}?onDate=${fDate}&parammode=2`).catch(() => null);
+            const nbrbUsd = await nbrbApiFetch(`rates/USD?onDate=${fDate}&parammode=2`).catch(() => null);
+            if (nbrbVal && nbrbUsd) {
+                const val = (nbrbVal.Cur_OfficialRate / nbrbVal.Cur_Scale) / (nbrbUsd.Cur_OfficialRate / nbrbUsd.Cur_Scale);
+                historicalCache.set(cacheKey, val);
+                return val;
+            }
+        } catch {}
 
         const cbrRes = await fetch(`/api/cbr/history?date_req=${cbrDate}`).then(r => r.json()).catch(() => null);
         const valutes = cbrRes?.ValCurs?.Valute;
@@ -379,6 +385,9 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
     const [fVal, tVal] = await Promise.all([getValVsUsd(from, date), getValVsUsd(to, date)]);
     if (fVal !== undefined && tVal !== undefined && tVal !== 0) {
         return fVal / tVal;
+    } else {
+        if (fVal === undefined) console.error(`Ошибка: данные не получены для базовой валюты ${from} на ${format(date, 'yyyy-MM-dd')}`);
+        if (tVal === undefined) console.error(`Ошибка: данные не получены для целевой валюты ${to} на ${format(date, 'yyyy-MM-dd')}`);
     }
     return undefined;
 }
@@ -387,21 +396,11 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
     const daysCount = Math.min(differenceInDays(endDate, startDate) + 1, 31);
     const results: { date: string; rate: number }[] = [];
     
-    console.log(`[Dynamics] Fetching period: ${format(startDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}`);
-
     for (let i = 0; i < daysCount; i++) {
         const d = addDays(startDate, i);
-        if (isAfter(d, new Date())) break;
-        
-        try {
-            const r = await getHistoricalRate(from, to, d);
-            if (r !== undefined) {
-                results.push({ date: format(d, 'dd.MM'), rate: r });
-            } else {
-                console.warn(`[Dynamics] No rate for ${format(d, 'yyyy-MM-dd')}`);
-            }
-        } catch (e) {
-            console.error(`[Dynamics] Failed for ${format(d, 'yyyy-MM-dd')}`, e);
+        const r = await getHistoricalRate(from, to, d);
+        if (r !== undefined) {
+            results.push({ date: format(d, 'dd.MM'), rate: r });
         }
     }
     return results;
@@ -410,14 +409,14 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
 export async function preFetchInitialRates() {
     const ds = getDataSource();
     const tasks = [
-        _updateCoinlayerRatesCache(),
-        _updateCbrMetalsCache(),
-        _updateCbrRatesCache(),
-        _updateFixerRatesCache()
+        _updateCoinlayerRatesCache().catch(() => {}),
+        _updateCbrMetalsCache().catch(() => {}),
+        _updateCbrRatesCache().catch(() => {}),
+        _updateFixerRatesCache().catch(() => {})
     ];
     
-    if (ds === 'nbrb') tasks.push(_updateNbrbRatesCache());
-    else if (ds === 'currencyapi') tasks.push(_updateCurrencyApiRatesCache());
+    if (ds === 'nbrb') tasks.push(_updateNbrbRatesCache().catch(() => {}));
+    else if (ds === 'currencyapi') tasks.push(_updateCurrencyApiRatesCache().catch(() => {}));
     
     await Promise.allSettled(tasks);
 }

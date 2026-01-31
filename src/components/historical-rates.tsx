@@ -46,89 +46,78 @@ export function HistoricalRates() {
 
   const handleFetchDynamics = async () => {
     if (dynamicsRange?.from && dynamicsRange.to) {
-        console.log("[History UI] handleFetchDynamics start", { fromCurrency, toCurrency, from: dynamicsRange.from, to: dynamicsRange.to });
+        console.log("[History UI] Запрос динамики:", fromCurrency, toCurrency, dynamicsRange.from, dynamicsRange.to);
         setFetchingDynamics(true);
         setDynamicsData([]);
+
         try {
             const data = await getDynamicsForPeriod(fromCurrency, toCurrency, dynamicsRange.from, dynamicsRange.to);
-            console.log("[History UI] handleFetchDynamics data received", data);
-            setDynamicsData(data);
+            console.log("[History UI] Данные динамики получены:", data);
+            
             if (data.length === 0) {
-                toast({
-                    variant: 'destructive',
-                    title: t('history.noDynamics'),
-                });
+                console.error("Ошибка: данные динамики не получены для пары", fromCurrency, toCurrency);
+                toast({ variant: 'destructive', title: t('history.noDynamics') });
+            } else {
+                setDynamicsData(data);
             }
         } catch (e) {
-            console.error("[History UI] handleFetchDynamics failed", e);
-            toast({
-                variant: 'destructive',
-                title: t('history.noDynamics'),
-            });
+            console.error("[History UI] Сбой при получении динамики:", e);
+            toast({ variant: 'destructive', title: t('history.noDynamics') });
         } finally {
             setFetchingDynamics(false);
-            console.log("[History UI] handleFetchDynamics finished");
         }
     }
   };
 
   const handleFetchSingleRate = async () => {
     if (date) {
-      console.log("[History UI] handleFetchSingleRate start", { fromCurrency, toCurrency, date });
+      console.log("[History UI] Запрос одиночного курса:", fromCurrency, toCurrency, date);
       setFetchingSingle(true);
       setSingleRate(undefined);
       try {
           const rate = await getHistoricalRate(fromCurrency, toCurrency, date);
-          console.log("[History UI] handleFetchSingleRate rate received", rate);
-          setSingleRate(rate === undefined ? null : rate);
+          
           if (rate === undefined) {
-              toast({
-                  variant: 'destructive',
-                  title: t('history.noRate'),
-              });
+              console.error("Ошибка: данные не получены для одиночного курса", fromCurrency, toCurrency, date);
+              setSingleRate(null);
+              toast({ variant: 'destructive', title: t('history.noRate') });
+          } else {
+              console.log("[History UI] Курс получен:", rate);
+              setSingleRate(rate);
           }
       } catch (e) {
-          console.error("[History UI] handleFetchSingleRate failed", e);
+          console.error("[History UI] Сбой при получении одиночного курса:", e);
           setSingleRate(null);
-          toast({
-              variant: 'destructive',
-              title: t('history.noRate'),
-          });
+          toast({ variant: 'destructive', title: t('history.noRate') });
       } finally {
           setFetchingSingle(false);
-          console.log("[History UI] handleFetchSingleRate finished");
       }
     }
   };
 
   const handleFetchRangeRate = async () => {
     if (range?.from && range.to) {
-      console.log("[History UI] handleFetchRangeRate start", { fromCurrency, toCurrency, from: range.from, to: range.to });
+      console.log("[History UI] Запрос сравнения (диапазон):", fromCurrency, toCurrency, range.from, range.to);
       setFetchingRange(true);
       setRangeResult(undefined);
       try {
           const startRate = await getHistoricalRate(fromCurrency, toCurrency, range.from);
           const endRate = await getHistoricalRate(fromCurrency, toCurrency, range.to);
-          console.log("[History UI] handleFetchRangeRate results", { startRate, endRate });
+          
           if (startRate !== undefined && endRate !== undefined) {
+            console.log("[History UI] Курсы диапазона получены:", { startRate, endRate });
             setRangeResult({ startRate, endRate });
           } else {
+            console.error("Ошибка: данные не получены для диапазона", { fromCurrency, toCurrency, startRate, endRate });
             setRangeResult(null);
-            toast({
-                variant: 'destructive',
-                title: t('history.noRate'),
-            });
+            toast({ variant: 'destructive', title: t('history.noRate') });
           }
       } catch (e) {
-          console.error("[History UI] handleFetchRangeRate failed", e);
+          console.error("[History UI] Сбой при получении диапазона:", e);
           setRangeResult(null);
-          toast({
-              variant: 'destructive',
-              title: t('history.noRate'),
-          });
+          toast({ variant: 'destructive', title: t('history.noRate') });
       } finally {
           setFetchingRange(false);
-          console.log("[History UI] handleFetchRangeRate finished");
       }
     }
   };
@@ -146,10 +135,6 @@ export function HistoricalRates() {
     setSingleRate(undefined);
     setRangeResult(undefined);
     setDynamicsData([]);
-  }
-
-  const getCalendarDisabledDates = () => {
-    return { after: new Date() };
   }
 
   const chartConfig = { rate: { label: 'Rate', color: 'hsl(var(--primary))' } };
@@ -190,7 +175,7 @@ export function HistoricalRates() {
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={dynamicsRange?.from} onSelect={(d) => { setDynamicsRange({ ...dynamicsRange, from: d }); setDynamicsStartPopoverOpen(false); }} disabled={getCalendarDisabledDates()} locale={dateLocale} />
+                        <Calendar mode="single" selected={dynamicsRange?.from} onSelect={(d) => { setDynamicsRange({ ...dynamicsRange, from: d }); setDynamicsStartPopoverOpen(false); }} locale={dateLocale} />
                     </PopoverContent>
                 </Popover>
                 <Popover open={dynamicsEndPopoverOpen} onOpenChange={setDynamicsEndPopoverOpen}>
@@ -201,7 +186,7 @@ export function HistoricalRates() {
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={dynamicsRange?.to} onSelect={(d) => { setDynamicsRange({ ...dynamicsRange, to: d }); setDynamicsEndPopoverOpen(false); }} disabled={(d) => (dynamicsRange?.from ? d < dynamicsRange.from : false) || d > new Date()} locale={dateLocale} />
+                        <Calendar mode="single" selected={dynamicsRange?.to} onSelect={(d) => { setDynamicsRange({ ...dynamicsRange, to: d }); setDynamicsEndPopoverOpen(false); }} locale={dateLocale} />
                     </PopoverContent>
                 </Popover>
             </div>
@@ -237,7 +222,7 @@ export function HistoricalRates() {
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0">
-                  <Calendar mode="single" selected={date} onSelect={(d) => { setDate(d); setSingleDatePopoverOpen(false); }} disabled={getCalendarDisabledDates()} locale={dateLocale} />
+                  <Calendar mode="single" selected={date} onSelect={(d) => { setDate(d); setSingleDatePopoverOpen(false); }} locale={dateLocale} />
               </PopoverContent>
             </Popover>
             <Button onClick={handleFetchSingleRate} className="w-full" disabled={fetchingSingle || !date}>{fetchingSingle ? t('latestRates.loading') : t('history.getRate')}</Button>
@@ -259,7 +244,7 @@ export function HistoricalRates() {
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={range?.from} onSelect={(d) => { setRange({ ...range, from: d }); setRangeStartPopoverOpen(false); }} disabled={getCalendarDisabledDates()} locale={dateLocale} />
+                        <Calendar mode="single" selected={range?.from} onSelect={(d) => { setRange({ ...range, from: d }); setRangeStartPopoverOpen(false); }} locale={dateLocale} />
                     </PopoverContent>
                 </Popover>
                 <Popover open={rangeEndPopoverOpen} onOpenChange={setRangeEndPopoverOpen}>
@@ -270,7 +255,7 @@ export function HistoricalRates() {
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={range?.to} onSelect={(d) => { setRange({ ...range, to: d }); setRangeEndPopoverOpen(false); }} disabled={(d) => (range?.from ? d < range.from : false) || d > new Date()} locale={dateLocale} />
+                        <Calendar mode="single" selected={range?.to} onSelect={(d) => { setRange({ ...range, to: d }); setRangeEndPopoverOpen(false); }} locale={dateLocale} />
                     </PopoverContent>
                 </Popover>
              </div>
