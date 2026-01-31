@@ -124,7 +124,7 @@ export function HistoricalRates() {
     setDynamicsData([]);
   }
 
-  const chartConfig = { rate: { label: 'Rate', color: 'hsl(var(--primary))' } };
+  const chartConfig = { rate: { label: t('history.dynamicsFor', { from: fromCurrency, to: toCurrency }), color: 'hsl(var(--primary))' } };
 
   return (
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
@@ -188,12 +188,18 @@ export function HistoricalRates() {
                                 tickLine={false} 
                                 axisLine={false} 
                                 tickMargin={8} 
-                                tickFormatter={(val) => val > 10 ? val.toFixed(2) : val.toFixed(4)} 
+                                tickFormatter={(val) => {
+                                  if (val === 0) return '0';
+                                  if (val > 100) return val.toFixed(0);
+                                  if (val > 10) return val.toFixed(2);
+                                  if (val > 0.01) return val.toFixed(4);
+                                  return val.toFixed(6);
+                                }} 
                                 width={60}
                                 domain={['auto', 'auto']}
                             />
                             <ChartTooltip content={<ChartTooltipContent />} />
-                            <Area dataKey="rate" type="natural" fill="var(--color-rate)" stroke="var(--color-rate)" fillOpacity={0.4} />
+                            <Area dataKey="rate" type="monotone" fill="var(--color-rate)" stroke="var(--color-rate)" fillOpacity={0.4} />
                         </AreaChart>
                     </ChartContainer>
                 </div>
