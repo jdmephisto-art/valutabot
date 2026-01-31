@@ -38,7 +38,7 @@ export function HistoricalRates() {
   const [rangeStartPopoverOpen, setRangeStartPopoverOpen] = useState(false);
   const [rangeEndPopoverOpen, setRangeEndPopoverOpen] = useState(false);
 
-  const [dynamicsRange, setDynamicsRange] = useState<DateRange | undefined>({ from: subDays(new Date(), 29), to: new Date() });
+  const [dynamicsRange, setDynamicsRange] = useState<DateRange | undefined>({ from: subDays(new Date(), 14), to: new Date() });
   const [dynamicsData, setDynamicsData] = useState<any[]>([]);
   const [fetchingDynamics, setFetchingDynamics] = useState(false);
   const [dynamicsStartPopoverOpen, setDynamicsStartPopoverOpen] = useState(false);
@@ -48,9 +48,16 @@ export function HistoricalRates() {
     if (dynamicsRange?.from && dynamicsRange.to) {
         setFetchingDynamics(true);
         setDynamicsData([]);
-        const data = await getDynamicsForPeriod(fromCurrency, toCurrency, dynamicsRange.from, dynamicsRange.to);
-        setDynamicsData(data);
-        if (data.length === 0) {
+        try {
+            const data = await getDynamicsForPeriod(fromCurrency, toCurrency, dynamicsRange.from, dynamicsRange.to);
+            setDynamicsData(data);
+            if (data.length === 0) {
+                toast({
+                    variant: 'destructive',
+                    title: t('history.noDynamics'),
+                });
+            }
+        } catch (e) {
             toast({
                 variant: 'destructive',
                 title: t('history.noDynamics'),
@@ -64,9 +71,17 @@ export function HistoricalRates() {
     if (date) {
       setFetchingSingle(true);
       setSingleRate(undefined);
-      const rate = await getHistoricalRate(fromCurrency, toCurrency, date);
-      setSingleRate(rate === undefined ? null : rate);
-      if (rate === undefined) {
+      try {
+          const rate = await getHistoricalRate(fromCurrency, toCurrency, date);
+          setSingleRate(rate === undefined ? null : rate);
+          if (rate === undefined) {
+              toast({
+                  variant: 'destructive',
+                  title: t('history.noRate'),
+              });
+          }
+      } catch (e) {
+          setSingleRate(null);
           toast({
               variant: 'destructive',
               title: t('history.noRate'),
@@ -80,16 +95,24 @@ export function HistoricalRates() {
     if (range?.from && range.to) {
       setFetchingRange(true);
       setRangeResult(undefined);
-      const startRate = await getHistoricalRate(fromCurrency, toCurrency, range.from);
-      const endRate = await getHistoricalRate(fromCurrency, toCurrency, range.to);
-      if (startRate !== undefined && endRate !== undefined) {
-        setRangeResult({ startRate, endRate });
-      } else {
-        setRangeResult(null);
-        toast({
-            variant: 'destructive',
-            title: t('history.noRate'),
-        });
+      try {
+          const startRate = await getHistoricalRate(fromCurrency, toCurrency, range.from);
+          const endRate = await getHistoricalRate(fromCurrency, toCurrency, range.to);
+          if (startRate !== undefined && endRate !== undefined) {
+            setRangeResult({ startRate, endRate });
+          } else {
+            setRangeResult(null);
+            toast({
+                variant: 'destructive',
+                title: t('history.noRate'),
+            });
+          }
+      } catch (e) {
+          setRangeResult(null);
+          toast({
+              variant: 'destructive',
+              title: t('history.noRate'),
+          });
       }
       setFetchingRange(false);
     }
@@ -111,8 +134,7 @@ export function HistoricalRates() {
   }
 
   const getCalendarDisabledDates = () => {
-    const disabled: { before?: Date, after?: Date } = { after: new Date() };
-    return disabled;
+    return { after: new Date() };
   }
 
   const chartConfig = { rate: { label: 'Rate', color: 'hsl(var(--primary))' } };
@@ -164,7 +186,7 @@ export function HistoricalRates() {
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={dynamicsRange?.to} onSelect={(d) => { setDynamicsRange({ ...dynamicsRange, to: d }); setDynamicsEndPopoverOpen(false); }} disabled={(d) => (dynamicsRange?.from ? d < dynamicsRange.from : false)} locale={dateLocale} />
+                        <Calendar mode="single" selected={dynamicsRange?.to} onSelect={(d) => { setDynamicsRange({ ...dynamicsRange, to: d }); setDynamicsEndPopoverOpen(false); }} disabled={(d) => (dynamicsRange?.from ? d < dynamicsRange.from : false) || d > new Date()} locale={dateLocale} />
                     </PopoverContent>
                 </Popover>
             </div>
@@ -233,7 +255,7 @@ export function HistoricalRates() {
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={range?.to} onSelect={(d) => { setRange({ ...range, to: d }); setRangeEndPopoverOpen(false); }} disabled={(d) => (range?.from ? d < range.from : false)} locale={dateLocale} />
+                        <Calendar mode="single" selected={range?.to} onSelect={(d) => { setRange({ ...range, to: d }); setRangeEndPopoverOpen(false); }} disabled={(d) => (range?.from ? d < range.from : false) || d > new Date()} locale={dateLocale} />
                     </PopoverContent>
                 </Popover>
              </div>
