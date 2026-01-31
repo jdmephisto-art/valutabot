@@ -46,6 +46,10 @@ export function HistoricalRates() {
 
   const handleFetchDynamics = async () => {
     if (dynamicsRange?.from && dynamicsRange.to) {
+        if (dynamicsRange.from > new Date()) {
+            toast({ variant: 'destructive', title: t('history.noRate'), description: t('validation.positiveOrZero') });
+            return;
+        }
         setFetchingDynamics(true);
         setDynamicsData([]);
         const data = await getDynamicsForPeriod(fromCurrency, toCurrency, dynamicsRange.from, dynamicsRange.to);
@@ -62,6 +66,10 @@ export function HistoricalRates() {
 
   const handleFetchSingleRate = async () => {
     if (date) {
+      if (date > new Date()) {
+          toast({ variant: 'destructive', title: t('history.noRate') });
+          return;
+      }
       setFetchingSingle(true);
       setSingleRate(undefined);
       const rate = await getHistoricalRate(fromCurrency, toCurrency, date);
@@ -133,11 +141,15 @@ export function HistoricalRates() {
       </CardHeader>
       <CardContent>
         <div className="flex items-center gap-2 mb-4">
-          <div className="flex-1 min-w-0"><CurrencyCombobox value={fromCurrency} onChange={setFromCurrency} /></div>
+          <div className="flex-1 min-w-0">
+              <CurrencyCombobox value={fromCurrency} onChange={setFromCurrency} />
+          </div>
           <Button variant="ghost" size="icon" onClick={handleSwapCurrencies} className="flex-shrink-0">
              <ArrowRightLeft className="h-4 w-4 text-muted-foreground" />
           </Button>
-          <div className="flex-1 min-w-0"><CurrencyCombobox value={toCurrency} onChange={setToCurrency} /></div>
+          <div className="flex-1 min-w-0">
+              <CurrencyCombobox value={toCurrency} onChange={setToCurrency} />
+          </div>
         </div>
 
         <Tabs defaultValue="dynamics" value={activeTab} onValueChange={handleTabChange}>
