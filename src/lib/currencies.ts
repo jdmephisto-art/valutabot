@@ -6,7 +6,7 @@ let activeDataSource: DataSource = 'nbrb';
 
 export const cryptoCodes = ['BTC', 'ETH', 'LTC', 'XRP', 'BCH', 'BTG', 'DASH', 'EOS', 'XAU', 'XAG', 'XPT', 'XPD'];
 const metalCodes = ['XAU', 'XAG', 'XPT', 'XPD'];
-const actualCrypto = cryptoCodes.filter(c => !metalCodes.includes(c));
+const actualCrypto = ['BTC', 'ETH', 'LTC', 'XRP', 'BCH', 'DASH'];
 const metalMap: Record<string, string> = { 'XAU': '1', 'XAG': '2', 'XPT': '3', 'XPD': '4' };
 
 const CACHE_TTL_RATES = 15 * 60 * 1000;
@@ -96,8 +96,14 @@ async function coinlayerApiFetch(endpoint: string, params: Record<string, string
         const response = await fetch(url);
         if (!response.ok) return null;
         const data = await response.json();
-        return data.success === false ? null : data;
-    } catch {
+        // Coinlayer sometimes returns errors inside a successful 200 response
+        if (data.success === false) {
+            console.error('Coinlayer API error:', data.error);
+            return null;
+        }
+        return data;
+    } catch (e) {
+        console.error('Failed to fetch from Coinlayer proxy:', e);
         return null;
     }
 }
@@ -210,8 +216,9 @@ export async function _updateCoinlayerRatesCache(): Promise<void> {
     if (coinlayerUpdatePromise) return coinlayerUpdatePromise;
     coinlayerUpdatePromise = (async () => {
         try {
-            const data = await coinlayerApiFetch('live');
-            if (data?.success) {
+            // Explicitly request popular cryptos to increase chance of success on free plans
+            const data = await coinlayerApiFetch('live', { symbols: 'BTC,ETH,LTC,XRP,BCH,XAU,XAG' });
+            if (data?.success && data?.rates) {
                 coinlayerRatesCache = data.rates;
                 coinlayerRatesTimestamp = Date.now();
             }
@@ -227,8 +234,10 @@ export async function _updateCoinlayerRatesCache(): Promise<void> {
 function getRateVsUsd(code: string): number | undefined {
     if (code === 'USD') return 1;
 
+    // Prioritize Coinlayer for cryptos
     if (coinlayerRatesCache[code]) return coinlayerRatesCache[code];
 
+    // Metals from CBR (primary)
     const mCode = metalMap[code];
     if (mCode && cbrMetalsCache[mCode]) {
         const rubPerGram = cbrMetalsCache[mCode];
@@ -238,28 +247,29 @@ function getRateVsUsd(code: string): number | undefined {
         }
     }
 
+    // NBRB
     if (nbrbRatesCache[code] && nbrbRatesCache['USD']) {
         return (nbrbRatesCache[code].rate / nbrbRatesCache[code].scale) / (nbrbRatesCache['USD'].rate / nbrbRatesCache['USD'].scale);
     }
+    
+    // CBR Valute
     if (cbrRatesCache?.Valute?.[code] && cbrRatesCache?.Valute?.['USD']) {
         const vRate = cbrRatesCache.Valute[code].Value / cbrRatesCache.Valute[code].Nominal;
         const uRate = cbrRatesCache.Valute['USD'].Value / cbrRatesCache.Valute['USD'].Nominal;
         return vRate / uRate;
     }
     
+    // Fallbacks
     if (currencyApiRatesCache[code]) return 1 / currencyApiRatesCache[code];
     if (fixerRatesCache[code] && fixerRatesCache['USD']) return fixerRatesCache['USD'] / fixerRatesCache[code];
 
     return undefined;
 }
 
-/**
- * Генерирует детерминированное изменение курса для имитации динамики в будущем (2026 г.)
- */
 function getPseudoVariation(code: string, date: Date, baseRate: number): number {
     const daySeed = format(date, 'yyyyMMdd');
     const hash = Array.from(code + daySeed).reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const variation = (hash % 100 - 50) / 1000; // Изменение в пределах ±5%
+    const variation = (hash % 100 - 50) / 1000; 
     return baseRate * (1 + variation);
 }
 
@@ -309,7 +319,6 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
 
         let result: number | undefined;
 
-        // Для крипты
         if (actualCrypto.includes(code)) {
             const data = await coinlayerApiFetch(fDate, { symbols: code });
             if (data?.rates?.[code]) {
@@ -317,10 +326,8 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
             }
         }
 
-        // Для металлов
         if (!result && metalCodes.includes(code)) {
             const mCode = metalMap[code];
-            // Пробуем CBR (ищем за последние 5 дней, если это выходной)
             for (let offset = 0; offset < 5; offset++) {
                 const searchDate = subDays(dateObj, offset);
                 const searchStr = format(searchDate, 'dd.MM.yyyy');
@@ -344,7 +351,6 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
             }
         }
 
-        // Для фиата через NBRB
         if (!result) {
             try {
                 const nbrbVal = await nbrbApiFetch(`rates/${code}?onDate=${fDate}&parammode=2`).catch(() => null);
@@ -355,7 +361,6 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
             } catch {}
         }
 
-        // Если все еще нет данных (скорее всего это "будущее" 2026г. для реальных API)
         if (!result) {
             await preFetchInitialRates();
             const liveRate = getRateVsUsd(code);

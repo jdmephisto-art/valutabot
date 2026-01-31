@@ -8,14 +8,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Endpoint is required' }, { status: 400 });
   }
 
-  // !!! ВАЖНО: Замените 'YOUR_COINLAYER_API_KEY' на ваш реальный ключ API от Coinlayer.com !!!
   const apiKey = 'b676ecb8db4d746383bfced2a2cbe94e';
-  // Базовый URL Coinlayer не требует сегмента /api/ для эндпоинтов live, list и исторических дат.
   const baseUrl = 'http://api.coinlayer.com/';
 
   const externalApiParams = new URLSearchParams();
   searchParams.forEach((value, key) => {
-    if (key !== 'endpoint') {
+    if (key !== 'endpoint' && key !== 'access_key') {
       externalApiParams.set(key, value);
     }
   });
@@ -25,7 +23,10 @@ export async function GET(request: NextRequest) {
 
   try {
     const apiResponse = await fetch(apiUrl, {
-      headers: { 'Accept': 'application/json' },
+      headers: { 
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      },
       cache: 'no-store'
     });
 
