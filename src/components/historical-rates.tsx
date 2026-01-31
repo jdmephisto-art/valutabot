@@ -49,16 +49,13 @@ export function HistoricalRates() {
         setFetchingDynamics(true);
         setDynamicsData([]);
         try {
-            console.log(`[History UI] Fetching dynamics for ${fromCurrency}/${toCurrency} from ${format(dynamicsRange.from, 'yyyy-MM-dd')} to ${format(dynamicsRange.to, 'yyyy-MM-dd')}`);
             const data = await getDynamicsForPeriod(fromCurrency, toCurrency, dynamicsRange.from, dynamicsRange.to);
             if (!data || data.length === 0) {
-                console.error(`[History UI] No data received for ${fromCurrency}/${toCurrency}`);
                 toast({ variant: 'destructive', title: t('history.noDynamics'), description: t('history.dynamicFetchError') });
             } else {
                 setDynamicsData(data);
             }
         } catch (e: any) {
-            console.error(`[History UI] Exception:`, e);
             toast({ variant: 'destructive', title: t('history.noDynamics'), description: e.message });
         } finally {
             setFetchingDynamics(false);
@@ -196,7 +193,7 @@ export function HistoricalRates() {
                                   return val.toFixed(6);
                                 }} 
                                 width={60}
-                                domain={['auto', 'auto']}
+                                domain={['dataMin', 'dataMax']}
                             />
                             <ChartTooltip content={<ChartTooltipContent />} />
                             <Area dataKey="rate" type="monotone" fill="var(--color-rate)" stroke="var(--color-rate)" fillOpacity={0.4} />
