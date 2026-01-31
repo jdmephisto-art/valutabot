@@ -5,7 +5,13 @@ import { currencyApiPreloadedCurrencies } from './preloaded-data';
 
 let activeDataSource: DataSource = 'nbrb';
 
-export const cryptoCodes = ['BTC', 'ETH', 'LTC', 'XRP', 'BCH', 'BTG', 'DASH', 'EOS', 'XAU', 'XAG', 'XPT', 'XPD'];
+export const cryptoCodes = [
+    'BTC', 'ETH', 'LTC', 'XRP', 'BCH', 'BTG', 'DASH', 'EOS', 
+    'SOL', 'TON', 'DOGE', 'ADA', 'DOT', 'TRX', 'MATIC', 'AVAX', 'LINK',
+    'USDT', 'USDC', 'DAI', 'NOT', 'DOGS',
+    'XAU', 'XAG', 'XPT', 'XPD'
+];
+
 const metalCodes = ['XAU', 'XAG', 'XPT', 'XPD'];
 const metalMap: Record<string, string> = { 'XAU': '1', 'XAG': '2', 'XPT': '3', 'XPD': '4' };
 
@@ -17,6 +23,20 @@ const cryptoMapping: Record<string, string> = {
     'XRP': 'ripple',
     'BCH': 'bitcoin-cash',
     'DASH': 'dash',
+    'SOL': 'solana',
+    'TON': 'the-open-network',
+    'DOGE': 'dogecoin',
+    'ADA': 'cardano',
+    'DOT': 'polkadot',
+    'TRX': 'tron',
+    'MATIC': 'matic-network',
+    'AVAX': 'avalanche-2',
+    'LINK': 'chainlink',
+    'USDT': 'tether',
+    'USDC': 'usd-coin',
+    'DAI': 'dai',
+    'NOT': 'notcoin',
+    'DOGS': 'dogs'
 };
 
 const CACHE_TTL_RATES = 15 * 60 * 1000;
@@ -208,7 +228,7 @@ export async function _updateCbrMetalsCache(): Promise<void> {
 function getRateVsUsd(code: string): number | undefined {
     if (code === 'USD') return 1;
 
-    // ПРИОРИТЕТ 1: CoinGecko для криптовалют (ETH теперь здесь)
+    // ПРИОРИТЕТ 1: CoinGecko (теперь для всей крипты)
     if (coinGeckoRatesCache[code]) return coinGeckoRatesCache[code];
 
     // ПРИОРИТЕТ 2: Металлы из ЦБ РФ
@@ -221,7 +241,7 @@ function getRateVsUsd(code: string): number | undefined {
         }
     }
 
-    // ПРИОРИТЕТ 3: NBRB (дает BTC и фиат)
+    // ПРИОРИТЕТ 3: NBRB (фиат и BTC)
     if (nbrbRatesCache[code] && nbrbRatesCache['USD']) {
         return (nbrbRatesCache[code].rate / nbrbRatesCache[code].scale) / (nbrbRatesCache['USD'].rate / nbrbRatesCache['USD'].scale);
     }
@@ -292,14 +312,12 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
 
         let result: number | undefined;
 
-        // Если это "будущее" (2026 год), используем псевдо-вариацию от текущего курса
         if (isActuallyFuture) {
             await preFetchInitialRates();
             const liveRate = getRateVsUsd(code);
             if (liveRate) return getPseudoVariation(code, dateObj, liveRate);
         }
 
-        // РЕАЛЬНАЯ ИСТОРИЯ ДЛЯ КРИПТЫ ЧЕРЕЗ COINGECKO
         const geckoId = cryptoMapping[code];
         if (geckoId) {
             const hist = await coingeckoApiFetch(`coins/${geckoId}/history`, { date: format(dateObj, 'dd-MM-yyyy'), localization: 'false' });
@@ -308,7 +326,6 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
             }
         }
 
-        // МЕТАЛЛЫ ИЗ ЦБ РФ
         if (!result && metalCodes.includes(code)) {
             const mCode = metalMap[code];
             const searchStr = format(dateObj, 'dd.MM.yyyy');
@@ -329,7 +346,6 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
             }
         }
 
-        // ФИАТ ИЗ НБРБ
         if (!result) {
             try {
                 const fDate = format(dateObj, 'yyyy-MM-dd');
@@ -356,7 +372,6 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
     const daysCount = Math.min(differenceInDays(endDate, startDate) + 1, 31);
     const results: { date: string; rate: number }[] = [];
 
-    // ОПТИМИЗАЦИЯ ДЛЯ КРИПТЫ: Получаем весь график одним запросом
     const fromId = cryptoMapping[from];
     const toId = cryptoMapping[to];
 
@@ -367,7 +382,7 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
                 from: getUnixTime(startDate).toString(),
                 to: getUnixTime(endDate).toString()
             });
-            return data?.prices; // Array of [timestamp, price]
+            return data?.prices;
         };
 
         const fromPrices = fromId ? await fetchGeckoChart(fromId) : null;
@@ -392,7 +407,6 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
         }
     }
     
-    // ФОЛЛБЭК: Подневный запрос
     for (let i = 0; i < daysCount; i++) {
         const d = addDays(startDate, i);
         const r = await getHistoricalRate(from, to, d);

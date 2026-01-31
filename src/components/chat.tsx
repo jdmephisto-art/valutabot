@@ -1,8 +1,9 @@
+
 'use client';
 
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Check } from 'lucide-react';
+import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Check, Box } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LatestRates } from '@/components/latest-rates';
@@ -14,6 +15,7 @@ import { RateUpdateCard } from '@/components/rate-update-card';
 import { DataSourceSwitcher } from '@/components/data-source-switcher';
 import { AutoClearManager } from '@/components/auto-clear-manager';
 import { DisplayedPairManager } from '@/components/displayed-pair-manager';
+import { OtherAssetsView } from '@/components/other-assets-view';
 import type { Alert, DataSource, Language } from '@/lib/types';
 import { findRateAsync, getLatestRates, setDataSource, getDataSource, preFetchInitialRates } from '@/lib/currencies';
 import { useToast } from '@/hooks/use-toast';
@@ -36,7 +38,7 @@ type ActionButtonProps = {
   icon: React.ElementType;
 };
 
-const defaultDisplayedPairs = ['USD/EUR', 'EUR/USD', 'USD/BYN', 'EUR/BYN', 'USD/RUB', 'EUR/RUB', 'BTC/USD', 'ETH/EUR'];
+const defaultDisplayedPairs = ['USD/EUR', 'EUR/USD', 'USD/BYN', 'EUR/BYN', 'USD/RUB', 'EUR/RUB', 'BTC/USD', 'ETH/EUR', 'TON/USD', 'SOL/USD'];
 const DISPLAYED_PAIRS_STORAGE_KEY = 'currencyBotDisplayedPairs';
 
 export function ChatInterface() {
@@ -64,6 +66,7 @@ export function ChatInterface() {
   
   const getActionButtons = (): ActionButtonProps[] => [
     { id: 'rates', label: t('chat.showRates'), icon: LineChart },
+    { id: 'other_assets', label: t('chat.showOtherAssets'), icon: Box },
     { id: 'configure_pairs', label: t('chat.showDisplayedPairManager'), icon: List },
     { id: 'convert', label: t('chat.showConverter'), icon: CircleDollarSign },
     { id: 'alert', label: t('chat.setAlert'), icon: BellRing },
@@ -198,6 +201,9 @@ export function ChatInterface() {
   
     const actionMap: Record<string, () => React.ReactNode> = {
       rates: () => <LatestRates pairs={displayedPairs} />,
+      other_assets: () => <OtherAssetsView onShowRate={(from) => {
+        addMessage({ sender: 'bot', component: <LatestRates pairs={[`${from}/USD`]} /> });
+      }} />,
       configure_pairs: () => (
         <DisplayedPairManager
           pairs={displayedPairs}
