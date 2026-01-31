@@ -46,20 +46,16 @@ export function HistoricalRates() {
 
   const handleFetchDynamics = async () => {
     if (dynamicsRange?.from && dynamicsRange.to) {
-        console.log("[History UI] Запрос динамики:", fromCurrency, toCurrency, dynamicsRange.from, dynamicsRange.to);
         setFetchingDynamics(true);
         setDynamicsData([]);
         try {
             const data = await getDynamicsForPeriod(fromCurrency, toCurrency, dynamicsRange.from, dynamicsRange.to);
-            console.log("[History UI] Получены данные динамики:", data);
-            if (data.length === 0) {
-                console.error("Ошибка: данные динамики не получены для пары", fromCurrency, toCurrency);
-                toast({ variant: 'destructive', title: t('history.noDynamics') });
+            if (!data || data.length === 0) {
+                toast({ variant: 'destructive', title: t('history.noDynamics'), description: t('history.dynamicFetchError') });
             } else {
                 setDynamicsData(data);
             }
         } catch (e) {
-            console.error("[History UI] Сбой при получении динамики:", e);
             toast({ variant: 'destructive', title: t('history.noDynamics') });
         } finally {
             setFetchingDynamics(false);
@@ -69,20 +65,17 @@ export function HistoricalRates() {
 
   const handleFetchSingleRate = async () => {
     if (date) {
-      console.log("[History UI] Запрос одиночного курса:", fromCurrency, toCurrency, date);
       setFetchingSingle(true);
       setSingleRate(undefined);
       try {
           const rate = await getHistoricalRate(fromCurrency, toCurrency, date);
           if (rate === undefined) {
               setSingleRate(null);
-              console.error("Ошибка: данные не получены для одиночного курса", fromCurrency, toCurrency);
               toast({ variant: 'destructive', title: t('history.noRate') });
           } else {
               setSingleRate(rate);
           }
       } catch (e) {
-          console.error("[History UI] Сбой при получении одиночного курса:", e);
           setSingleRate(null);
           toast({ variant: 'destructive', title: t('history.noRate') });
       } finally {
@@ -93,7 +86,6 @@ export function HistoricalRates() {
 
   const handleFetchRangeRate = async () => {
     if (range?.from && range.to) {
-      console.log("[History UI] Запрос диапазона:", fromCurrency, toCurrency, range.from, range.to);
       setFetchingRange(true);
       setRangeResult(undefined);
       try {
@@ -103,11 +95,9 @@ export function HistoricalRates() {
             setRangeResult({ startRate, endRate });
           } else {
             setRangeResult(null);
-            console.error("Ошибка: данные не получены для диапазона", fromCurrency, toCurrency);
             toast({ variant: 'destructive', title: t('history.noRate') });
           }
       } catch (e) {
-          console.error("[History UI] Сбой при получении диапазона:", e);
           setRangeResult(null);
           toast({ variant: 'destructive', title: t('history.noRate') });
       } finally {
