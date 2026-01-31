@@ -1,5 +1,5 @@
 import { Currency, ExchangeRate, DataSource } from '@/lib/types';
-import { format, subDays, differenceInDays, addDays, isAfter } from 'date-fns';
+import { format, subDays, differenceInDays, addDays } from 'date-fns';
 import { currencyApiPreloadedCurrencies } from './preloaded-data';
 
 let activeDataSource: DataSource = 'nbrb';
@@ -97,10 +97,7 @@ async function coinlayerApiFetch(endpoint: string, params: Record<string, string
     const url = `/api/coinlayer?${queryParams.toString()}`;
     try {
         const response = await fetch(url);
-        if (!response.ok) {
-            console.error(`Coinlayer API fetch error: ${response.status} for ${endpoint}`);
-            return null;
-        }
+        if (!response.ok) return null;
         return await response.json();
     } catch (e) {
         console.error("Coinlayer API error", e);
@@ -242,7 +239,6 @@ function getRateVsUsd(code: string): number | undefined {
         const rubPerGram = cbrMetalsCache[mCode];
         if (cbrRatesCache?.Valute?.['USD']) {
             const rubPerUsd = cbrRatesCache.Valute['USD'].Value / cbrRatesCache.Valute['USD'].Nominal;
-            // Пересчет из руб/грамм в USD/унция (1 унция = 31.1035 грамм)
             return (rubPerGram * 31.1035) / rubPerUsd;
         }
     }
@@ -313,22 +309,17 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
 
         // A. Криптовалюты
         if (actualCrypto.includes(code)) {
-            console.log(`[API Request] Fetching crypto history for ${code} on ${fDate}`);
             const data = await coinlayerApiFetch(fDate, { symbols: code });
             if (data?.success && data.rates && data.rates[code] !== undefined) {
                 const val = data.rates[code];
                 historicalCache.set(cacheKey, val);
                 return val;
-            } else {
-                console.warn(`[API Response] Данные крипты НЕ получены для ${code} на ${fDate}`, data);
-                return undefined;
             }
         }
 
         // B. Драгметаллы (ЦБ РФ)
         if (metalCodes.includes(code)) {
             const mCode = metalMap[code];
-            // Пытаемся получить данные за диапазон, так как ЦБ может не иметь записи на конкретный день
             const d1 = format(subDays(dateObj, 5), 'dd.MM.yyyy');
             const d2 = format(dateObj, 'dd.MM.yyyy');
             
