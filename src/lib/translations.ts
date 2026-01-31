@@ -1,3 +1,4 @@
+
 export const translations = {
   en: {
     chat: {
@@ -253,7 +254,7 @@ export const translations = {
       end: 'Конец ({date}):',
       change: 'Изменение:',
       rangeTooLarge: 'Диапазон дат слишком большой',
-      rangeTooLargeDesc: 'Пожалуйста, выберите диапазон 30 дней или меньше для CurrencyAPI, чтобы не превышать лимиты API.',
+      rangeTooLargeDesc: 'Пожалуйста, выберите диапазон 30 дней или меньше для CurrencyAPI.net, чтобы не превышать лимиты API.',
       noDynamics: 'Не удалось получить динамику для выбранного периода.',
       dynamicFetchError: 'API вернуло пустой ответ для этой пары или периода.',
       noRate: 'Не удалось получить курс для выбранной даты.',

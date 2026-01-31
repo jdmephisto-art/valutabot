@@ -1,13 +1,23 @@
+
 import { Currency, ExchangeRate, DataSource } from '@/lib/types';
-import { format, subDays, differenceInDays, addDays, isToday, isFuture } from 'date-fns';
+import { format, subDays, differenceInDays, addDays, isFuture, getUnixTime } from 'date-fns';
 import { currencyApiPreloadedCurrencies } from './preloaded-data';
 
 let activeDataSource: DataSource = 'nbrb';
 
 export const cryptoCodes = ['BTC', 'ETH', 'LTC', 'XRP', 'BCH', 'BTG', 'DASH', 'EOS', 'XAU', 'XAG', 'XPT', 'XPD'];
 const metalCodes = ['XAU', 'XAG', 'XPT', 'XPD'];
-const actualCrypto = ['BTC', 'ETH', 'LTC', 'XRP', 'BCH', 'DASH'];
 const metalMap: Record<string, string> = { 'XAU': '1', 'XAG': '2', 'XPT': '3', 'XPD': '4' };
+
+// Маппинг для CoinGecko (символ -> ID)
+const cryptoMapping: Record<string, string> = {
+    'BTC': 'bitcoin',
+    'ETH': 'ethereum',
+    'LTC': 'litecoin',
+    'XRP': 'ripple',
+    'BCH': 'bitcoin-cash',
+    'DASH': 'dash',
+};
 
 const CACHE_TTL_RATES = 15 * 60 * 1000;
 
@@ -19,10 +29,8 @@ let cbrRatesCache: any | null = null;
 let cbrRatesTimestamp = 0;
 let cbrMetalsCache: Record<string, number> = {};
 let cbrMetalsTimestamp = 0;
-let fixerRatesCache: { [key: string]: number } = {};
-let fixerRatesTimestamp = 0;
-let coinlayerRatesCache: { [key: string]: number } = {};
-let coinlayerRatesTimestamp = 0;
+let coinGeckoRatesCache: { [key: string]: number } = {};
+let coinGeckoRatesTimestamp = 0;
 
 const historicalCache = new Map<string, number>();
 
@@ -30,8 +38,7 @@ let nbrbUpdatePromise: Promise<void> | null = null;
 let currencyApiUpdatePromise: Promise<void> | null = null;
 let cbrUpdatePromise: Promise<void> | null = null;
 let cbrMetalsUpdatePromise: Promise<void> | null = null;
-let fixerUpdatePromise: Promise<void> | null = null;
-let coinlayerUpdatePromise: Promise<void> | null = null;
+let coinGeckoUpdatePromise: Promise<void> | null = null;
 
 function isCacheValid(timestamp: number, ttl: number): boolean {
     return timestamp > 0 && (Date.now() - timestamp) < ttl;
@@ -47,14 +54,23 @@ export function getDataSource(): DataSource {
     return activeDataSource;
 }
 
+async function coingeckoApiFetch(endpoint: string, params: Record<string, string> = {}) {
+    const queryParams = new URLSearchParams({ endpoint, ...params });
+    const url = `/api/coingecko?${queryParams.toString()}`;
+    try {
+        const response = await fetch(url, { cache: 'no-store' });
+        return response.ok ? response.json() : null;
+    } catch {
+        return null;
+    }
+}
+
 async function currencyApiNetFetch(endpoint: string, params: Record<string, string> = {}) {
     const queryParams = new URLSearchParams({ endpoint, ...params });
     const url = `/api/currency?${queryParams.toString()}`;
     try {
         const response = await fetch(url, { cache: 'no-store' });
-        if (!response.ok) return null;
-        const data = await response.json();
-        return data.valid === false ? null : data;
+        return response.ok ? response.json() : null;
     } catch {
         return null;
     }
@@ -78,34 +94,31 @@ async function cbrApiFetch() {
     }
 }
 
-async function fixerApiFetch(endpoint: string, params: Record<string, string> = {}) {
-    const queryParams = new URLSearchParams({ endpoint, ...params });
-    const url = `/api/fixer?${queryParams.toString()}`;
-    try {
-        const response = await fetch(url);
-        return response.ok ? response.json() : null;
-    } catch {
-        return null;
-    }
-}
-
-async function coinlayerApiFetch(endpoint: string, params: Record<string, string> = {}) {
-    const queryParams = new URLSearchParams({ endpoint, ...params });
-    const url = `/api/coinlayer?${queryParams.toString()}`;
-    try {
-        const response = await fetch(url);
-        if (!response.ok) return null;
-        const data = await response.json();
-        // Coinlayer sometimes returns errors inside a successful 200 response
-        if (data.success === false) {
-            console.error('Coinlayer API error:', data.error);
-            return null;
+export async function _updateCoinGeckoRatesCache(): Promise<void> {
+    if (isCacheValid(coinGeckoRatesTimestamp, CACHE_TTL_RATES) && Object.keys(coinGeckoRatesCache).length > 0) return Promise.resolve();
+    if (coinGeckoUpdatePromise) return coinGeckoUpdatePromise;
+    coinGeckoUpdatePromise = (async () => {
+        try {
+            const ids = Object.values(cryptoMapping).join(',');
+            const data = await coingeckoApiFetch('simple/price', { ids, vs_currencies: 'usd' });
+            if (data) {
+                const temp: any = {};
+                Object.keys(cryptoMapping).forEach(code => {
+                    const id = cryptoMapping[code];
+                    if (data[id]?.usd) {
+                        temp[code] = data[id].usd;
+                    }
+                });
+                coinGeckoRatesCache = temp;
+                coinGeckoRatesTimestamp = Date.now();
+            }
+        } catch (e) {
+            console.error('CoinGecko update failed', e);
+        } finally {
+            coinGeckoUpdatePromise = null;
         }
-        return data;
-    } catch (e) {
-        console.error('Failed to fetch from Coinlayer proxy:', e);
-        return null;
-    }
+    })();
+    return coinGeckoUpdatePromise;
 }
 
 export async function _updateNbrbRatesCache(): Promise<void> {
@@ -192,52 +205,13 @@ export async function _updateCbrMetalsCache(): Promise<void> {
     return cbrMetalsUpdatePromise;
 }
 
-export async function _updateFixerRatesCache(): Promise<void> {
-    if (isCacheValid(fixerRatesTimestamp, CACHE_TTL_RATES) && Object.keys(fixerRatesCache).length > 0) return Promise.resolve();
-    if (fixerUpdatePromise) return fixerUpdatePromise;
-    fixerUpdatePromise = (async () => {
-        try {
-            const data = await fixerApiFetch('latest');
-            if (data?.success) {
-                fixerRatesCache = data.rates;
-                fixerRatesTimestamp = Date.now();
-            }
-        } catch (e) {
-            console.error('Fixer update failed', e);
-        } finally {
-            fixerUpdatePromise = null;
-        }
-    })();
-    return fixerUpdatePromise;
-}
-
-export async function _updateCoinlayerRatesCache(): Promise<void> {
-    if (isCacheValid(coinlayerRatesTimestamp, CACHE_TTL_RATES) && Object.keys(coinlayerRatesCache).length > 0) return Promise.resolve();
-    if (coinlayerUpdatePromise) return coinlayerUpdatePromise;
-    coinlayerUpdatePromise = (async () => {
-        try {
-            // Explicitly request popular cryptos to increase chance of success on free plans
-            const data = await coinlayerApiFetch('live', { symbols: 'BTC,ETH,LTC,XRP,BCH,XAU,XAG' });
-            if (data?.success && data?.rates) {
-                coinlayerRatesCache = data.rates;
-                coinlayerRatesTimestamp = Date.now();
-            }
-        } catch (e) {
-            console.error('Coinlayer update failed', e);
-        } finally {
-            coinlayerUpdatePromise = null;
-        }
-    })();
-    return coinlayerUpdatePromise;
-}
-
 function getRateVsUsd(code: string): number | undefined {
     if (code === 'USD') return 1;
 
-    // Prioritize Coinlayer for cryptos
-    if (coinlayerRatesCache[code]) return coinlayerRatesCache[code];
+    // ПРИОРИТЕТ 1: CoinGecko для криптовалют (ETH теперь здесь)
+    if (coinGeckoRatesCache[code]) return coinGeckoRatesCache[code];
 
-    // Metals from CBR (primary)
+    // ПРИОРИТЕТ 2: Металлы из ЦБ РФ
     const mCode = metalMap[code];
     if (mCode && cbrMetalsCache[mCode]) {
         const rubPerGram = cbrMetalsCache[mCode];
@@ -247,21 +221,20 @@ function getRateVsUsd(code: string): number | undefined {
         }
     }
 
-    // NBRB
+    // ПРИОРИТЕТ 3: NBRB (дает BTC и фиат)
     if (nbrbRatesCache[code] && nbrbRatesCache['USD']) {
         return (nbrbRatesCache[code].rate / nbrbRatesCache[code].scale) / (nbrbRatesCache['USD'].rate / nbrbRatesCache['USD'].scale);
     }
     
-    // CBR Valute
+    // ПРИОРИТЕТ 4: CBR (фиат)
     if (cbrRatesCache?.Valute?.[code] && cbrRatesCache?.Valute?.['USD']) {
         const vRate = cbrRatesCache.Valute[code].Value / cbrRatesCache.Valute[code].Nominal;
         const uRate = cbrRatesCache.Valute['USD'].Value / cbrRatesCache.Valute['USD'].Nominal;
         return vRate / uRate;
     }
     
-    // Fallbacks
+    // ПРИОРИТЕТ 5: CurrencyAPI
     if (currencyApiRatesCache[code]) return 1 / currencyApiRatesCache[code];
-    if (fixerRatesCache[code] && fixerRatesCache['USD']) return fixerRatesCache['USD'] / fixerRatesCache[code];
 
     return undefined;
 }
@@ -309,8 +282,8 @@ export async function findRateAsync(from: string, to: string): Promise<number | 
 export async function getHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
     if (from === to) return 1;
 
-    const fDate = format(date, 'yyyy-MM-dd');
     const dateKey = format(date, 'yyyyMMdd');
+    const isActuallyFuture = isFuture(date);
 
     const getValVsUsd = async (code: string, dateObj: Date): Promise<number | undefined> => {
         if (code === 'USD') return 1;
@@ -319,54 +292,53 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
 
         let result: number | undefined;
 
-        if (actualCrypto.includes(code)) {
-            const data = await coinlayerApiFetch(fDate, { symbols: code });
-            if (data?.rates?.[code]) {
-                result = data.rates[code];
+        // Если это "будущее" (2026 год), используем псевдо-вариацию от текущего курса
+        if (isActuallyFuture) {
+            await preFetchInitialRates();
+            const liveRate = getRateVsUsd(code);
+            if (liveRate) return getPseudoVariation(code, dateObj, liveRate);
+        }
+
+        // РЕАЛЬНАЯ ИСТОРИЯ ДЛЯ КРИПТЫ ЧЕРЕЗ COINGECKO
+        const geckoId = cryptoMapping[code];
+        if (geckoId) {
+            const hist = await coingeckoApiFetch(`coins/${geckoId}/history`, { date: format(dateObj, 'dd-MM-yyyy'), localization: 'false' });
+            if (hist?.market_data?.current_price?.usd) {
+                result = hist.market_data.current_price.usd;
             }
         }
 
+        // МЕТАЛЛЫ ИЗ ЦБ РФ
         if (!result && metalCodes.includes(code)) {
             const mCode = metalMap[code];
-            for (let offset = 0; offset < 5; offset++) {
-                const searchDate = subDays(dateObj, offset);
-                const searchStr = format(searchDate, 'dd.MM.yyyy');
-                const mRes = await fetch(`/api/cbr/metals?date_req1=${searchStr}&date_req2=${searchStr}`).then(r => r.json()).catch(() => null);
-                
-                if (mRes?.Metall?.Record) {
-                    const records = Array.isArray(mRes.Metall.Record) ? mRes.Metall.Record : [mRes.Metall.Record];
-                    const record = records.find((r: any) => r.$.Code === mCode);
-                    const priceStr = record?.Buy?.[0]?.replace(',', '.');
-                    if (priceStr) {
-                        const rubG = parseFloat(priceStr);
-                        const uRes = await fetch(`/api/cbr/history?date_req=${format(searchDate, 'dd/MM/yyyy')}`).then(r => r.json()).catch(() => null);
-                        const uVal = uRes?.ValCurs?.Valute?.find((v: any) => v.CharCode[0] === 'USD');
-                        if (uVal) {
-                            const rubU = parseFloat(uVal.Value[0].replace(',', '.')) / parseInt(uVal.Nominal[0], 10);
-                            result = (rubG * 31.1035) / rubU;
-                            break;
-                        }
+            const searchStr = format(dateObj, 'dd.MM.yyyy');
+            const mRes = await fetch(`/api/cbr/metals?date_req1=${searchStr}&date_req2=${searchStr}`).then(r => r.json()).catch(() => null);
+            if (mRes?.Metall?.Record) {
+                const records = Array.isArray(mRes.Metall.Record) ? mRes.Metall.Record : [mRes.Metall.Record];
+                const record = records.find((r: any) => r.$.Code === mCode);
+                const priceStr = record?.Buy?.[0]?.replace(',', '.');
+                if (priceStr) {
+                    const rubG = parseFloat(priceStr);
+                    const uRes = await fetch(`/api/cbr/history?date_req=${format(dateObj, 'dd/MM/yyyy')}`).then(r => r.json()).catch(() => null);
+                    const uVal = uRes?.ValCurs?.Valute?.find((v: any) => v.CharCode[0] === 'USD');
+                    if (uVal) {
+                        const rubU = parseFloat(uVal.Value[0].replace(',', '.')) / parseInt(uVal.Nominal[0], 10);
+                        result = (rubG * 31.1035) / rubU;
                     }
                 }
             }
         }
 
+        // ФИАТ ИЗ НБРБ
         if (!result) {
             try {
+                const fDate = format(dateObj, 'yyyy-MM-dd');
                 const nbrbVal = await nbrbApiFetch(`rates/${code}?onDate=${fDate}&parammode=2`).catch(() => null);
                 const nbrbUsd = await nbrbApiFetch(`rates/USD?onDate=${fDate}&parammode=2`).catch(() => null);
                 if (nbrbVal && nbrbUsd) {
                     result = (nbrbVal.Cur_OfficialRate / nbrbVal.Cur_Scale) / (nbrbUsd.Cur_OfficialRate / nbrbUsd.Cur_Scale);
                 }
             } catch {}
-        }
-
-        if (!result) {
-            await preFetchInitialRates();
-            const liveRate = getRateVsUsd(code);
-            if (liveRate) {
-                result = getPseudoVariation(code, dateObj, liveRate);
-            }
         }
 
         if (result) historicalCache.set(cacheKey, result);
@@ -383,7 +355,44 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
     const daysCount = Math.min(differenceInDays(endDate, startDate) + 1, 31);
     const results: { date: string; rate: number }[] = [];
+
+    // ОПТИМИЗАЦИЯ ДЛЯ КРИПТЫ: Получаем весь график одним запросом
+    const fromId = cryptoMapping[from];
+    const toId = cryptoMapping[to];
+
+    if ((fromId || from === 'USD') && (toId || to === 'USD') && !isFuture(endDate)) {
+        const fetchGeckoChart = async (id: string) => {
+            const data = await coingeckoApiFetch(`coins/${id}/market_chart/range`, {
+                vs_currency: 'usd',
+                from: getUnixTime(startDate).toString(),
+                to: getUnixTime(endDate).toString()
+            });
+            return data?.prices; // Array of [timestamp, price]
+        };
+
+        const fromPrices = fromId ? await fetchGeckoChart(fromId) : null;
+        const toPrices = toId ? await fetchGeckoChart(toId) : null;
+
+        if (fromPrices || toPrices) {
+            for (let i = 0; i < daysCount; i++) {
+                const targetDate = addDays(startDate, i);
+                const targetTs = getUnixTime(targetDate) * 1000;
+                
+                const getPriceAtDate = (prices: any[]) => {
+                    if (!prices) return 1;
+                    const closest = prices.reduce((prev, curr) => Math.abs(curr[0] - targetTs) < Math.abs(prev[0] - targetTs) ? curr : prev);
+                    return closest[1];
+                };
+
+                const fP = getPriceAtDate(fromPrices);
+                const tP = getPriceAtDate(toPrices);
+                results.push({ date: format(targetDate, 'dd.MM'), rate: fP / tP });
+            }
+            return results;
+        }
+    }
     
+    // ФОЛЛБЭК: Подневный запрос
     for (let i = 0; i < daysCount; i++) {
         const d = addDays(startDate, i);
         const r = await getHistoricalRate(from, to, d);
@@ -397,14 +406,13 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
 export async function preFetchInitialRates() {
     const ds = getDataSource();
     const tasks = [
-        _updateCoinlayerRatesCache().catch(() => {}),
+        _updateCoinGeckoRatesCache().catch(() => {}),
         _updateCbrMetalsCache().catch(() => {}),
         _updateCbrRatesCache().catch(() => {}),
-        _updateFixerRatesCache().catch(() => {})
+        _updateCurrencyApiRatesCache().catch(() => {})
     ];
     
     if (ds === 'nbrb') tasks.push(_updateNbrbRatesCache().catch(() => {}));
-    else if (ds === 'currencyapi') tasks.push(_updateCurrencyApiRatesCache().catch(() => {}));
     
     await Promise.allSettled(tasks);
 }
