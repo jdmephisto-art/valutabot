@@ -46,10 +46,12 @@ export function HistoricalRates() {
 
   const handleFetchDynamics = async () => {
     if (dynamicsRange?.from && dynamicsRange.to) {
+        console.log("[History UI] Запрос динамики:", fromCurrency, toCurrency, dynamicsRange.from, dynamicsRange.to);
         setFetchingDynamics(true);
         setDynamicsData([]);
         try {
             const data = await getDynamicsForPeriod(fromCurrency, toCurrency, dynamicsRange.from, dynamicsRange.to);
+            console.log("[History UI] Получены данные динамики:", data);
             if (data.length === 0) {
                 console.error("Ошибка: данные динамики не получены для пары", fromCurrency, toCurrency);
                 toast({ variant: 'destructive', title: t('history.noDynamics') });
@@ -67,6 +69,7 @@ export function HistoricalRates() {
 
   const handleFetchSingleRate = async () => {
     if (date) {
+      console.log("[History UI] Запрос одиночного курса:", fromCurrency, toCurrency, date);
       setFetchingSingle(true);
       setSingleRate(undefined);
       try {
@@ -90,6 +93,7 @@ export function HistoricalRates() {
 
   const handleFetchRangeRate = async () => {
     if (range?.from && range.to) {
+      console.log("[History UI] Запрос диапазона:", fromCurrency, toCurrency, range.from, range.to);
       setFetchingRange(true);
       setRangeResult(undefined);
       try {
