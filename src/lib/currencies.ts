@@ -9,13 +9,13 @@ export const cryptoCodes = [
     'BTC', 'ETH', 'LTC', 'XRP', 'BCH', 'BTG', 'DASH', 'EOS', 
     'SOL', 'TON', 'DOGE', 'ADA', 'DOT', 'TRX', 'MATIC', 'AVAX', 'LINK',
     'USDT', 'USDC', 'DAI', 'NOT', 'DOGS',
-    'XAU', 'XAG', 'XPT', 'XPD'
+    'XAU', 'XAG', 'XPT', 'XPD',
+    'BAYC', 'AZUKI', 'PUDGY'
 ];
 
 const metalCodes = ['XAU', 'XAG', 'XPT', 'XPD'];
 const metalMap: Record<string, string> = { 'XAU': '1', 'XAG': '2', 'XPT': '3', 'XPD': '4' };
 
-// Маппинг для CoinGecko (символ -> ID)
 const cryptoMapping: Record<string, string> = {
     'BTC': 'bitcoin',
     'ETH': 'ethereum',
@@ -39,6 +39,12 @@ const cryptoMapping: Record<string, string> = {
     'DOGS': 'dogs'
 };
 
+const nftsMapping: Record<string, string> = {
+    'BAYC': 'bored-ape-yacht-club',
+    'AZUKI': 'azuki',
+    'PUDGY': 'pudgy-penguins'
+};
+
 const CACHE_TTL_RATES = 15 * 60 * 1000;
 
 let nbrbRatesCache: { [key: string]: { rate: number, scale: number } } = {};
@@ -51,6 +57,8 @@ let cbrMetalsCache: Record<string, number> = {};
 let cbrMetalsTimestamp = 0;
 let coinGeckoRatesCache: { [key: string]: number } = {};
 let coinGeckoRatesTimestamp = 0;
+let nftRatesCache: { [key: string]: number } = {};
+let nftRatesTimestamp = 0;
 
 const historicalCache = new Map<string, number>();
 
@@ -132,6 +140,17 @@ export async function _updateCoinGeckoRatesCache(): Promise<void> {
                 coinGeckoRatesCache = temp;
                 coinGeckoRatesTimestamp = Date.now();
             }
+
+            // Update NFTs floor prices
+            for (const code of Object.keys(nftsMapping)) {
+                const id = nftsMapping[code];
+                const nftData = await coingeckoApiFetch(`nfts/${id}`);
+                if (nftData?.floor_price?.usd) {
+                    nftRatesCache[code] = nftData.floor_price.usd;
+                }
+            }
+            nftRatesTimestamp = Date.now();
+
         } catch (e) {
             console.error('CoinGecko update failed', e);
         } finally {
@@ -228,10 +247,11 @@ export async function _updateCbrMetalsCache(): Promise<void> {
 function getRateVsUsd(code: string): number | undefined {
     if (code === 'USD') return 1;
 
-    // ПРИОРИТЕТ 1: CoinGecko (теперь для всей крипты)
+    // 1. CoinGecko (Crypto & NFT)
     if (coinGeckoRatesCache[code]) return coinGeckoRatesCache[code];
+    if (nftRatesCache[code]) return nftRatesCache[code];
 
-    // ПРИОРИТЕТ 2: Металлы из ЦБ РФ
+    // 2. Metals from CBR
     const mCode = metalMap[code];
     if (mCode && cbrMetalsCache[mCode]) {
         const rubPerGram = cbrMetalsCache[mCode];
@@ -241,19 +261,19 @@ function getRateVsUsd(code: string): number | undefined {
         }
     }
 
-    // ПРИОРИТЕТ 3: NBRB (фиат и BTC)
+    // 3. NBRB
     if (nbrbRatesCache[code] && nbrbRatesCache['USD']) {
         return (nbrbRatesCache[code].rate / nbrbRatesCache[code].scale) / (nbrbRatesCache['USD'].rate / nbrbRatesCache['USD'].scale);
     }
     
-    // ПРИОРИТЕТ 4: CBR (фиат)
+    // 4. CBR
     if (cbrRatesCache?.Valute?.[code] && cbrRatesCache?.Valute?.['USD']) {
         const vRate = cbrRatesCache.Valute[code].Value / cbrRatesCache.Valute[code].Nominal;
         const uRate = cbrRatesCache.Valute['USD'].Value / cbrRatesCache.Valute['USD'].Nominal;
         return vRate / uRate;
     }
     
-    // ПРИОРИТЕТ 5: CurrencyAPI
+    // 5. CurrencyAPI
     if (currencyApiRatesCache[code]) return 1 / currencyApiRatesCache[code];
 
     return undefined;

@@ -4,7 +4,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/hooks/use-translation';
-import { TrendingUp, Coins, Zap, ShieldCheck, Share2 } from 'lucide-react';
+import { TrendingUp, Coins, Zap, ShieldCheck, Share2, LayoutGrid } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -36,6 +36,12 @@ const assetGroups = [
     icon: Share2,
     color: 'text-purple-500',
     assets: ['TRX', 'MATIC', 'AVAX', 'LINK'],
+  },
+  {
+    id: 'nfts',
+    icon: LayoutGrid,
+    color: 'text-pink-500',
+    assets: ['BAYC', 'AZUKI', 'PUDGY'],
   }
 ];
 
@@ -52,7 +58,7 @@ export function OtherAssetsView({ onShowRate }: OtherAssetsViewProps) {
                 <CardDescription>{t('otherAssets.description')}</CardDescription>
             </CardHeader>
             <CardContent>
-                <ScrollArea className="h-[300px] pr-4">
+                <ScrollArea className="h-[350px] pr-4">
                     <div className="space-y-6">
                         {assetGroups.map((group) => (
                             <div key={group.id} className="space-y-3">
@@ -67,7 +73,7 @@ export function OtherAssetsView({ onShowRate }: OtherAssetsViewProps) {
                                             className="flex flex-col p-2 bg-muted/50 rounded-lg hover:bg-muted transition-colors border group"
                                         >
                                             <div className="flex items-center justify-between mb-1">
-                                                <Badge variant="outline" className="font-mono">{code}</Badge>
+                                                <Badge variant="outline" className="font-mono text-[10px]">{code}</Badge>
                                                 <Button 
                                                     variant="ghost" 
                                                     size="sm" 

@@ -43,6 +43,7 @@ export const translations = {
       stablecoins: "Stablecoins",
       telegram: "Telegram Ecosystem",
       infrastructure: "Infrastructure",
+      nfts: "NFT Collections (Floor)",
       action: "Show Rate",
     },
     language: {
@@ -223,6 +224,7 @@ export const translations = {
       stablecoins: "Стейблкоины",
       telegram: "Экосистема Telegram",
       infrastructure: "Инфраструктура",
+      nfts: "NFT Коллекции (Floor)",
       action: "Показать курс",
     },
     language: {
@@ -392,6 +394,9 @@ export const currencyNames: Record<string, Record<string, string>> = {
     'XAG': 'Silver (gram)',
     'XPT': 'Platinum (gram)',
     'XPD': 'Palladium (gram)',
+    'BAYC': 'Bored Ape Yacht Club',
+    'AZUKI': 'Azuki',
+    'PUDGY': 'Pudgy Penguins',
   },
   ru: {
     'USD': 'Доллар США',
@@ -422,5 +427,8 @@ export const currencyNames: Record<string, Record<string, string>> = {
     'XAG': 'Серебро (грамм)',
     'XPT': 'Платина (грамм)',
     'XPD': 'Палладий (грамм)',
+    'BAYC': 'Bored Ape Yacht Club',
+    'AZUKI': 'Azuki',
+    'PUDGY': 'Pudgy Penguins',
   }
 };
