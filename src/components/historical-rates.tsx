@@ -46,10 +46,6 @@ export function HistoricalRates() {
 
   const handleFetchDynamics = async () => {
     if (dynamicsRange?.from && dynamicsRange.to) {
-        if (dynamicsRange.from > new Date()) {
-            toast({ variant: 'destructive', title: t('history.noRate'), description: t('validation.positiveOrZero') });
-            return;
-        }
         setFetchingDynamics(true);
         setDynamicsData([]);
         const data = await getDynamicsForPeriod(fromCurrency, toCurrency, dynamicsRange.from, dynamicsRange.to);
@@ -66,10 +62,6 @@ export function HistoricalRates() {
 
   const handleFetchSingleRate = async () => {
     if (date) {
-      if (date > new Date()) {
-          toast({ variant: 'destructive', title: t('history.noRate') });
-          return;
-      }
       setFetchingSingle(true);
       setSingleRate(undefined);
       const rate = await getHistoricalRate(fromCurrency, toCurrency, date);
@@ -120,14 +112,6 @@ export function HistoricalRates() {
 
   const getCalendarDisabledDates = () => {
     const disabled: { before?: Date, after?: Date } = { after: new Date() };
-    const source = getDataSource();
-    if (source === 'nbrb') {
-        disabled.before = new Date('2021-01-01');
-    } else if (source === 'cbr') {
-        disabled.before = new Date('2002-01-01');
-    } else {
-        disabled.before = subDays(new Date(), (365 * 2) - 1);
-    }
     return disabled;
   }
 
@@ -169,7 +153,7 @@ export function HistoricalRates() {
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={dynamicsRange?.from} onSelect={(d) => { setDynamicsRange({ ...dynamicsRange, from: d }); setDynamicsStartPopoverOpen(false); }} disabled={(d) => d > new Date() || (getCalendarDisabledDates().before ? d < getCalendarDisabledDates().before! : false)} locale={dateLocale} />
+                        <Calendar mode="single" selected={dynamicsRange?.from} onSelect={(d) => { setDynamicsRange({ ...dynamicsRange, from: d }); setDynamicsStartPopoverOpen(false); }} disabled={getCalendarDisabledDates()} locale={dateLocale} />
                     </PopoverContent>
                 </Popover>
                 <Popover open={dynamicsEndPopoverOpen} onOpenChange={setDynamicsEndPopoverOpen}>
@@ -180,7 +164,7 @@ export function HistoricalRates() {
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={dynamicsRange?.to} onSelect={(d) => { setDynamicsRange({ ...dynamicsRange, to: d }); setDynamicsEndPopoverOpen(false); }} disabled={(d) => d > new Date() || (dynamicsRange?.from ? d < dynamicsRange.from : false)} locale={dateLocale} />
+                        <Calendar mode="single" selected={dynamicsRange?.to} onSelect={(d) => { setDynamicsRange({ ...dynamicsRange, to: d }); setDynamicsEndPopoverOpen(false); }} disabled={(d) => (dynamicsRange?.from ? d < dynamicsRange.from : false)} locale={dateLocale} />
                     </PopoverContent>
                 </Popover>
             </div>
@@ -249,7 +233,7 @@ export function HistoricalRates() {
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={range?.to} onSelect={(d) => { setRange({ ...range, to: d }); setRangeEndPopoverOpen(false); }} disabled={(d) => d > new Date() || (range?.from ? d < range.from : false)} locale={dateLocale} />
+                        <Calendar mode="single" selected={range?.to} onSelect={(d) => { setRange({ ...range, to: d }); setRangeEndPopoverOpen(false); }} disabled={(d) => (range?.from ? d < range.from : false)} locale={dateLocale} />
                     </PopoverContent>
                 </Popover>
              </div>

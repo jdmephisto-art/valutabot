@@ -1,4 +1,4 @@
-import type { Currency, ExchangeRate, DataSource } from '@/lib/types';
+import { Currency, ExchangeRate, DataSource } from '@/lib/types';
 import { format, subDays, differenceInDays, addDays } from 'date-fns';
 import { currencyApiPreloadedCurrencies } from './preloaded-data';
 
@@ -216,7 +216,7 @@ function _updateCoinlayerRatesCache(): Promise<void> {
 function getRateVsUsd(code: string): number | undefined {
     if (code === 'USD') return 1;
 
-    // 1. Криптовалюты (Coinlayer)
+    // 1. Криптовалюты (Coinlayer) - возвращает цену 1 единицы в USD
     if (coinlayerRatesCache[code]) return coinlayerRatesCache[code];
 
     // 2. Драгметаллы (CBR)
@@ -279,8 +279,8 @@ export async function findRateAsync(from: string, to: string): Promise<number | 
 
 export async function getHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
     if (from === to) return 1;
-    if (date > new Date()) return undefined;
-
+    
+    // Получаем цену актива в USD на конкретную дату
     const getValVsUsd = async (code: string, dateObj: Date): Promise<number | undefined> => {
         if (code === 'USD') return 1;
         const cacheKey = `${code}_${format(dateObj, 'yyyyMMdd')}`;
@@ -292,7 +292,7 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
         // A. Криптовалюты
         if (actualCrypto.includes(code)) {
             const data = await coinlayerApiFetch(fDate, { symbols: code });
-            if (data?.success && data.rates[code]) {
+            if (data?.success && data.rates && data.rates[code]) {
                 const val = data.rates[code];
                 historicalCache.set(cacheKey, val);
                 return val;
@@ -302,18 +302,22 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
         // B. Драгметаллы
         if (metalCodes.includes(code)) {
             const mCode = metalMap[code];
+            // Для ЦБ берем диапазон, так как в выходные курсов нет
             const d1 = format(subDays(dateObj, 4), 'dd.MM.yyyy');
             const d2 = format(dateObj, 'dd.MM.yyyy');
             const [mRes, uRes] = await Promise.all([
                 fetch(`/api/cbr/metals?date_req1=${d1}&date_req2=${d2}`).then(r => r.json()).catch(() => null),
                 fetch(`/api/cbr/history?date_req=${cbrDate}`).then(r => r.json()).catch(() => null)
             ]);
+            
             let rubG: string | undefined;
             if (mRes?.Metall?.Record) {
                 const records = Array.isArray(mRes.Metall.Record) ? mRes.Metall.Record : [mRes.Metall.Record];
+                // Берем самый последний доступный курс из диапазона
                 const sorted = records.filter((r: any) => r.$.Code === mCode).sort((a: any, b: any) => b.$.Date.split('.').reverse().join('').localeCompare(a.$.Date.split('.').reverse().join('')));
                 rubG = sorted[0]?.Buy?.[0]?.replace(',', '.');
             }
+            
             const uVal = uRes?.ValCurs?.Valute?.find((v: any) => v.CharCode[0] === 'USD');
             if (rubG && uVal) {
                 const rubU = parseFloat(uVal.Value[0].replace(',', '.')) / parseInt(uVal.Nominal[0], 10);
@@ -323,7 +327,7 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
             }
         }
 
-        // C. Фиатные валюты (НБРБ или ЦБ)
+        // C. Фиатные валюты (НБРБ)
         const nbrbVal = await nbrbApiFetch(`rates/${code}?onDate=${fDate}&parammode=2`).catch(() => null);
         const nbrbUsd = await nbrbApiFetch(`rates/USD?onDate=${fDate}&parammode=2`).catch(() => null);
         if (nbrbVal && nbrbUsd) {
@@ -332,6 +336,7 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
             return val;
         }
 
+        // D. Фиатные валюты (ЦБ РФ архив)
         const cbrRes = await fetch(`/api/cbr/history?date_req=${cbrDate}`).then(r => r.json()).catch(() => null);
         const valutes = cbrRes?.ValCurs?.Valute;
         if (Array.isArray(valutes)) {
@@ -357,7 +362,7 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
     const daysCount = Math.min(differenceInDays(endDate, startDate) + 1, 31);
     const results: { date: string; rate: number }[] = [];
     
-    // Последовательные запросы для стабильности
+    // Запрашиваем данные последовательно, чтобы избежать блокировок API
     for (let i = 0; i < daysCount; i++) {
         const d = addDays(startDate, i);
         const r = await getHistoricalRate(from, to, d);

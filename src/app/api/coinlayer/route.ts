@@ -10,7 +10,8 @@ export async function GET(request: NextRequest) {
 
   // !!! ВАЖНО: Замените 'YOUR_COINLAYER_API_KEY' на ваш реальный ключ API от Coinlayer.com !!!
   const apiKey = 'b676ecb8db4d746383bfced2a2cbe94e';
-  const baseUrl = 'http://api.coinlayer.com/api/';
+  // Базовый URL Coinlayer не требует сегмента /api/ для эндпоинтов live, list и исторических дат.
+  const baseUrl = 'http://api.coinlayer.com/';
 
   const externalApiParams = new URLSearchParams();
   searchParams.forEach((value, key) => {
