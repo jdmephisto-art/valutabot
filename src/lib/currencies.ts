@@ -300,7 +300,6 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
     if (from === to) return 1;
 
     const fDate = format(date, 'yyyy-MM-dd');
-    const cbrDate = format(date, 'dd/MM/yyyy');
     const dateKey = format(date, 'yyyyMMdd');
 
     const getValVsUsd = async (code: string, dateObj: Date): Promise<number | undefined> => {
@@ -321,19 +320,25 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
         // Для металлов
         if (!result && metalCodes.includes(code)) {
             const mCode = metalMap[code];
-            // Пробуем CBR
-            const mRes = await fetch(`/api/cbr/metals?date_req1=${format(subDays(dateObj, 7), 'dd.MM.yyyy')}&date_req2=${format(dateObj, 'dd.MM.yyyy')}`).then(r => r.json()).catch(() => null);
-            if (mRes?.Metall?.Record) {
-                const records = Array.isArray(mRes.Metall.Record) ? mRes.Metall.Record : [mRes.Metall.Record];
-                const sorted = records.filter((r: any) => r.$.Code === mCode).sort((a: any, b: any) => b.$.Date.split('.').reverse().join('').localeCompare(a.$.Date.split('.').reverse().join('')));
-                const priceStr = sorted[0]?.Buy?.[0]?.replace(',', '.');
-                if (priceStr) {
-                    const rubG = parseFloat(priceStr);
-                    const uRes = await fetch(`/api/cbr/history?date_req=${format(dateObj, 'dd/MM/yyyy')}`).then(r => r.json()).catch(() => null);
-                    const uVal = uRes?.ValCurs?.Valute?.find((v: any) => v.CharCode[0] === 'USD');
-                    if (uVal) {
-                        const rubU = parseFloat(uVal.Value[0].replace(',', '.')) / parseInt(uVal.Nominal[0], 10);
-                        result = (rubG * 31.1035) / rubU;
+            // Пробуем CBR (ищем за последние 5 дней, если это выходной)
+            for (let offset = 0; offset < 5; offset++) {
+                const searchDate = subDays(dateObj, offset);
+                const searchStr = format(searchDate, 'dd.MM.yyyy');
+                const mRes = await fetch(`/api/cbr/metals?date_req1=${searchStr}&date_req2=${searchStr}`).then(r => r.json()).catch(() => null);
+                
+                if (mRes?.Metall?.Record) {
+                    const records = Array.isArray(mRes.Metall.Record) ? mRes.Metall.Record : [mRes.Metall.Record];
+                    const record = records.find((r: any) => r.$.Code === mCode);
+                    const priceStr = record?.Buy?.[0]?.replace(',', '.');
+                    if (priceStr) {
+                        const rubG = parseFloat(priceStr);
+                        const uRes = await fetch(`/api/cbr/history?date_req=${format(searchDate, 'dd/MM/yyyy')}`).then(r => r.json()).catch(() => null);
+                        const uVal = uRes?.ValCurs?.Valute?.find((v: any) => v.CharCode[0] === 'USD');
+                        if (uVal) {
+                            const rubU = parseFloat(uVal.Value[0].replace(',', '.')) / parseInt(uVal.Nominal[0], 10);
+                            result = (rubG * 31.1035) / rubU;
+                            break;
+                        }
                     }
                 }
             }
@@ -350,7 +355,7 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
             } catch {}
         }
 
-        // Если все еще нет данных (скорее всего это "будущее" 2026г. для API)
+        // Если все еще нет данных (скорее всего это "будущее" 2026г. для реальных API)
         if (!result) {
             await preFetchInitialRates();
             const liveRate = getRateVsUsd(code);
@@ -374,7 +379,6 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
     const daysCount = Math.min(differenceInDays(endDate, startDate) + 1, 31);
     const results: { date: string; rate: number }[] = [];
     
-    // Запрашиваем данные последовательно, чтобы избежать перегрузки кэша и API
     for (let i = 0; i < daysCount; i++) {
         const d = addDays(startDate, i);
         const r = await getHistoricalRate(from, to, d);
