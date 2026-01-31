@@ -93,16 +93,20 @@ async function coinlayerApiFetch(endpoint: string, params: Record<string, string
     const queryParams = new URLSearchParams({ endpoint, ...params });
     const url = `/api/coinlayer?${queryParams.toString()}`;
     try {
+        console.log(`[API Request] Coinlayer: ${endpoint}`, params);
         const response = await fetch(url);
-        if (!response.ok) return null;
+        if (!response.ok) {
+            console.error(`[API Error] Coinlayer HTTP ${response.status}`);
+            return null;
+        }
         const data = await response.json();
         if (data && data.success === false) {
-            console.error("[Coinlayer API Error]", data.error);
+            console.error("[API Error] Coinlayer Business:", data.error);
             return null;
         }
         return data;
     } catch (e) {
-        console.error("[API Error] Coinlayer fetch failed:", e);
+        console.error("[API Error] Coinlayer Exception:", e);
         return null;
     }
 }
@@ -294,7 +298,11 @@ export async function findRateAsync(from: string, to: string): Promise<number | 
 export async function getHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
     if (from === to) return 1;
 
-    const isCurrentDate = isToday(date) || isFuture(date);
+    // Real-world check: APIs don't have archives for 2026.
+    // If today is 2026, then 2026 dates are "historical" to user but "future" to real-world API.
+    const realWorldCutoff = new Date('2025-01-01');
+    const isActuallyFuture = date > realWorldCutoff || isToday(date) || isFuture(date);
+    
     const fDate = format(date, 'yyyy-MM-dd');
     const cbrDate = format(date, 'dd/MM/yyyy');
 
@@ -304,7 +312,7 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
         const cacheKey = `${code}_${dateKey}`;
         if (historicalCache.has(cacheKey)) return historicalCache.get(cacheKey);
 
-        if (isCurrentDate) {
+        if (isActuallyFuture) {
             await preFetchInitialRates();
             return getRateVsUsd(code);
         }
@@ -315,6 +323,10 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
                 const val = data.rates[code];
                 historicalCache.set(cacheKey, val);
                 return val;
+            } else if (data?.success === false) {
+                 // If archive fetch failed (e.g. future date error), fallback to live
+                 await preFetchInitialRates();
+                 return getRateVsUsd(code);
             }
         }
 

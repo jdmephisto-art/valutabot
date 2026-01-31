@@ -49,14 +49,17 @@ export function HistoricalRates() {
         setFetchingDynamics(true);
         setDynamicsData([]);
         try {
+            console.log(`[History UI] Fetching dynamics for ${fromCurrency}/${toCurrency} from ${format(dynamicsRange.from, 'yyyy-MM-dd')} to ${format(dynamicsRange.to, 'yyyy-MM-dd')}`);
             const data = await getDynamicsForPeriod(fromCurrency, toCurrency, dynamicsRange.from, dynamicsRange.to);
             if (!data || data.length === 0) {
+                console.error(`[History UI] No data received for ${fromCurrency}/${toCurrency}`);
                 toast({ variant: 'destructive', title: t('history.noDynamics'), description: t('history.dynamicFetchError') });
             } else {
                 setDynamicsData(data);
             }
-        } catch (e) {
-            toast({ variant: 'destructive', title: t('history.noDynamics') });
+        } catch (e: any) {
+            console.error(`[History UI] Exception:`, e);
+            toast({ variant: 'destructive', title: t('history.noDynamics'), description: e.message });
         } finally {
             setFetchingDynamics(false);
         }
@@ -75,9 +78,9 @@ export function HistoricalRates() {
           } else {
               setSingleRate(rate);
           }
-      } catch (e) {
+      } catch (e: any) {
           setSingleRate(null);
-          toast({ variant: 'destructive', title: t('history.noRate') });
+          toast({ variant: 'destructive', title: t('history.noRate'), description: e.message });
       } finally {
           setFetchingSingle(false);
       }
@@ -97,9 +100,9 @@ export function HistoricalRates() {
             setRangeResult(null);
             toast({ variant: 'destructive', title: t('history.noRate') });
           }
-      } catch (e) {
+      } catch (e: any) {
           setRangeResult(null);
-          toast({ variant: 'destructive', title: t('history.noRate') });
+          toast({ variant: 'destructive', title: t('history.noRate'), description: e.message });
       } finally {
           setFetchingRange(false);
       }
