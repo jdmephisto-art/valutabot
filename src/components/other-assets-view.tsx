@@ -4,9 +4,10 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/hooks/use-translation';
-import { TrendingUp, Coins, Zap, ShieldCheck, Share2, LayoutGrid } from 'lucide-react';
+import { TrendingUp, Coins, Zap, ShieldCheck, Share2, LayoutGrid, Brain, Wallet, Gamepad2, Rocket, Database, Network, Globe, Landmark } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
 
 type OtherAssetsViewProps = {
     onShowRate: (from: string) => void;
@@ -32,15 +33,63 @@ const assetGroups = [
     assets: ['USDT', 'USDC', 'DAI'],
   },
   {
+    id: 'ai',
+    icon: Brain,
+    color: 'text-blue-400',
+    assets: ['FET', 'RNDR', 'AGIX'],
+  },
+  {
+    id: 'defi',
+    icon: Wallet,
+    color: 'text-indigo-500',
+    assets: ['UNI', 'AAVE', 'MKR'],
+  },
+  {
+    id: 'metaverse',
+    icon: Gamepad2,
+    color: 'text-pink-500',
+    assets: ['SAND', 'MANA', 'AXS', 'IMX'],
+  },
+  {
+    id: 'memes',
+    icon: Rocket,
+    color: 'text-yellow-500',
+    assets: ['DOGE', 'SHIB', 'PEPE', 'FLOKI', 'BONK'],
+  },
+  {
     id: 'infrastructure',
     icon: Share2,
     color: 'text-purple-500',
-    assets: ['TRX', 'MATIC', 'AVAX', 'LINK'],
+    assets: ['NEAR', 'ATOM', 'ARB', 'OP', 'TRX', 'MATIC', 'AVAX', 'LINK'],
+  },
+  {
+    id: 'storage',
+    icon: Database,
+    color: 'text-cyan-600',
+    assets: ['FIL', 'AR', 'STORJ'],
+  },
+  {
+    id: 'depin',
+    icon: Network,
+    color: 'text-emerald-500',
+    assets: ['HNT', 'THETA'],
+  },
+  {
+    id: 'rwa',
+    icon: Globe,
+    color: 'text-amber-700',
+    assets: ['ONDO'],
+  },
+  {
+    id: 'exchange',
+    icon: Landmark,
+    color: 'text-slate-600',
+    assets: ['BNB', 'OKB', 'CRO'],
   },
   {
     id: 'nfts',
     icon: LayoutGrid,
-    color: 'text-pink-500',
+    color: 'text-rose-400',
     assets: ['BAYC', 'AZUKI', 'PUDGY'],
   }
 ];
@@ -58,11 +107,11 @@ export function OtherAssetsView({ onShowRate }: OtherAssetsViewProps) {
                 <CardDescription>{t('otherAssets.description')}</CardDescription>
             </CardHeader>
             <CardContent>
-                <ScrollArea className="h-[350px] pr-4">
+                <ScrollArea className="h-[450px] pr-4">
                     <div className="space-y-6">
                         {assetGroups.map((group) => (
                             <div key={group.id} className="space-y-3">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 border-b pb-1">
                                     <group.icon className={cn("h-4 w-4", group.color)} />
                                     <h4 className="text-sm font-bold">{t(`otherAssets.${group.id}`)}</h4>
                                 </div>
@@ -96,8 +145,4 @@ export function OtherAssetsView({ onShowRate }: OtherAssetsViewProps) {
             </CardContent>
         </Card>
     );
-}
-
-function cn(...inputs: any[]) {
-    return inputs.filter(Boolean).join(' ');
 }

@@ -9,6 +9,9 @@ export const cryptoCodes = [
     'BTC', 'ETH', 'LTC', 'XRP', 'BCH', 'BTG', 'DASH', 'EOS', 
     'SOL', 'TON', 'DOGE', 'ADA', 'DOT', 'TRX', 'MATIC', 'AVAX', 'LINK',
     'USDT', 'USDC', 'DAI', 'NOT', 'DOGS',
+    'FET', 'RNDR', 'AGIX', 'UNI', 'AAVE', 'MKR', 'SAND', 'MANA', 'AXS', 'IMX',
+    'SHIB', 'PEPE', 'FLOKI', 'BONK', 'FIL', 'AR', 'STORJ', 'HNT', 'THETA',
+    'ONDO', 'BNB', 'OKB', 'CRO', 'NEAR', 'ATOM', 'ARB', 'OP',
     'XAU', 'XAG', 'XPT', 'XPD',
     'BAYC', 'AZUKI', 'PUDGY'
 ];
@@ -36,7 +39,34 @@ const cryptoMapping: Record<string, string> = {
     'USDC': 'usd-coin',
     'DAI': 'dai',
     'NOT': 'notcoin',
-    'DOGS': 'dogs'
+    'DOGS': 'dogs',
+    'FET': 'fetch-ai',
+    'RNDR': 'render-token',
+    'AGIX': 'singularitynet',
+    'UNI': 'uniswap',
+    'AAVE': 'aave',
+    'MKR': 'maker',
+    'SAND': 'the-sandbox',
+    'MANA': 'decentraland',
+    'AXS': 'axie-infinity',
+    'IMX': 'immutable-x',
+    'SHIB': 'shiba-inu',
+    'PEPE': 'pepe',
+    'FLOKI': 'floki',
+    'BONK': 'bonk',
+    'FIL': 'filecoin',
+    'AR': 'arweave',
+    'STORJ': 'storj',
+    'HNT': 'helium',
+    'THETA': 'theta-token',
+    'ONDO': 'ondo-finance',
+    'BNB': 'binancecoin',
+    'OKB': 'okb',
+    'CRO': 'crypto-com-chain',
+    'NEAR': 'near',
+    'ATOM': 'cosmos',
+    'ARB': 'arbitrum',
+    'OP': 'optimism'
 };
 
 const nftsMapping: Record<string, string> = {
@@ -141,7 +171,6 @@ export async function _updateCoinGeckoRatesCache(): Promise<void> {
                 coinGeckoRatesTimestamp = Date.now();
             }
 
-            // Update NFTs floor prices
             for (const code of Object.keys(nftsMapping)) {
                 const id = nftsMapping[code];
                 const nftData = await coingeckoApiFetch(`nfts/${id}`);
@@ -247,11 +276,9 @@ export async function _updateCbrMetalsCache(): Promise<void> {
 function getRateVsUsd(code: string): number | undefined {
     if (code === 'USD') return 1;
 
-    // 1. CoinGecko (Crypto & NFT)
     if (coinGeckoRatesCache[code]) return coinGeckoRatesCache[code];
     if (nftRatesCache[code]) return nftRatesCache[code];
 
-    // 2. Metals from CBR
     const mCode = metalMap[code];
     if (mCode && cbrMetalsCache[mCode]) {
         const rubPerGram = cbrMetalsCache[mCode];
@@ -261,19 +288,16 @@ function getRateVsUsd(code: string): number | undefined {
         }
     }
 
-    // 3. NBRB
     if (nbrbRatesCache[code] && nbrbRatesCache['USD']) {
         return (nbrbRatesCache[code].rate / nbrbRatesCache[code].scale) / (nbrbRatesCache['USD'].rate / nbrbRatesCache['USD'].scale);
     }
     
-    // 4. CBR
     if (cbrRatesCache?.Valute?.[code] && cbrRatesCache?.Valute?.['USD']) {
         const vRate = cbrRatesCache.Valute[code].Value / cbrRatesCache.Valute[code].Nominal;
         const uRate = cbrRatesCache.Valute['USD'].Value / cbrRatesCache.Valute['USD'].Nominal;
         return vRate / uRate;
     }
     
-    // 5. CurrencyAPI
     if (currencyApiRatesCache[code]) return 1 / currencyApiRatesCache[code];
 
     return undefined;
