@@ -46,10 +46,12 @@ export function HistoricalRates() {
 
   const handleFetchDynamics = async () => {
     if (dynamicsRange?.from && dynamicsRange.to) {
+        console.log("[History UI] handleFetchDynamics start", { fromCurrency, toCurrency, from: dynamicsRange.from, to: dynamicsRange.to });
         setFetchingDynamics(true);
         setDynamicsData([]);
         try {
             const data = await getDynamicsForPeriod(fromCurrency, toCurrency, dynamicsRange.from, dynamicsRange.to);
+            console.log("[History UI] handleFetchDynamics data received", data);
             setDynamicsData(data);
             if (data.length === 0) {
                 toast({
@@ -58,21 +60,26 @@ export function HistoricalRates() {
                 });
             }
         } catch (e) {
+            console.error("[History UI] handleFetchDynamics failed", e);
             toast({
                 variant: 'destructive',
                 title: t('history.noDynamics'),
             });
+        } finally {
+            setFetchingDynamics(false);
+            console.log("[History UI] handleFetchDynamics finished");
         }
-        setFetchingDynamics(false);
     }
   };
 
   const handleFetchSingleRate = async () => {
     if (date) {
+      console.log("[History UI] handleFetchSingleRate start", { fromCurrency, toCurrency, date });
       setFetchingSingle(true);
       setSingleRate(undefined);
       try {
           const rate = await getHistoricalRate(fromCurrency, toCurrency, date);
+          console.log("[History UI] handleFetchSingleRate rate received", rate);
           setSingleRate(rate === undefined ? null : rate);
           if (rate === undefined) {
               toast({
@@ -81,23 +88,28 @@ export function HistoricalRates() {
               });
           }
       } catch (e) {
+          console.error("[History UI] handleFetchSingleRate failed", e);
           setSingleRate(null);
           toast({
               variant: 'destructive',
               title: t('history.noRate'),
           });
+      } finally {
+          setFetchingSingle(false);
+          console.log("[History UI] handleFetchSingleRate finished");
       }
-      setFetchingSingle(false);
     }
   };
 
   const handleFetchRangeRate = async () => {
     if (range?.from && range.to) {
+      console.log("[History UI] handleFetchRangeRate start", { fromCurrency, toCurrency, from: range.from, to: range.to });
       setFetchingRange(true);
       setRangeResult(undefined);
       try {
           const startRate = await getHistoricalRate(fromCurrency, toCurrency, range.from);
           const endRate = await getHistoricalRate(fromCurrency, toCurrency, range.to);
+          console.log("[History UI] handleFetchRangeRate results", { startRate, endRate });
           if (startRate !== undefined && endRate !== undefined) {
             setRangeResult({ startRate, endRate });
           } else {
@@ -108,13 +120,16 @@ export function HistoricalRates() {
             });
           }
       } catch (e) {
+          console.error("[History UI] handleFetchRangeRate failed", e);
           setRangeResult(null);
           toast({
               variant: 'destructive',
               title: t('history.noRate'),
           });
+      } finally {
+          setFetchingRange(false);
+          console.log("[History UI] handleFetchRangeRate finished");
       }
-      setFetchingRange(false);
     }
   };
   
