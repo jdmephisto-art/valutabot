@@ -228,10 +228,10 @@ function _updateCoinlayerRatesCache(): Promise<void> {
 function getRateVsUsd(code: string): number | undefined {
     if (code === 'USD') return 1;
 
-    // 1. Check Coinlayer (Crypto & some metals)
+    // 1. Check Coinlayer (Crypto)
     if (coinlayerRatesCache[code]) return coinlayerRatesCache[code];
 
-    // 2. Check CBR Metals (fallback)
+    // 2. Check CBR Metals (fallback for metals)
     const mCode = metalMap[code];
     if (mCode && cbrMetalsCache[mCode]) {
         const rubPerGram = cbrMetalsCache[mCode];
@@ -307,14 +307,15 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
 
         const fDate = format(dateObj, 'yyyy-MM-dd');
         const cbrDate = format(dateObj, 'dd/MM/yyyy');
-        const nbrbDate = format(dateObj, 'yyyy-M-d');
+        const nbrbDate = format(dateObj, 'yyyy-MM-dd');
 
         // A. Crypto
         if (actualCrypto.includes(code)) {
             const data = await coinlayerApiFetch(fDate, { symbols: code });
             if (data?.success && data.rates[code]) {
-                historicalCache.set(cacheKey, data.rates[code]);
-                return data.rates[code];
+                const val = data.rates[code];
+                historicalCache.set(cacheKey, val);
+                return val;
             }
         }
 
@@ -330,13 +331,11 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
             let rubG: string | undefined;
             if (mRes?.Metall?.Record) {
                 const records = Array.isArray(mRes.Metall.Record) ? mRes.Metall.Record : [mRes.Metall.Record];
-                const parseDateStr = (d: string) => d.split('.').reverse().join('');
-                const targetRecord = records
-                    .filter((r: any) => r.$.Code === mCode)
-                    .sort((a: any, b: any) => parseDateStr(b.$.Date).localeCompare(parseDateStr(a.$.Date)))[0];
-                rubG = targetRecord?.Buy?.[0]?.replace(',', '.');
+                const sorted = records.filter((r: any) => r.$.Code === mCode).sort((a: any, b: any) => b.$.Date.split('.').reverse().join('').localeCompare(a.$.Date.split('.').reverse().join('')));
+                rubG = sorted[0]?.Buy?.[0]?.replace(',', '.');
             }
-            const uVal = uRes?.ValCurs?.Valute?.find((v: any) => v.CharCode[0] === 'USD');
+            const valutes = uRes?.ValCurs?.Valute;
+            const uVal = Array.isArray(valutes) ? valutes.find((v: any) => v.CharCode[0] === 'USD') : undefined;
             if (rubG && uVal) {
                 const rubU = parseFloat(uVal.Value[0].replace(',', '.')) / parseInt(uVal.Nominal[0], 10);
                 const val = (parseFloat(rubG) * 31.1035) / rubU;
@@ -345,7 +344,7 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
             }
         }
 
-        // C. Fiat - NBRB
+        // C. Fiat - Try sources
         const nbrbVal = await nbrbApiFetch(`rates/${code}?onDate=${nbrbDate}&parammode=2`).catch(() => null);
         const nbrbUsd = await nbrbApiFetch(`rates/USD?onDate=${nbrbDate}&parammode=2`).catch(() => null);
         if (nbrbVal && nbrbUsd) {
@@ -354,10 +353,9 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
             return val;
         }
 
-        // D. Fiat - CBR
         const cbrRes = await fetch(`/api/cbr/history?date_req=${cbrDate}`).then(r => r.json()).catch(() => null);
         const valutes = cbrRes?.ValCurs?.Valute;
-        if (valutes) {
+        if (Array.isArray(valutes)) {
             const v = valutes.find((i: any) => i.CharCode[0] === code);
             const u = valutes.find((i: any) => i.CharCode[0] === 'USD');
             if (v && u) {
@@ -372,15 +370,15 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
         return undefined;
     };
 
-    const f = await getValVsUsd(from, date);
-    const t = await getValVsUsd(to, date);
-    return (f !== undefined && t !== undefined && t !== 0) ? f / t : undefined;
+    const [fVal, tVal] = await Promise.all([getValVsUsd(from, date), getValVsUsd(to, date)]);
+    return (fVal !== undefined && tVal !== undefined && tVal !== 0) ? fVal / tVal : undefined;
 }
 
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
     const daysCount = Math.min(differenceInDays(endDate, startDate) + 1, 31);
     const results: { date: string; rate: number }[] = [];
     
+    // Use sequential fetching to avoid API rate limits
     for (let i = 0; i < daysCount; i++) {
         const d = addDays(startDate, i);
         const r = await getHistoricalRate(from, to, d);
@@ -394,14 +392,14 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
 export async function preFetchInitialRates() {
     const ds = getDataSource();
     const tasks = [
-        _updateCoinlayerRatesCache(), 
-        _updateFixerRatesCache(), 
-        _updateCbrMetalsCache(), 
-        _updateCbrRatesCache()
+        _updateCoinlayerRatesCache().catch(() => {}),
+        _updateCbrMetalsCache().catch(() => {}),
+        _updateCbrRatesCache().catch(() => {}),
+        _updateFixerRatesCache().catch(() => {})
     ];
     
-    if (ds === 'nbrb') tasks.push(_updateNbrbRatesCache());
-    else if (ds === 'currencyapi') tasks.push(_updateCurrencyApiRatesCache());
+    if (ds === 'nbrb') tasks.push(_updateNbrbRatesCache().catch(() => {}));
+    else if (ds === 'currencyapi') tasks.push(_updateCurrencyApiRatesCache().catch(() => {}));
     
-    await Promise.all(tasks);
+    await Promise.allSettled(tasks);
 }

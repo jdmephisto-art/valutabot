@@ -11,7 +11,7 @@ import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { getDynamicsForPeriod, getHistoricalRate, getDataSource } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
 import { format, subDays } from 'date-fns';
-import { CalendarIcon, TrendingDown, TrendingUp } from 'lucide-react';
+import { CalendarIcon, TrendingDown, TrendingUp, ArrowRightLeft } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useToast } from '@/hooks/use-toast';
@@ -102,6 +102,14 @@ export function HistoricalRates() {
     setDynamicsData([]);
   }
 
+  const handleSwapCurrencies = () => {
+    setFromCurrency(toCurrency);
+    setToCurrency(fromCurrency);
+    setSingleRate(undefined);
+    setRangeResult(undefined);
+    setDynamicsData([]);
+  }
+
   const getCalendarDisabledDates = () => {
     const disabled: { before?: Date, after?: Date } = { after: new Date() };
     const source = getDataSource();
@@ -124,7 +132,15 @@ export function HistoricalRates() {
         <CardDescription>{t('history.description', { source: dataSource.toUpperCase() })}</CardDescription>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="dynamics" onValueChange={handleTabChange}>
+        <div className="flex items-center gap-2 mb-4">
+          <div className="flex-1 min-w-0"><CurrencyCombobox value={fromCurrency} onChange={setFromCurrency} /></div>
+          <Button variant="ghost" size="icon" onClick={handleSwapCurrencies} className="flex-shrink-0">
+             <ArrowRightLeft className="h-4 w-4 text-muted-foreground" />
+          </Button>
+          <div className="flex-1 min-w-0"><CurrencyCombobox value={toCurrency} onChange={setToCurrency} /></div>
+        </div>
+
+        <Tabs defaultValue="dynamics" value={activeTab} onValueChange={handleTabChange}>
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="dynamics">{t('history.tabDynamics')}</TabsTrigger>
             <TabsTrigger value="single">{t('history.tabSingle')}</TabsTrigger>
@@ -132,10 +148,6 @@ export function HistoricalRates() {
           </TabsList>
           
           <TabsContent value="dynamics" className="space-y-4 pt-4">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="flex-1 min-w-0"><CurrencyCombobox value={fromCurrency} onChange={setFromCurrency} /></div>
-              <div className="flex-1 min-w-0"><CurrencyCombobox value={toCurrency} onChange={setToCurrency} /></div>
-            </div>
             <div className="grid grid-cols-2 gap-2">
                 <Popover open={dynamicsStartPopoverOpen} onOpenChange={setDynamicsStartPopoverOpen}>
                     <PopoverTrigger asChild>
@@ -184,10 +196,6 @@ export function HistoricalRates() {
           </TabsContent>
 
           <TabsContent value="single" className="space-y-4 pt-4">
-             <div className="flex items-center gap-2 mb-4">
-              <div className="flex-1 min-w-0"><CurrencyCombobox value={fromCurrency} onChange={setFromCurrency} /></div>
-              <div className="flex-1 min-w-0"><CurrencyCombobox value={toCurrency} onChange={setToCurrency} /></div>
-            </div>
             <Popover open={singleDatePopoverOpen} onOpenChange={setSingleDatePopoverOpen}>
               <PopoverTrigger asChild>
                 <Button variant={"outline"} className="w-full justify-start text-left font-normal">
@@ -209,10 +217,6 @@ export function HistoricalRates() {
           </TabsContent>
 
           <TabsContent value="range" className="space-y-4 pt-4">
-             <div className="flex items-center gap-2 mb-4">
-              <div className="flex-1 min-w-0"><CurrencyCombobox value={fromCurrency} onChange={setFromCurrency} /></div>
-              <div className="flex-1 min-w-0"><CurrencyCombobox value={toCurrency} onChange={setToCurrency} /></div>
-            </div>
              <div className="grid grid-cols-2 gap-2">
                 <Popover open={rangeStartPopoverOpen} onOpenChange={setRangeStartPopoverOpen}>
                     <PopoverTrigger asChild>
