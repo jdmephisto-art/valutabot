@@ -85,8 +85,8 @@ let cbrRatesCache: any | null = null;
 let cbrRatesTimestamp = 0;
 let cbrMetalsCache: Record<string, number> = {};
 let cbrMetalsTimestamp = 0;
-let coinGeckoRatesCache: { [key: string]: number } = {};
-let coinGeckoRatesTimestamp = 0;
+let cryptoRatesCache: { [key: string]: number } = {};
+let cryptoRatesTimestamp = 0;
 let nftRatesCache: { [key: string]: number } = {};
 let nftRatesTimestamp = 0;
 
@@ -96,7 +96,7 @@ let nbrbUpdatePromise: Promise<void> | null = null;
 let currencyApiUpdatePromise: Promise<void> | null = null;
 let cbrUpdatePromise: Promise<void> | null = null;
 let cbrMetalsUpdatePromise: Promise<void> | null = null;
-let coinGeckoUpdatePromise: Promise<void> | null = null;
+let cryptoUpdatePromise: Promise<void> | null = null;
 
 function isCacheValid(timestamp: number, ttl: number): boolean {
     return timestamp > 0 && (Date.now() - timestamp) < ttl;
@@ -115,6 +115,17 @@ export function getDataSource(): DataSource {
 async function coingeckoApiFetch(endpoint: string, params: Record<string, string> = {}) {
     const queryParams = new URLSearchParams({ endpoint, ...params });
     const url = `/api/coingecko?${queryParams.toString()}`;
+    try {
+        const response = await fetch(url, { cache: 'no-store' });
+        return response.ok ? response.json() : null;
+    } catch {
+        return null;
+    }
+}
+
+async function cmcApiFetch(endpoint: string, params: Record<string, string> = {}) {
+    const queryParams = new URLSearchParams({ endpoint, ...params });
+    const url = `/api/cmc?${queryParams.toString()}`;
     try {
         const response = await fetch(url, { cache: 'no-store' });
         return response.ok ? response.json() : null;
@@ -152,13 +163,35 @@ async function cbrApiFetch() {
     }
 }
 
-export async function _updateCoinGeckoRatesCache(): Promise<void> {
-    if (isCacheValid(coinGeckoRatesTimestamp, CACHE_TTL_RATES) && Object.keys(coinGeckoRatesCache).length > 0) return Promise.resolve();
-    if (coinGeckoUpdatePromise) return coinGeckoUpdatePromise;
-    coinGeckoUpdatePromise = (async () => {
+async function _updateCmcRates(): Promise<boolean> {
+    try {
+        const symbols = Object.keys(cryptoMapping).join(',');
+        const data = await cmcApiFetch('cryptocurrency/quotes/latest', { symbol: symbols });
+        if (data?.data) {
+            Object.keys(cryptoMapping).forEach(code => {
+                const quote = data.data[code]?.quote?.USD?.price;
+                if (quote) {
+                    cryptoRatesCache[code] = quote;
+                }
+            });
+            cryptoRatesTimestamp = Date.now();
+            return true;
+        }
+    } catch (e) {
+        console.error('CMC update failed', e);
+    }
+    return false;
+}
+
+export async function _updateCryptoRatesCache(): Promise<void> {
+    if (isCacheValid(cryptoRatesTimestamp, CACHE_TTL_RATES) && Object.keys(cryptoRatesCache).length > 0) return Promise.resolve();
+    if (cryptoUpdatePromise) return cryptoUpdatePromise;
+    cryptoUpdatePromise = (async () => {
         try {
+            // Try CoinGecko first (Primary)
             const ids = Object.values(cryptoMapping).join(',');
             const data = await coingeckoApiFetch('simple/price', { ids, vs_currencies: 'usd' });
+            
             if (data) {
                 const temp: any = {};
                 Object.keys(cryptoMapping).forEach(code => {
@@ -167,10 +200,14 @@ export async function _updateCoinGeckoRatesCache(): Promise<void> {
                         temp[code] = data[id].usd;
                     }
                 });
-                coinGeckoRatesCache = temp;
-                coinGeckoRatesTimestamp = Date.now();
+                cryptoRatesCache = { ...cryptoRatesCache, ...temp };
+                cryptoRatesTimestamp = Date.now();
+            } else {
+                // Fallback to CMC
+                await _updateCmcRates();
             }
 
+            // NFT floor prices (Only on CG)
             for (const code of Object.keys(nftsMapping)) {
                 const id = nftsMapping[code];
                 const nftData = await coingeckoApiFetch(`nfts/${id}`);
@@ -181,12 +218,16 @@ export async function _updateCoinGeckoRatesCache(): Promise<void> {
             nftRatesTimestamp = Date.now();
 
         } catch (e) {
-            console.error('CoinGecko update failed', e);
+            console.error('Crypto cache update failed', e);
+            // Last resort: try CMC if CG failed completely
+            if (Object.keys(cryptoRatesCache).length === 0) {
+                await _updateCmcRates();
+            }
         } finally {
-            coinGeckoUpdatePromise = null;
+            cryptoUpdatePromise = null;
         }
     })();
-    return coinGeckoUpdatePromise;
+    return cryptoUpdatePromise;
 }
 
 export async function _updateNbrbRatesCache(): Promise<void> {
@@ -276,7 +317,7 @@ export async function _updateCbrMetalsCache(): Promise<void> {
 function getRateVsUsd(code: string): number | undefined {
     if (code === 'USD') return 1;
 
-    if (coinGeckoRatesCache[code]) return coinGeckoRatesCache[code];
+    if (cryptoRatesCache[code]) return cryptoRatesCache[code];
     if (nftRatesCache[code]) return nftRatesCache[code];
 
     const mCode = metalMap[code];
@@ -464,7 +505,7 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
 export async function preFetchInitialRates() {
     const ds = getDataSource();
     const tasks = [
-        _updateCoinGeckoRatesCache().catch(() => {}),
+        _updateCryptoRatesCache().catch(() => {}),
         _updateCbrMetalsCache().catch(() => {}),
         _updateCbrRatesCache().catch(() => {}),
         _updateCurrencyApiRatesCache().catch(() => {})
