@@ -79,8 +79,8 @@ const CACHE_TTL_RATES = 15 * 60 * 1000;
 
 let nbrbRatesCache: { [key: string]: { rate: number, scale: number } } = {};
 let nbrbRatesTimestamp = 0;
-let currencyApiRatesCache: { [key: string]: number } = {};
-let currencyApiRatesTimestamp = 0;
+let worldCurrencyRatesCache: { [key: string]: number } = {};
+let worldCurrencyRatesTimestamp = 0;
 let fixerRatesCache: { [key: string]: number } = {};
 let fixerRatesTimestamp = 0;
 let cbrRatesCache: any | null = null;
@@ -95,7 +95,7 @@ let nftRatesTimestamp = 0;
 const historicalCache = new Map<string, number>();
 
 let nbrbUpdatePromise: Promise<void> | null = null;
-let currencyApiUpdatePromise: Promise<void> | null = null;
+let worldCurrencyUpdatePromise: Promise<void> | null = null;
 let fixerUpdatePromise: Promise<void> | null = null;
 let cbrUpdatePromise: Promise<void> | null = null;
 let cbrMetalsUpdatePromise: Promise<void> | null = null;
@@ -126,7 +126,7 @@ async function coingeckoApiFetch(endpoint: string, params: Record<string, string
     }
 }
 
-async function cmcApiFetch(endpoint: string, params: Record<string, string> = {}) {
+async function coinmarketcapApiFetch(endpoint: string, params: Record<string, string> = {}) {
     const queryParams = new URLSearchParams({ endpoint, ...params });
     const url = `/api/cmc?${queryParams.toString()}`;
     try {
@@ -137,9 +137,9 @@ async function cmcApiFetch(endpoint: string, params: Record<string, string> = {}
     }
 }
 
-async function currencyApiNetFetch(endpoint: string, params: Record<string, string> = {}) {
+async function worldCurrencyApiFetch(endpoint: string, params: Record<string, string> = {}) {
     const queryParams = new URLSearchParams({ endpoint, ...params });
-    const url = `/api/currency?${queryParams.toString()}`;
+    const url = `/api/worldcurrency?${queryParams.toString()}`;
     try {
         const response = await fetch(url, { cache: 'no-store' });
         return response.ok ? response.json() : null;
@@ -166,10 +166,10 @@ async function cbrApiFetch() {
     }
 }
 
-async function _updateCmcRates(): Promise<boolean> {
+async function _updateCoinmarketcapRates(): Promise<boolean> {
     try {
         const symbols = Object.keys(cryptoMapping).join(',');
-        const data = await cmcApiFetch('cryptocurrency/quotes/latest', { symbol: symbols });
+        const data = await coinmarketcapApiFetch('cryptocurrency/quotes/latest', { symbol: symbols });
         if (data?.data) {
             Object.keys(cryptoMapping).forEach(code => {
                 const quote = data.data[code]?.quote?.USD?.price;
@@ -181,7 +181,7 @@ async function _updateCmcRates(): Promise<boolean> {
             return true;
         }
     } catch (e) {
-        console.error('CMC update failed', e);
+        console.error('CoinMarketCap update failed', e);
     }
     return false;
 }
@@ -205,7 +205,7 @@ export async function _updateCryptoRatesCache(): Promise<void> {
                 cryptoRatesCache = { ...cryptoRatesCache, ...temp };
                 cryptoRatesTimestamp = Date.now();
             } else {
-                await _updateCmcRates();
+                await _updateCoinmarketcapRates();
             }
 
             for (const code of Object.keys(nftsMapping)) {
@@ -220,7 +220,7 @@ export async function _updateCryptoRatesCache(): Promise<void> {
         } catch (e) {
             console.error('Crypto cache update failed', e);
             if (Object.keys(cryptoRatesCache).length === 0) {
-                await _updateCmcRates();
+                await _updateCoinmarketcapRates();
             }
         } finally {
             cryptoUpdatePromise = null;
@@ -254,24 +254,24 @@ export async function _updateNbrbRatesCache(): Promise<void> {
     return nbrbUpdatePromise;
 }
 
-export async function _updateCurrencyApiRatesCache(): Promise<void> {
-    if (isCacheValid(currencyApiRatesTimestamp, CACHE_TTL_RATES) && Object.keys(currencyApiRatesCache).length > 0) return Promise.resolve();
-    if (currencyApiUpdatePromise) return currencyApiUpdatePromise;
-    currencyApiUpdatePromise = (async () => {
+export async function _updateWorldCurrencyRatesCache(): Promise<void> {
+    if (isCacheValid(worldCurrencyRatesTimestamp, CACHE_TTL_RATES) && Object.keys(worldCurrencyRatesCache).length > 0) return Promise.resolve();
+    if (worldCurrencyUpdatePromise) return worldCurrencyUpdatePromise;
+    worldCurrencyUpdatePromise = (async () => {
         try {
-            const data = await currencyApiNetFetch('rates', { base: 'USD' });
+            const data = await worldCurrencyApiFetch('rates', { base: 'USD' });
             if (data?.rates) {
-                currencyApiRatesCache = data.rates;
-                currencyApiRatesCache['USD'] = 1;
-                currencyApiRatesTimestamp = Date.now();
+                worldCurrencyRatesCache = data.rates;
+                worldCurrencyRatesCache['USD'] = 1;
+                worldCurrencyRatesTimestamp = Date.now();
             }
         } catch (e) {
-            console.error('CurrencyAPI update failed', e);
+            console.error('WorldCurrencyAPI update failed', e);
         } finally {
-            currencyApiUpdatePromise = null;
+            worldCurrencyUpdatePromise = null;
         }
     })();
-    return currencyApiUpdatePromise;
+    return worldCurrencyUpdatePromise;
 }
 
 export async function _updateFixerRatesCache(): Promise<void> {
@@ -360,7 +360,7 @@ function getRateVsUsd(code: string): number | undefined {
         return vRate / uRate;
     }
     
-    if (currencyApiRatesCache[code]) return 1 / currencyApiRatesCache[code];
+    if (worldCurrencyRatesCache[code]) return 1 / worldCurrencyRatesCache[code];
 
     let result: number | undefined;
     if (fixerRatesCache[code] && fixerRatesCache['USD']) {
@@ -534,7 +534,7 @@ export async function preFetchInitialRates() {
         _updateCryptoRatesCache().catch(() => {}),
         _updateCbrMetalsCache().catch(() => {}),
         _updateCbrRatesCache().catch(() => {}),
-        _updateCurrencyApiRatesCache().catch(() => {}),
+        _updateWorldCurrencyRatesCache().catch(() => {}),
         _updateFixerRatesCache().catch(() => {})
     ];
     

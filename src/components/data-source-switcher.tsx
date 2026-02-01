@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -36,21 +37,21 @@ export function DataSourceSwitcher({ currentSource, onSourceChange }: DataSource
                     variant={currentSource === 'cbr' ? 'default' : 'outline'}
                     className="w-full justify-start text-left h-auto py-2"
                 >
-                    <Landmark className="mr-3 h-5 w-5 flex-shrink-0" />
+                    < Landmark className="mr-3 h-5 w-5 flex-shrink-0" />
                     <div className="flex-1">
                         <p className="font-semibold">{t('dataSource.cbr')}</p>
                         <p className="text-xs text-muted-foreground font-normal whitespace-normal">{t('dataSource.cbrDesc')}</p>
                     </div>
                 </Button>
                 <Button 
-                    onClick={() => onSourceChange('currencyapi')}
-                    variant={currentSource === 'currencyapi' ? 'default' : 'outline'}
+                    onClick={() => onSourceChange('worldcurrencyapi')}
+                    variant={currentSource === 'worldcurrencyapi' ? 'default' : 'outline'}
                     className="w-full justify-start text-left h-auto py-2"
                 >
                     <Globe className="mr-3 h-5 w-5 flex-shrink-0" />
                      <div className="flex-1">
-                        <p className="font-semibold">{t('dataSource.currencyapi')}</p>
-                        <p className="text-xs text-muted-foreground font-normal whitespace-normal">{t('dataSource.currencyapiDesc')}</p>
+                        <p className="font-semibold">{t('dataSource.worldcurrencyapi')}</p>
+                        <p className="text-xs text-muted-foreground font-normal whitespace-normal">{t('dataSource.worldcurrencyapiDesc')}</p>
                     </div>
                 </Button>
                  <p className="text-xs text-muted-foreground pt-2">{t('dataSource.warning')}</p>

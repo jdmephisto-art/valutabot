@@ -20,6 +20,6 @@ export type Alert = {
   baseRate: number;
 };
 
-export type DataSource = 'nbrb' | 'currencyapi' | 'cbr';
+export type DataSource = 'nbrb' | 'worldcurrencyapi' | 'cbr';
 
 export type Language = 'en' | 'ru';

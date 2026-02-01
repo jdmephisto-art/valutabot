@@ -98,7 +98,7 @@ export function ChatInterface() {
     
     toast({
         title: t('dataSource.toast'),
-        description: t('dataSource.toastDesc', { source: source.toUpperCase() }),
+        description: t('dataSource.toastDesc', { source: t(`dataSource.${source}`) }),
     });
   };
   
@@ -280,7 +280,7 @@ export function ChatInterface() {
         return;
     }
     
-    const newSource = lang === 'ru' ? 'nbrb' : 'currencyapi';
+    const newSource = lang === 'ru' ? 'nbrb' : 'worldcurrencyapi';
 
     if (dataSource !== newSource) {
       handleDataSourceChange(newSource);
