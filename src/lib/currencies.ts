@@ -81,6 +81,8 @@ let nbrbRatesCache: { [key: string]: { rate: number, scale: number } } = {};
 let nbrbRatesTimestamp = 0;
 let currencyApiRatesCache: { [key: string]: number } = {};
 let currencyApiRatesTimestamp = 0;
+let fixerRatesCache: { [key: string]: number } = {};
+let fixerRatesTimestamp = 0;
 let cbrRatesCache: any | null = null;
 let cbrRatesTimestamp = 0;
 let cbrMetalsCache: Record<string, number> = {};
@@ -94,6 +96,7 @@ const historicalCache = new Map<string, number>();
 
 let nbrbUpdatePromise: Promise<void> | null = null;
 let currencyApiUpdatePromise: Promise<void> | null = null;
+let fixerUpdatePromise: Promise<void> | null = null;
 let cbrUpdatePromise: Promise<void> | null = null;
 let cbrMetalsUpdatePromise: Promise<void> | null = null;
 let cryptoUpdatePromise: Promise<void> | null = null;
@@ -188,7 +191,6 @@ export async function _updateCryptoRatesCache(): Promise<void> {
     if (cryptoUpdatePromise) return cryptoUpdatePromise;
     cryptoUpdatePromise = (async () => {
         try {
-            // Try CoinGecko first (Primary)
             const ids = Object.values(cryptoMapping).join(',');
             const data = await coingeckoApiFetch('simple/price', { ids, vs_currencies: 'usd' });
             
@@ -203,11 +205,9 @@ export async function _updateCryptoRatesCache(): Promise<void> {
                 cryptoRatesCache = { ...cryptoRatesCache, ...temp };
                 cryptoRatesTimestamp = Date.now();
             } else {
-                // Fallback to CMC
                 await _updateCmcRates();
             }
 
-            // NFT floor prices (Only on CG)
             for (const code of Object.keys(nftsMapping)) {
                 const id = nftsMapping[code];
                 const nftData = await coingeckoApiFetch(`nfts/${id}`);
@@ -219,7 +219,6 @@ export async function _updateCryptoRatesCache(): Promise<void> {
 
         } catch (e) {
             console.error('Crypto cache update failed', e);
-            // Last resort: try CMC if CG failed completely
             if (Object.keys(cryptoRatesCache).length === 0) {
                 await _updateCmcRates();
             }
@@ -273,6 +272,28 @@ export async function _updateCurrencyApiRatesCache(): Promise<void> {
         }
     })();
     return currencyApiUpdatePromise;
+}
+
+export async function _updateFixerRatesCache(): Promise<void> {
+    if (isCacheValid(fixerRatesTimestamp, CACHE_TTL_RATES) && Object.keys(fixerRatesCache).length > 0) return Promise.resolve();
+    if (fixerUpdatePromise) return fixerUpdatePromise;
+    fixerUpdatePromise = (async () => {
+        try {
+            const response = await fetch('/api/fixer?endpoint=latest');
+            if (response.ok) {
+                const data = await response.json();
+                if (data?.success && data?.rates) {
+                    fixerRatesCache = data.rates;
+                    fixerRatesTimestamp = Date.now();
+                }
+            }
+        } catch (e) {
+            console.error('Fixer update failed', e);
+        } finally {
+            fixerUpdatePromise = null;
+        }
+    })();
+    return fixerUpdatePromise;
 }
 
 export async function _updateCbrRatesCache(): Promise<void> {
@@ -341,7 +362,12 @@ function getRateVsUsd(code: string): number | undefined {
     
     if (currencyApiRatesCache[code]) return 1 / currencyApiRatesCache[code];
 
-    return undefined;
+    let result: number | undefined;
+    if (fixerRatesCache[code] && fixerRatesCache['USD']) {
+        result = fixerRatesCache[code] / fixerRatesCache['USD'];
+    }
+
+    return result;
 }
 
 function getPseudoVariation(code: string, date: Date, baseRate: number): number {
@@ -508,7 +534,8 @@ export async function preFetchInitialRates() {
         _updateCryptoRatesCache().catch(() => {}),
         _updateCbrMetalsCache().catch(() => {}),
         _updateCbrRatesCache().catch(() => {}),
-        _updateCurrencyApiRatesCache().catch(() => {})
+        _updateCurrencyApiRatesCache().catch(() => {}),
+        _updateFixerRatesCache().catch(() => {})
     ];
     
     if (ds === 'nbrb') tasks.push(_updateNbrbRatesCache().catch(() => {}));
