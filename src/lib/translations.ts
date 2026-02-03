@@ -1,4 +1,3 @@
-
 export const translations = {
   en: {
     chat: {
@@ -113,6 +112,7 @@ export const translations = {
       noRate: 'Could not get the rate for the selected date.',
       apiPlanErrorTitle: 'Feature Unavailable',
       apiPlanErrorDesc: 'Historical data is not available on the free plan of WorldCurrencyAPI. Please switch to the NBRB data source to use this feature.',
+      fallbackHint: "On {requestedDate} the official rate was not set. Showing last available rate from {actualDate}.",
     },
     tracking: {
       title: 'Track Currency Pairs',
@@ -302,6 +302,7 @@ export const translations = {
       noRate: 'Не удалось получить курс для выбранной даты.',
       apiPlanErrorTitle: 'Функция недоступна',
       apiPlanErrorDesc: 'Исторические данные недоступны на бесплатном тарифе WorldCurrencyAPI. Пожалуйста, переключитесь на источник данных НБРБ, чтобы использовать эту функцию.',
+      fallbackHint: "На {requestedDate} официальный курс не установлен. Показан последний доступный курс за {actualDate}.",
     },
     tracking: {
       title: 'Отслеживание валютных пар',

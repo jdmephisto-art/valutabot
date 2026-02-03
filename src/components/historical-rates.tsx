@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -12,12 +11,13 @@ import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { getDynamicsForPeriod, getHistoricalRate, getDataSource } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
 import { format, subDays } from 'date-fns';
-import { CalendarIcon, TrendingDown, TrendingUp, ArrowRightLeft } from 'lucide-react';
+import { CalendarIcon, TrendingDown, TrendingUp, ArrowRightLeft, Info } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/hooks/use-translation';
 import { CurrencyCombobox } from './currency-combobox';
+import type { HistoricalRateResult } from '@/lib/types';
 
 export function HistoricalRates() {
   const dataSource = getDataSource();
@@ -29,7 +29,7 @@ export function HistoricalRates() {
   const [activeTab, setActiveTab] = useState('dynamics');
 
   const [date, setDate] = useState<Date | undefined>(new Date());
-  const [singleRate, setSingleRate] = useState<number | null | undefined>(undefined);
+  const [singleRate, setSingleRate] = useState<HistoricalRateResult | null | undefined>(undefined);
   const [fetchingSingle, setFetchingSingle] = useState(false);
   const [singleDatePopoverOpen, setSingleDatePopoverOpen] = useState(false);
 
@@ -69,12 +69,12 @@ export function HistoricalRates() {
       setFetchingSingle(true);
       setSingleRate(undefined);
       try {
-          const rate = await getHistoricalRate(fromCurrency, toCurrency, date);
-          if (rate === undefined) {
+          const result = await getHistoricalRate(fromCurrency, toCurrency, date);
+          if (result === undefined) {
               setSingleRate(null);
               toast({ variant: 'destructive', title: t('history.noRate') });
           } else {
-              setSingleRate(rate);
+              setSingleRate(result);
           }
       } catch (e: any) {
           setSingleRate(null);
@@ -90,10 +90,10 @@ export function HistoricalRates() {
       setFetchingRange(true);
       setRangeResult(undefined);
       try {
-          const startRate = await getHistoricalRate(fromCurrency, toCurrency, range.from);
-          const endRate = await getHistoricalRate(fromCurrency, toCurrency, range.to);
-          if (startRate !== undefined && endRate !== undefined) {
-            setRangeResult({ startRate, endRate });
+          const startRes = await getHistoricalRate(fromCurrency, toCurrency, range.from);
+          const endRes = await getHistoricalRate(fromCurrency, toCurrency, range.to);
+          if (startRes !== undefined && endRes !== undefined) {
+            setRangeResult({ startRate: startRes.rate, endRate: endRes.rate });
           } else {
             setRangeResult(null);
             toast({ variant: 'destructive', title: t('history.noRate') });
@@ -218,9 +218,20 @@ export function HistoricalRates() {
             </Popover>
             <Button onClick={handleFetchSingleRate} className="w-full" disabled={fetchingSingle || !date}>{fetchingSingle ? t('latestRates.loading') : t('history.getRate')}</Button>
             {singleRate !== undefined && singleRate !== null && (
-              <div className="text-center p-4 bg-muted/50 rounded-lg">
+              <div className="text-center p-4 bg-muted/50 rounded-lg space-y-2">
                 <p className="text-sm text-muted-foreground">{t('history.rateOn', { date: date ? format(date, "PPP", { locale: dateLocale }) : '' })}</p>
-                <p className="text-2xl font-bold font-mono">{singleRate.toFixed(4)}</p>
+                <p className="text-2xl font-bold font-mono">{singleRate.rate.toFixed(4)}</p>
+                {date && format(singleRate.date, 'yyyyMMdd') !== format(date, 'yyyyMMdd') && (
+                    <div className="flex items-start gap-2 p-2 bg-orange-500/10 border border-orange-500/20 rounded text-left">
+                        <Info className="h-4 w-4 text-orange-500 shrink-0 mt-0.5" />
+                        <p className="text-[10px] text-orange-600 leading-tight">
+                            {t('history.fallbackHint', { 
+                                requestedDate: format(date, "dd.MM.yyyy"), 
+                                actualDate: format(singleRate.date, "dd.MM.yyyy") 
+                            })}
+                        </p>
+                    </div>
+                )}
               </div>
             )}
           </TabsContent>

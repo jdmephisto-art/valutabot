@@ -23,3 +23,8 @@ export type Alert = {
 export type DataSource = 'nbrb' | 'worldcurrencyapi' | 'cbr';
 
 export type Language = 'en' | 'ru';
+
+export type HistoricalRateResult = {
+  rate: number;
+  date: Date;
+};

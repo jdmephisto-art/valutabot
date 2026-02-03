@@ -1,5 +1,4 @@
-
-import { Currency, ExchangeRate, DataSource } from '@/lib/types';
+import { Currency, ExchangeRate, DataSource, HistoricalRateResult } from '@/lib/types';
 import { format, subDays, differenceInDays, addDays, isFuture, getUnixTime } from 'date-fns';
 import { currencyApiPreloadedCurrencies } from './preloaded-data';
 
@@ -410,30 +409,31 @@ export async function findRateAsync(from: string, to: string): Promise<number | 
     return findRate(from, to);
 }
 
-export async function getHistoricalRate(from: string, to: string, date: Date): Promise<number | undefined> {
-    if (from === to) return 1;
+export async function getHistoricalRate(from: string, to: string, date: Date, allowLookBack = true): Promise<HistoricalRateResult | undefined> {
+    if (from === to) return { rate: 1, date };
 
-    const dateKey = format(date, 'yyyyMMdd');
-    const isActuallyFuture = isFuture(date);
-
-    const getValVsUsd = async (code: string, dateObj: Date): Promise<number | undefined> => {
+    const getValVsUsdOnDate = async (code: string, dateObj: Date): Promise<number | undefined> => {
         if (code === 'USD') return 1;
+        const dateKey = format(dateObj, 'yyyyMMdd');
         const cacheKey = `${code}_${dateKey}`;
         if (historicalCache.has(cacheKey)) return historicalCache.get(cacheKey);
 
         let result: number | undefined;
+        const isActuallyFuture = isFuture(dateObj);
 
         if (isActuallyFuture) {
             await preFetchInitialRates();
             const liveRate = getRateVsUsd(code);
-            if (liveRate) return getPseudoVariation(code, dateObj, liveRate);
+            if (liveRate) result = getPseudoVariation(code, dateObj, liveRate);
         }
 
-        const geckoId = cryptoMapping[code];
-        if (geckoId) {
-            const hist = await coingeckoApiFetch(`coins/${geckoId}/history`, { date: format(dateObj, 'dd-MM-yyyy'), localization: 'false' });
-            if (hist?.market_data?.current_price?.usd) {
-                result = hist.market_data.current_price.usd;
+        if (!result) {
+            const geckoId = cryptoMapping[code];
+            if (geckoId) {
+                const hist = await coingeckoApiFetch(`coins/${geckoId}/history`, { date: format(dateObj, 'dd-MM-yyyy'), localization: 'false' });
+                if (hist?.market_data?.current_price?.usd) {
+                    result = hist.market_data.current_price.usd;
+                }
             }
         }
 
@@ -472,10 +472,18 @@ export async function getHistoricalRate(from: string, to: string, date: Date): P
         return result;
     };
 
-    const [fVal, tVal] = await Promise.all([getValVsUsd(from, date), getValVsUsd(to, date)]);
-    if (fVal !== undefined && tVal !== undefined && tVal !== 0) {
-        return fVal / tVal;
+    let currentAttemptDate = date;
+    const maxDays = allowLookBack ? 7 : 1;
+
+    for (let i = 0; i < maxDays; i++) {
+        const [fVal, tVal] = await Promise.all([getValVsUsdOnDate(from, currentAttemptDate), getValVsUsdOnDate(to, currentAttemptDate)]);
+        if (fVal !== undefined && tVal !== undefined && tVal !== 0) {
+            return { rate: fVal / tVal, date: currentAttemptDate };
+        }
+        if (!allowLookBack) break;
+        currentAttemptDate = subDays(currentAttemptDate, 1);
     }
+    
     return undefined;
 }
 
@@ -520,9 +528,15 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
     
     for (let i = 0; i < daysCount; i++) {
         const d = addDays(startDate, i);
-        const r = await getHistoricalRate(from, to, d);
+        const r = await getHistoricalRate(from, to, d, false); // No internal lookback for dynamics, to keep dates aligned
         if (r !== undefined) {
-            results.push({ date: format(d, 'dd.MM'), rate: r });
+            results.push({ date: format(d, 'dd.MM'), rate: r.rate });
+        } else {
+            // If missing in dynamics, try one day back specifically for the gap
+            const rBack = await getHistoricalRate(from, to, d, true);
+            if (rBack !== undefined) {
+                results.push({ date: format(d, 'dd.MM'), rate: rBack.rate });
+            }
         }
     }
     return results;
