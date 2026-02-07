@@ -116,11 +116,15 @@ export async function _updateMetalsRatesCache(db?: Firestore): Promise<void> {
     if (Date.now() - metalsRatesTimestamp < CACHE_TTL_RATES && Object.keys(metalsRatesCache).length > 0) return;
     const data = await cbrMetalsApiFetch();
     if (data) {
-        const rubUsd = worldCurrencyRatesCache['RUB'] ? 1 / worldCurrencyRatesCache['RUB'] : 0.011;
-        if (data['1']) metalsRatesCache['XAU'] = data['1'] * rubUsd;
-        if (data['2']) metalsRatesCache['XAG'] = data['2'] * rubUsd;
-        if (data['3']) metalsRatesCache['XPT'] = data['3'] * rubUsd;
-        if (data['4']) metalsRatesCache['XPD'] = data['4'] * rubUsd;
+        // Цена металла из ЦБ РФ идет в рублях за грамм. Нам нужно получить USD/грамм.
+        // Берем курс рубля из мирового кэша (RUB per 1 USD)
+        const rubPerUsd = worldCurrencyRatesCache['RUB'] || 90; 
+        const usdPerRub = 1 / rubPerUsd;
+
+        if (data['1']) metalsRatesCache['XAU'] = parseFloat(data['1']) * usdPerRub;
+        if (data['2']) metalsRatesCache['XAG'] = parseFloat(data['2']) * usdPerRub;
+        if (data['3']) metalsRatesCache['XPT'] = parseFloat(data['3']) * usdPerRub;
+        if (data['4']) metalsRatesCache['XPD'] = parseFloat(data['4']) * usdPerRub;
         metalsRatesTimestamp = Date.now();
     }
 }
@@ -144,14 +148,24 @@ export async function _updateNbrbRatesCache(db?: Firestore): Promise<void> {
 
 function getRateVsUsd(code: string): number | undefined {
     if (code === 'USD') return 1;
+    
+    // 1. Проверяем кэш криптовалют (хранит USD за 1 единицу)
     if (cryptoRatesCache[code] !== undefined) return cryptoRatesCache[code];
+    
+    // 2. Проверяем кэш металлов (хранит USD за 1 грамм)
     if (metalsRatesCache[code] !== undefined) return metalsRatesCache[code];
     
+    // 3. Проверяем кэш НБРБ (рассчитываем через кросс-курс к доллару)
     if (nbrbRatesCache[code] && nbrbRatesCache['USD']) {
-        return (nbrbRatesCache[code].rate / nbrbRatesCache[code].scale) / (nbrbRatesCache['USD'].rate / nbrbRatesCache['USD'].scale);
+        const codeInByn = nbrbRatesCache[code].rate / nbrbRatesCache[code].scale;
+        const usdInByn = nbrbRatesCache['USD'].rate / nbrbRatesCache['USD'].scale;
+        return codeInByn / usdInByn;
     }
     
-    if (worldCurrencyRatesCache[code] !== undefined) return 1 / worldCurrencyRatesCache[code];
+    // 4. Проверяем мировой кэш (там обычно Code per 1 USD)
+    if (worldCurrencyRatesCache[code] !== undefined) {
+        return 1 / worldCurrencyRatesCache[code];
+    }
     
     return undefined;
 }
@@ -160,7 +174,10 @@ export function findRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
     const fromUsd = getRateVsUsd(from);
     const toUsd = getRateVsUsd(to);
-    if (fromUsd !== undefined && toUsd !== undefined && toUsd !== 0) return fromUsd / toUsd;
+    
+    if (fromUsd !== undefined && toUsd !== undefined && toUsd !== 0) {
+        return fromUsd / toUsd;
+    }
     return undefined;
 }
 
@@ -188,10 +205,13 @@ export async function findRateAsync(from: string, to: string, db?: Firestore): P
 }
 
 export async function preFetchInitialRates(db?: Firestore) {
-    const worldData = await worldCurrencyApiFetch();
-    if (worldData?.rates) {
-        worldCurrencyRatesCache = worldData.rates;
-        worldCurrencyRatesTimestamp = Date.now();
+    // Сначала тянем мировые курсы, так как они нужны для расчета металлов
+    if (Date.now() - worldCurrencyRatesTimestamp > CACHE_TTL_RATES || Object.keys(worldCurrencyRatesCache).length === 0) {
+        const worldData = await worldCurrencyApiFetch();
+        if (worldData?.rates) {
+            worldCurrencyRatesCache = worldData.rates;
+            worldCurrencyRatesTimestamp = Date.now();
+        }
     }
 
     const tasks = [

@@ -60,47 +60,62 @@ export function CurrencyConverter() {
         <CardTitle className="text-lg font-semibold">{t('converter.title')}</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
-          <div className="flex flex-col gap-4">
-            <div className="space-y-1">
-              <CurrencyCombobox 
-                value={fromCurrency}
-                onChange={setFromCurrency}
-                placeholder={t('converter.from')}
-                disabled={currencies.length === 0}
-              />
-              <Input
-                type="text"
-                placeholder={t('converter.amount')}
-                value={amount}
-                onChange={handleAmountChange}
-              />
+        <div className="space-y-6">
+          <div className="flex flex-col gap-3">
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+              <div className="space-y-1">
+                <CurrencyCombobox 
+                  value={fromCurrency}
+                  onChange={setFromCurrency}
+                  placeholder={t('converter.from')}
+                  disabled={currencies.length === 0}
+                />
+              </div>
+
+              <Button variant="ghost" size="icon" onClick={handleSwapCurrencies} className="mt-0">
+                <ArrowRightLeft className="h-4 w-4 text-muted-foreground" />
+              </Button>
+
+              <div className="space-y-1">
+                <CurrencyCombobox
+                  value={toCurrency}
+                  onChange={setToCurrency}
+                  placeholder={t('converter.to')}
+                  disabled={currencies.length === 0}
+                />
+              </div>
             </div>
 
-            <Button variant="ghost" size="icon" onClick={handleSwapCurrencies} className="self-center">
-              <ArrowRightLeft className="h-5 w-5 text-muted-foreground rotate-90 sm:rotate-0" />
-            </Button>
-
-            <div className="space-y-1">
-              <CurrencyCombobox
-                value={toCurrency}
-                onChange={setToCurrency}
-                placeholder={t('converter.to')}
-                disabled={currencies.length === 0}
-              />
-              <Input
-                type="text"
-                placeholder={isConverting ? t('latestRates.loading') : t('converter.converted')}
-                value={isConverting ? '' : convertedAmount}
-                readOnly
-                className="bg-muted/50"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <p className="text-[10px] text-muted-foreground pl-1">{t('converter.amount')}</p>
+                <Input
+                  type="text"
+                  placeholder="0.00"
+                  value={amount}
+                  onChange={handleAmountChange}
+                  className="text-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-[10px] text-muted-foreground pl-1">{t('converter.converted')}</p>
+                <Input
+                  type="text"
+                  placeholder={isConverting ? "..." : "0.00"}
+                  value={isConverting ? '' : convertedAmount}
+                  readOnly
+                  className="bg-muted/50 text-sm font-semibold"
+                />
+              </div>
             </div>
           </div>
+          
           {amount && !isConverting && convertedAmount && displayRate && (
-             <p className="text-center text-muted-foreground text-xs font-mono pt-2 break-all">
-                1 {fromCurrency} = {displayRate > 1000 ? displayRate.toFixed(2) : displayRate.toFixed(8).replace(/\.?0+$/, '')} {toCurrency}
-            </p>
+             <div className="pt-2 border-t border-border/50">
+               <p className="text-center text-muted-foreground text-[11px] font-mono break-all">
+                  1 {fromCurrency} = {displayRate > 1000 ? displayRate.toFixed(2) : displayRate.toFixed(8).replace(/\.?0+$/, '')} {toCurrency}
+              </p>
+             </div>
           )}
         </div>
       </CardContent>
