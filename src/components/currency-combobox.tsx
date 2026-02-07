@@ -34,8 +34,9 @@ export function CurrencyCombobox({
 
   const filterByTerm = (currency: Currency) => {
     if (!searchTerm) return true;
-    return currency.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           getCurrencyName(currency.code).toLowerCase().includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase();
+    return currency.code.toLowerCase().includes(term) ||
+           getCurrencyName(currency.code).toLowerCase().includes(term);
   };
 
   const filteredFiat = React.useMemo(() => fiatCurrencies.filter(filterByTerm), [fiatCurrencies, searchTerm, getCurrencyName]);
@@ -108,7 +109,7 @@ export function CurrencyCombobox({
             value={searchTerm}
             onValueChange={setSearchTerm}
           />
-          <ScrollArea className="h-[200px] p-1">
+          <ScrollArea className="h-[250px] p-1">
             {filteredFiat.length === 0 && filteredCrypto.length === 0 ? (
                 <div className="p-2 text-center text-sm text-muted-foreground">{t('combobox.notFound')}</div>
             ) : (

@@ -7,17 +7,18 @@ import type { ExchangeRate } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { ArrowRight } from 'lucide-react';
 import { useTranslation } from '@/hooks/use-translation';
+import { useFirestore } from '@/firebase';
 
 type LatestRatesProps = {
     pairs: string[];
 }
 
 export function LatestRates({ pairs }: LatestRatesProps) {
-  // The rate can be undefined while loading
   const [rates, setRates] = useState<(Omit<ExchangeRate, 'rate'> & { rate?: number })[]>([]);
   const [changedRates, setChangedRates] = useState<Map<string, 'up' | 'down'>>(new Map());
   const { t } = useTranslation();
   const dataSource = getDataSource();
+  const firestore = useFirestore();
 
   useEffect(() => {
     if (pairs.length > 0) {
@@ -27,7 +28,7 @@ export function LatestRates({ pairs }: LatestRatesProps) {
       });
       setRates(initialData);
 
-      getLatestRates(pairs).then(fetchedRates => {
+      getLatestRates(pairs, firestore).then(fetchedRates => {
         const fetchedRatesMap = new Map(fetchedRates.map(r => [`${r.from}/${r.to}`, r.rate]));
         
         const updatedRates = pairs.map(p => {
@@ -40,24 +41,23 @@ export function LatestRates({ pairs }: LatestRatesProps) {
     } else {
       setRates([]);
     }
-  }, [dataSource, pairs]);
+  }, [dataSource, pairs, firestore]);
 
   useEffect(() => {
-    // Don't start interval until initial rates are loaded
     if (pairs.length === 0 || rates.some(r => r.rate === undefined)) return;
 
     const interval = setInterval(async () => {
       const oldRatesMap = new Map(rates.filter(r => r.rate !== undefined).map(r => [`${r.from}-${r.to}`, r.rate!]));
-      const newRates = await getLatestRates(pairs);
+      const newRates = await getLatestRates(pairs, firestore);
       const changed = new Map<string, 'up' | 'down'>();
 
       const newRatesMap = new Map<string, number>();
       for (const newRate of newRates) {
         const key = `${newRate.from}-${newRate.to}`;
-        newRatesMap.set(key, newRate.rate);
+        newRatesMap.set(key, newRate.rate!);
         const oldRate = oldRatesMap.get(key);
         if (oldRate && oldRate !== newRate.rate) {
-          changed.set(key, newRate.rate > oldRate ? 'up' : 'down');
+          changed.set(key, newRate.rate! > oldRate ? 'up' : 'down');
         }
       }
       
@@ -67,10 +67,17 @@ export function LatestRates({ pairs }: LatestRatesProps) {
       if (changed.size > 0) {
         setTimeout(() => setChangedRates(new Map()), 1500);
       }
-    }, 60000); // Check for new rates every minute
+    }, 60000);
 
     return () => clearInterval(interval);
-  }, [rates, pairs]);
+  }, [rates, pairs, firestore]);
+
+  const formatRate = (rate?: number) => {
+    if (rate === undefined) return <span className="text-xs animate-pulse">...</span>;
+    if (rate > 1000) return rate.toFixed(2);
+    if (rate > 10) return rate.toFixed(4);
+    return rate.toFixed(8).replace(/\.?0+$/, '');
+  };
 
   return (
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
@@ -118,7 +125,7 @@ export function LatestRates({ pairs }: LatestRatesProps) {
                     isChanged && (changeDirection === 'up' ? 'text-positive' : 'text-negative'),
                     isChanged && 'scale-110'
                     )}>
-                    {rate !== undefined ? rate.toFixed(4) : <span className="text-xs animate-pulse">...</span>}
+                    {formatRate(rate)}
                     </div>
                 </div>
                 );

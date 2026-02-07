@@ -9,10 +9,12 @@ import { Button } from './ui/button';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useTranslation } from '@/hooks/use-translation';
 import { CurrencyCombobox } from './currency-combobox';
+import { useFirestore } from '@/firebase';
 
 export function CurrencyConverter() {
   const { currencies } = useCurrencies();
   const { t } = useTranslation();
+  const firestore = useFirestore();
   const [fromCurrency, setFromCurrency] = useState('USD');
   const [toCurrency, setToCurrency] = useState('EUR');
   const [amount, setAmount] = useState('1');
@@ -25,19 +27,20 @@ export function CurrencyConverter() {
         if (!fromCurrency || !toCurrency) return;
 
         setIsConverting(true);
-        const rate = await findRateAsync(fromCurrency, toCurrency);
+        const rate = await findRateAsync(fromCurrency, toCurrency, firestore);
         
         setDisplayRate(rate);
 
         if (rate && amount) {
-          setConvertedAmount((parseFloat(amount) * rate).toFixed(4));
+          const result = parseFloat(amount) * rate;
+          setConvertedAmount(result > 1000 ? result.toFixed(2) : result.toFixed(8).replace(/\.?0+$/, ''));
         } else {
           setConvertedAmount('');
         }
         setIsConverting(false);
     };
     convert();
-  }, [fromCurrency, toCurrency, amount]);
+  }, [fromCurrency, toCurrency, amount, firestore]);
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -58,8 +61,8 @@ export function CurrencyConverter() {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <div className="flex-1 space-y-1 min-w-0">
+          <div className="flex flex-col gap-4">
+            <div className="space-y-1">
               <CurrencyCombobox 
                 value={fromCurrency}
                 onChange={setFromCurrency}
@@ -74,11 +77,11 @@ export function CurrencyConverter() {
               />
             </div>
 
-            <Button variant="ghost" size="icon" onClick={handleSwapCurrencies} className="self-end">
-              <ArrowRightLeft className="h-5 w-5 text-muted-foreground" />
+            <Button variant="ghost" size="icon" onClick={handleSwapCurrencies} className="self-center">
+              <ArrowRightLeft className="h-5 w-5 text-muted-foreground rotate-90 sm:rotate-0" />
             </Button>
 
-            <div className="flex-1 space-y-1 min-w-0">
+            <div className="space-y-1">
               <CurrencyCombobox
                 value={toCurrency}
                 onChange={setToCurrency}
@@ -95,8 +98,8 @@ export function CurrencyConverter() {
             </div>
           </div>
           {amount && !isConverting && convertedAmount && displayRate && (
-             <p className="text-center text-muted-foreground text-sm font-mono pt-2">
-                1 {fromCurrency} = {displayRate.toFixed(4)} {toCurrency}
+             <p className="text-center text-muted-foreground text-xs font-mono pt-2 break-all">
+                1 {fromCurrency} = {displayRate > 1000 ? displayRate.toFixed(2) : displayRate.toFixed(8).replace(/\.?0+$/, '')} {toCurrency}
             </p>
           )}
         </div>
