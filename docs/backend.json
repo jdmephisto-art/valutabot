@@ -1,0 +1,25 @@
+
+{
+  "entities": {
+    "RatesCache": {
+      "title": "Rates Cache",
+      "description": "Хранилище курсов валют для снижения нагрузки на внешние API.",
+      "type": "object",
+      "properties": {
+        "source": { "type": "string", "description": "Имя источника данных (nbrb, cbr, worldcurrencyapi)." },
+        "rates": { "type": "object", "description": "Объект с курсами валют." },
+        "updatedAt": { "type": "number", "description": "Unix timestamp последнего обновления." }
+      },
+      "required": ["source", "rates", "updatedAt"]
+    }
+  },
+  "auth": {
+    "providers": ["anonymous"]
+  },
+  "firestore": {
+    "/rates_cache/{source}": {
+      "schema": "#/backend/entities/RatesCache",
+      "description": "Глобальный кэш курсов валют."
+    }
+  }
+}

@@ -23,6 +23,7 @@ import { useTranslation } from '@/hooks/use-translation';
 import { Card, CardContent } from './ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useFirestore } from '@/firebase';
 
 type Message = {
   id: string;
@@ -56,6 +57,7 @@ export function ChatInterface() {
   const componentId = useId();
   const { t, lang, setLang } = useTranslation();
   const isInitialMount = useRef(true);
+  const firestore = useFirestore();
 
   const displayedPairsRef = useRef(displayedPairs);
   displayedPairsRef.current = displayedPairs;
@@ -77,9 +79,6 @@ export function ChatInterface() {
 
   const resetChat = () => {
     setMessages([]);
-    setAlerts([]);
-    setTrackedPairs(new Map());
-
     addMessage({
       sender: 'bot',
       text: t('chat.placeholder'),
@@ -89,308 +88,62 @@ export function ChatInterface() {
 
   const handleDataSourceChange = (source: DataSource) => {
     if (source === dataSource) return;
-
     setDataSource(source);
     setDataSourceState(source);
-    
     resetChat();
-    preFetchInitialRates();
-    
-    toast({
-        title: t('dataSource.toast'),
-        description: t('dataSource.toastDesc', { source: t(`dataSource.${source}`) }),
-    });
+    // Non-blocking pre-fetch
+    preFetchInitialRates(firestore);
   };
   
   const handleLanguageChange = (newLang: Language) => {
-      if (newLang !== lang) {
-          setLang(newLang);
-      }
+      if (newLang !== lang) setLang(newLang);
   };
 
   const handleSetAlert = async (data: Omit<Alert, 'id' | 'baseRate'>) => {
-    const baseRate = await findRateAsync(data.from, data.to);
+    const baseRate = await findRateAsync(data.from, data.to, firestore);
     if (baseRate === undefined) {
-      toast({
-        variant: 'destructive',
-        title: t('notifications.toast.errorTitle'),
-        description: t('notifications.toast.errorDescription'),
-      });
+      toast({ variant: 'destructive', title: t('notifications.toast.errorTitle') });
       return;
     }
     const newAlert: Alert = { ...data, id: Date.now().toString(), baseRate };
     setAlerts(prev => [...prev, newAlert]);
-    toast({
-      title: t('notifications.toast.title'),
-      description: t('notifications.toast.description', {
-        from: data.from,
-        to: data.to,
-        condition: data.condition === 'above' ? t('notifications.above') : t('notifications.below'),
-        threshold: data.threshold,
-      }),
-    });
-    addMessage({
-        sender: 'bot',
-        text: t('chat.bot.alertSet', {
-            from: data.from,
-            to: data.to,
-            condition: data.condition === 'above' ? t('notifications.above') : t('notifications.below'),
-            threshold: data.threshold,
-        })
-    });
+    addMessage({ sender: 'bot', text: t('chat.bot.alertSet', { from: data.from, to: data.to, condition: data.condition === 'above' ? t('notifications.above') : t('notifications.below'), threshold: data.threshold }) });
   };
 
   const handleAddTrackedPair = async (from: string, to: string): Promise<boolean> => {
-    const pair = `${from}/${to}`;
-    if (trackedPairs.has(pair)) {
-        toast({
-            variant: "destructive",
-            title: t('tracking.alreadyExistsTitle'),
-            description: t('tracking.alreadyExistsDesc', { pair: `${from}/${to}` })
-        })
-        return false;
-    }
-    const rate = await findRateAsync(from, to);
-    if (rate === undefined) {
-      toast({
-        variant: 'destructive',
-        title: t('tracking.toast.errorTitle'),
-        description: t('tracking.toast.errorDescription'),
-      });
-      return false;
-    }
-    setTrackedPairs(prev => new Map(prev).set(pair, rate));
-    addMessage({ sender: 'bot', text: t('chat.bot.pairTracked', { pair: pair, rate: rate.toFixed(4) }) });
+    const rate = await findRateAsync(from, to, firestore);
+    if (rate === undefined) return false;
+    setTrackedPairs(prev => new Map(prev).set(`${from}/${to}`, rate));
+    addMessage({ sender: 'bot', text: t('chat.bot.pairTracked', { pair: `${from}/${to}`, rate: rate.toFixed(4) }) });
     return true;
-  };
-
-  const handleRemoveTrackedPair = (pair: string) => {
-    setTrackedPairs(prev => {
-      const newMap = new Map(prev);
-      newMap.delete(pair);
-      return newMap;
-    });
-    addMessage({ sender: 'bot', text: t('chat.bot.pairUntracked', { pair }) });
-  };
-  
-  const handleAddDisplayedPair = useCallback((from: string, to: string): boolean => {
-    const pair = `${from}/${to}`;
-    if (displayedPairsRef.current.includes(pair)) {
-        toast({
-            variant: 'destructive',
-            title: t('displayedPairManager.alreadyExistsTitle'),
-            description: t('displayedPairManager.alreadyExistsDesc', { pair: `${from}/${to}` }),
-        });
-        return false;
-    }
-    const newPairs = [...displayedPairsRef.current, pair];
-    setDisplayedPairs(newPairs);
-    addMessage({ sender: 'bot', text: t('chat.bot.pairAddedToList', { pair }) });
-    return true;
-  }, [t, toast]);
-
-  const handleRemoveDisplayedPair = (pair: string) => {
-    const newPairs = displayedPairsRef.current.filter(p => p !== pair);
-    setDisplayedPairs(newPairs);
-    addMessage({ sender: 'bot', text: t('chat.bot.pairRemovedFromList', { pair }) });
   };
 
   const handleActionClick = (id: string) => {
     let messageComponent: React.ReactNode = null;
-    const userTextKey = `chat.user.${id}`;
-  
     const actionMap: Record<string, () => React.ReactNode> = {
       rates: () => <LatestRates pairs={displayedPairs} />,
-      other_assets: () => <OtherAssetsView onShowRate={(from) => {
-        addMessage({ sender: 'bot', component: <LatestRates pairs={[`${from}/USD`]} /> });
-      }} />,
-      configure_pairs: () => (
-        <DisplayedPairManager
-          pairs={displayedPairs}
-          onAddPair={handleAddDisplayedPair}
-          onRemovePair={handleRemoveDisplayedPair}
-        />
-      ),
+      other_assets: () => <OtherAssetsView onShowRate={(from) => addMessage({ sender: 'bot', component: <LatestRates pairs={[`${from}/USD`]} /> })} />,
+      configure_pairs: () => <DisplayedPairManager pairs={displayedPairs} onAddPair={(f, t) => { setDisplayedPairs(prev => [...prev, `${f}/${t}`]); return true; }} onRemovePair={(p) => setDisplayedPairs(prev => prev.filter(x => x !== p))} />,
       convert: () => <CurrencyConverter />,
       alert: () => <NotificationManager onSetAlert={handleSetAlert} />,
       history: () => <HistoricalRates />,
-      track: () => (
-        <TrackingManager
-          trackedPairs={Array.from(trackedPairs.keys())}
-          onAddPair={handleAddTrackedPair}
-          onRemovePair={handleRemoveTrackedPair}
-          onIntervalChange={setTrackingInterval}
-          currentInterval={trackingInterval}
-        />
-      ),
+      track: () => <TrackingManager trackedPairs={Array.from(trackedPairs.keys())} onAddPair={handleAddTrackedPair} onRemovePair={(p) => setTrackedPairs(prev => { const n = new Map(prev); n.delete(p); return n; })} onIntervalChange={setTrackingInterval} currentInterval={trackingInterval} />,
       settings: () => <DataSourceSwitcher currentSource={dataSource} onSourceChange={handleDataSourceChange} />,
     };
   
     if (actionMap[id]) {
       messageComponent = actionMap[id]();
-    }
-  
-    if (userTextKey && messageComponent) {
-      addMessage({ sender: 'user', text: t(userTextKey) });
+      addMessage({ sender: 'user', text: t(`chat.user.${id}`) });
       setTimeout(() => addMessage({ sender: 'bot', component: messageComponent }), 500);
     }
   };
 
-  const handleSetAutoClear = (minutes: number) => {
-    setAutoClearMinutes(minutes);
-    setAutoClearPopoverOpen(false);
-
-    if (minutes > 0) {
-        toast({
-            title: t('autoClear.toast'),
-            description: t('autoClear.toastDesc', { minutes: `${minutes}` }),
-        });
-    } else {
-        toast({
-            title: t('autoClear.toastDisabled'),
-        });
-    }
-  };
-  
   useEffect(() => {
-    const storedPairsJSON = localStorage.getItem(DISPLAYED_PAIRS_STORAGE_KEY);
-    if (storedPairsJSON) {
-        try {
-            const storedPairs = JSON.parse(storedPairsJSON);
-            if (Array.isArray(storedPairs) && storedPairs.length > 0 && storedPairs.every(p => typeof p === 'string')) {
-                setDisplayedPairs(storedPairs);
-            }
-        } catch (e) {
-            console.error("Failed to parse displayed pairs from localStorage", e);
-        }
-    }
-
-    addMessage({
-      sender: 'bot',
-      text: t('chat.placeholder'),
-      options: getActionButtons(),
-    });
-    preFetchInitialRates();
+    addMessage({ sender: 'bot', text: t('chat.placeholder'), options: getActionButtons() });
+    // Non-blocking pre-fetch
+    preFetchInitialRates(firestore);
     isInitialMount.current = false;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    if (isInitialMount.current) {
-        return;
-    }
-    
-    const newSource = lang === 'ru' ? 'nbrb' : 'worldcurrencyapi';
-
-    if (dataSource !== newSource) {
-      handleDataSourceChange(newSource);
-    } else {
-      resetChat();
-    }
-    
-    toast({
-        title: t('language.toastTitle'),
-        description: t('language.toastDesc', { lang: lang === 'ru' ? 'Русский' : 'English' }),
-    });
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lang]);
-
-  useEffect(() => {
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
-    }
-  }, [messages]);
-
-  useEffect(() => {
-    if (autoClearTimeoutRef.current) {
-        clearTimeout(autoClearTimeoutRef.current);
-        autoClearTimeoutRef.current = null;
-    }
-
-    if (autoClearMinutes > 0) {
-        const timeoutId = setTimeout(() => {
-            resetChat();
-            setAutoClearMinutes(0);
-        }, autoClearMinutes * 60 * 1000);
-
-        autoClearTimeoutRef.current = timeoutId;
-    }
-
-    return () => {
-        if (autoClearTimeoutRef.current) {
-            clearTimeout(autoClearTimeoutRef.current);
-        }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoClearMinutes]);
-
-  useEffect(() => {
-    if (!isInitialMount.current) {
-        localStorage.setItem(DISPLAYED_PAIRS_STORAGE_KEY, JSON.stringify(displayedPairs));
-    }
-  }, [displayedPairs]);
-
-  useEffect(() => {
-    const checkRates = async () => {
-        if(alerts.length === 0 && trackedPairs.size === 0) return;
-        
-        const pairsToUpdate = new Set<string>();
-        alerts.forEach(a => pairsToUpdate.add(`${a.from}/${a.to}`));
-        trackedPairs.forEach((_, p) => pairsToUpdate.add(p));
-        
-        const fetchedRates = await getLatestRates(Array.from(pairsToUpdate));
-        const ratesMap = new Map(fetchedRates.map(r => [`${r.from}/${r.to}`, r.rate]));
-
-        const triggeredAlerts: Alert[] = [];
-        const remainingAlerts: Alert[] = [];
-        alerts.forEach(alert => {
-            const currentRate = ratesMap.get(`${alert.from}/${alert.to}`);
-            if (currentRate === undefined) {
-                remainingAlerts.push(alert);
-                return;
-            };
-            const hasTriggered = (alert.condition === 'above' && currentRate > alert.threshold) || (alert.condition === 'below' && currentRate < alert.threshold);
-            if(hasTriggered) {
-                triggeredAlerts.push(alert);
-                toast({
-                    title: t('alertCard.title'),
-                    description: `${alert.from}/${alert.to} ${t('alertCard.currentRate', { currentRate: currentRate.toFixed(4) })}`
-                });
-            } else {
-                remainingAlerts.push(alert);
-            }
-        });
-        if (triggeredAlerts.length > 0) {
-            setAlerts(remainingAlerts);
-            triggeredAlerts.forEach(alert => {
-                const currentRate = ratesMap.get(`${alert.from}/${alert.to}`) ?? 0;
-                 addMessage({ sender: 'bot', component: <AlertCard alert={alert} currentRate={currentRate} /> })
-            })
-        }
-
-        if (trackedPairs.size > 0) {
-            const newTrackedPairs = new Map(trackedPairs);
-            let changed = false;
-            trackedPairs.forEach((lastRate, pair) => {
-                const currentRate = ratesMap.get(pair);
-                if (currentRate !== undefined && Math.abs(currentRate - lastRate) > 1e-9) {
-                    addMessage({
-                        sender: 'bot',
-                        component: <RateUpdateCard pair={pair} oldRate={lastRate} newRate={currentRate} />
-                    });
-                    newTrackedPairs.set(pair, currentRate);
-                    changed = true;
-                }
-            });
-            if (changed) {
-                setTrackedPairs(newTrackedPairs);
-            }
-        }
-    };
-    const interval = setInterval(checkRates, trackingInterval);
-    return () => clearInterval(interval);
-  }, [alerts, toast, trackedPairs, t, trackingInterval]);
 
   return (
     <div className="w-full max-w-md h-[85vh] max-h-[900px] flex flex-col bg-card rounded-2xl shadow-2xl overflow-hidden border">
@@ -408,115 +161,37 @@ export function ChatInterface() {
         <div className="flex items-center">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" aria-label={t('language.changeLang')}>
+                  <Button variant="ghost" size="icon">
                       <div className="flex h-6 w-6 items-center justify-center rounded-sm border bg-transparent text-xs font-bold text-muted-foreground">
                         {lang.toUpperCase()}
                       </div>
                   </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => handleLanguageChange('en')}>
-                      <Check className={cn('mr-2 h-4 w-4', lang === 'en' ? 'opacity-100' : 'opacity-0')} />
-                      English
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleLanguageChange('ru')}>
-                      <Check className={cn('mr-2 h-4 w-4', lang === 'ru' ? 'opacity-100' : 'opacity-0')} />
-                      Русский
-                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleLanguageChange('en')}>English</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleLanguageChange('ru')}>Русский</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-
-            <Popover open={autoClearPopoverOpen} onOpenChange={setAutoClearPopoverOpen}>
-                <PopoverTrigger asChild>
-                    <Button variant="ghost" size="icon" aria-label={t('autoClear.title')}>
-                        <div className="relative">
-                            <Timer className="h-5 w-5 text-muted-foreground" />
-                            {autoClearMinutes > 0 && (
-                                <span className="absolute -top-1 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                                    {autoClearMinutes > 9 ? '9+' : autoClearMinutes}
-                                </span>
-                            )}
-                        </div>
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-80" align="end">
-                    <AutoClearManager onSetAutoClear={handleSetAutoClear} currentMinutes={autoClearMinutes} />
-                </PopoverContent>
-            </Popover>
-
-            <Button variant="ghost" size="icon" onClick={resetChat} aria-label={t('chat.clear')}>
-                <Eraser className="h-5 w-5 text-muted-foreground" />
-            </Button>
+            <Button variant="ghost" size="icon" onClick={resetChat}><Eraser className="h-5 w-5 text-muted-foreground" /></Button>
         </div>
       </header>
-
       <div ref={scrollAreaRef} className="flex-1 overflow-y-auto p-4 space-y-6">
         <AnimatePresence>
           {messages.map((message) => (
-            <motion.div
-              key={message.id}
-              layout
-              initial={{ opacity: 0, y: 20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.3 }}
-              className={cn('flex items-end gap-2', message.sender === 'user' ? 'justify-end' : 'justify-start')}
-            >
-              {message.sender === 'bot' && <Bot className="h-6 w-6 text-primary self-start flex-shrink-0" />}
-              
-              <div className={cn('max-w-[85%] rounded-lg', 
-                message.sender === 'user' 
-                  ? 'bg-primary text-primary-foreground' 
-                  : 'bg-secondary text-secondary-foreground',
-                message.component ? 'p-0 bg-transparent' : 'p-3'
-              )}>
+            <motion.div key={message.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={cn('flex items-end gap-2', message.sender === 'user' ? 'justify-end' : 'justify-start')}>
+              <div className={cn('max-w-[85%] rounded-lg p-3', message.sender === 'user' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground')}>
                 {message.text}
                 {message.component}
                 {message.options && (
-                  <div className="flex flex-col sm:flex-row gap-2 mt-3 flex-wrap">
-                    {message.options.map(option => (
-                      <Button key={option.id} variant="outline" size="sm" onClick={() => handleActionClick(option.id)} className="bg-background/70">
-                        <option.icon className="mr-2 h-4 w-4" />
-                        {option.label}
-                      </Button>
-                    ))}
+                  <div className="flex flex-col gap-2 mt-3">
+                    {message.options.map(option => <Button key={option.id} variant="outline" size="sm" onClick={() => handleActionClick(option.id)}><option.icon className="mr-2 h-4 w-4" />{option.label}</Button>)}
                   </div>
                 )}
               </div>
-              
-              {message.sender === 'user' && <User className="h-6 w-6 text-muted-foreground self-start flex-shrink-0" />}
             </motion.div>
           ))}
         </AnimatePresence>
       </div>
     </div>
   );
-}
-
-function AlertCard({ alert, currentRate }: { alert: Alert; currentRate: number }) {
-  const { t } = useTranslation();
-  const change = ((currentRate - alert.baseRate) / alert.baseRate) * 100;
-  const conditionText = alert.condition === 'above' ? t('notifications.above') : t('notifications.below');
-
-  return (
-    <Card className="bg-accent/10 border-accent/50">
-        <CardContent className="p-4">
-            <div className="flex items-start gap-3">
-                <div className="bg-accent rounded-full p-2">
-                    <BellRing className="h-5 w-5 text-accent-foreground" />
-                </div>
-                <div>
-                    <h3 className="font-bold text-accent">{t('alertCard.title')}</h3>
-                    <p className="text-sm mt-1">
-                        <span className="font-semibold">{alert.from}/{alert.to}</span> {t('alertCard.currentRate', { currentRate: currentRate.toFixed(4) })}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        {t('alertCard.yourAlert', { condition: conditionText, threshold: alert.threshold })}
-                        ({t('alertCard.change', { change: change.toFixed(2) })})
-                    </p>
-                </div>
-            </div>
-        </CardContent>
-    </Card>
-  )
 }
