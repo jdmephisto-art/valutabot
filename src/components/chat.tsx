@@ -59,13 +59,12 @@ export function ChatInterface() {
 
   const scrollToBottom = useCallback(() => {
     if (scrollAreaRef.current) {
-        // Use a small delay to ensure content is rendered
         setTimeout(() => {
             scrollAreaRef.current?.scrollTo({
                 top: scrollAreaRef.current.scrollHeight,
                 behavior: 'smooth'
             });
-        }, 100);
+        }, 150);
     }
   }, []);
 
@@ -77,12 +76,46 @@ export function ChatInterface() {
   useEffect(() => {
     if (autoClearMinutes > 0) {
         const timer = setTimeout(() => {
-            setMessages([]);
             resetChat();
         }, autoClearMinutes * 60 * 1000);
         return () => clearTimeout(timer);
     }
   }, [autoClearMinutes, messages.length]);
+
+  // Alert check loop
+  useEffect(() => {
+    if (alerts.length === 0) return;
+
+    const checkInterval = setInterval(async () => {
+      const triggeredIndices: number[] = [];
+      
+      for (let i = 0; i < alerts.length; i++) {
+        const alert = alerts[i];
+        const currentRate = await findRateAsync(alert.from, alert.to, firestore);
+        
+        if (currentRate) {
+          const isTriggered = alert.condition === 'above' 
+            ? currentRate >= alert.threshold 
+            : currentRate <= alert.threshold;
+          
+          if (isTriggered) {
+            triggeredIndices.push(i);
+            addMessage({
+              sender: 'bot',
+              text: t('alertCard.title'),
+              component: <RateUpdateCard pair={`${alert.from}/${alert.to}`} oldRate={alert.baseRate} newRate={currentRate} />
+            });
+          }
+        }
+      }
+
+      if (triggeredIndices.length > 0) {
+        setAlerts(prev => prev.filter((_, idx) => !triggeredIndices.includes(idx)));
+      }
+    }, 60000);
+
+    return () => clearInterval(checkInterval);
+  }, [alerts, firestore, addMessage, t]);
 
   const getActionButtons = useCallback((): ActionButtonProps[] => [
     { id: 'rates', label: t('chat.showRates'), icon: LineChart },

@@ -1,5 +1,5 @@
 import { Currency, ExchangeRate, DataSource, HistoricalRateResult } from '@/lib/types';
-import { format, subDays, isFuture, isSameDay } from 'date-fns';
+import { format, subDays, isFuture } from 'date-fns';
 import { currencyApiPreloadedCurrencies } from './preloaded-data';
 import { doc, getDoc, setDoc, Firestore } from 'firebase/firestore';
 
@@ -114,9 +114,7 @@ export async function _updateMetalsRatesCache(db?: Firestore): Promise<void> {
     if (Date.now() - metalsRatesTimestamp < CACHE_TTL_RATES && Object.keys(metalsRatesCache).length > 0) return;
     const data = await cbrMetalsApiFetch();
     if (data) {
-        // CBR codes: 1-Gold, 2-Silver, 3-Platinum, 4-Palladium
-        // Prices are in RUB per gram
-        const rubUsd = findRate('RUB', 'USD') || 0.011;
+        const rubUsd = 0.011; // Fallback constant if no real-time rub-usd
         if (data['1']) metalsRatesCache['XAU'] = data['1'] * rubUsd;
         if (data['2']) metalsRatesCache['XAG'] = data['2'] * rubUsd;
         if (data['3']) metalsRatesCache['XPT'] = data['3'] * rubUsd;
@@ -147,12 +145,10 @@ function getRateVsUsd(code: string): number | undefined {
     if (cryptoRatesCache[code]) return cryptoRatesCache[code];
     if (metalsRatesCache[code]) return metalsRatesCache[code];
     
-    // NBRB cross-rate
     if (nbrbRatesCache[code] && nbrbRatesCache['USD']) {
         return (nbrbRatesCache[code].rate / nbrbRatesCache[code].scale) / (nbrbRatesCache['USD'].rate / nbrbRatesCache['USD'].scale);
     }
     
-    // WorldCurrencyAPI
     if (worldCurrencyRatesCache[code]) return 1 / worldCurrencyRatesCache[code];
     
     return undefined;
@@ -167,7 +163,11 @@ export function findRate(from: string, to: string): number | undefined {
 }
 
 export async function getCurrencies(): Promise<Currency[]> {
-    return currencyApiPreloadedCurrencies;
+    const cryptoCurrencies: Currency[] = cryptoCodes.map(code => ({
+        code,
+        name: code === 'BTC' ? 'Bitcoin' : code === 'ETH' ? 'Ethereum' : code
+    }));
+    return [...currencyApiPreloadedCurrencies, ...cryptoCurrencies].sort((a, b) => a.code.localeCompare(b.code));
 }
 
 export async function getLatestRates(pairs: string[], db?: Firestore): Promise<ExchangeRate[]> {
@@ -184,68 +184,48 @@ export async function findRateAsync(from: string, to: string, db?: Firestore): P
 }
 
 export async function preFetchInitialRates(db?: Firestore) {
-    const ds = getDataSource();
-    const tasks = [_updateCryptoRatesCache(db)];
-    if (ds === 'nbrb') tasks.push(_updateNbrbRatesCache(db));
-    if (ds === 'worldcurrencyapi') {
-        const data = await worldCurrencyApiFetch();
-        if (data?.rates) worldCurrencyRatesCache = data.rates;
+    const tasks = [
+        _updateCryptoRatesCache(db),
+        _updateMetalsRatesCache(db),
+        _updateNbrbRatesCache(db)
+    ];
+    
+    const worldData = await worldCurrencyApiFetch();
+    if (worldData?.rates) {
+        worldCurrencyRatesCache = worldData.rates;
+        worldCurrencyRatesTimestamp = Date.now();
     }
-    tasks.push(_updateMetalsRatesCache(db));
+    
     await Promise.allSettled(tasks);
 }
 
 export async function getHistoricalRate(from: string, to: string, date: Date): Promise<HistoricalRateResult | undefined> {
     if (isFuture(date)) return undefined;
     
-    // Look-back logic (7 days)
-    for (let i = 0; i < 7; i++) {
-        const checkDate = subDays(date, i);
-        const dateStr = format(checkDate, 'dd/MM/yyyy');
-        
-        // Use CBR API for historical RUB-based rates
-        if (from === 'RUB' || to === 'RUB' || from === 'USD' || to === 'USD') {
-            try {
-                const res = await fetch(`/api/cbr/history?date_req=${dateStr}`);
-                if (res.ok) {
-                    const xml = await res.json();
-                    if (xml?.ValCurs?.Valute) {
-                        const valutes = xml.ValCurs.Valute;
-                        const usdData = valutes.find((v: any) => v.CharCode?.[0] === 'USD');
-                        if (usdData) {
-                            const usdRate = parseFloat(usdData.Value[0].replace(',', '.'));
-                            const rubToUsd = 1 / usdRate;
-                            
-                            if (from === 'USD' && to === 'RUB') return { rate: usdRate, date: checkDate };
-                            if (from === 'RUB' && to === 'USD') return { rate: rubToUsd, date: checkDate };
-                        }
-                    }
-                }
-            } catch (e) { /* ignore */ }
-        }
-    }
+    // Always prefetch to ensure cache is hot
+    await preFetchInitialRates();
 
     const rate = findRate(from, to);
-    return rate ? { rate, date } : undefined;
+    if (rate !== undefined) {
+        return { rate, date };
+    }
+
+    return undefined;
 }
 
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
     const points = 7;
     const result: { date: string; rate: number }[] = [];
     const baseRate = findRate(from, to) || 1;
-    
-    // Simulate realistic trend based on volatility
     const volatility = cryptoCodes.includes(from) || cryptoCodes.includes(to) ? 0.05 : 0.005;
 
     for (let i = 0; i <= points; i++) {
         const d = new Date(startDate.getTime() + (endDate.getTime() - startDate.getTime()) * (i / points));
-        // Add some noise to the simulated rate
         const noise = 1 + (Math.random() - 0.5) * volatility;
         result.push({
             date: format(d, 'dd.MM'),
             rate: baseRate * noise
         });
     }
-    
     return result;
 }
