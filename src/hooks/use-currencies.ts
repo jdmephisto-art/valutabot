@@ -22,6 +22,7 @@ export function useCurrencies() {
             setCryptoCurrencies(crypto);
         };
         
+        // Ensure we show ALL currencies from the start
         filterAndSetCurrencies(currencyApiPreloadedCurrencies);
         setLoading(false);
 

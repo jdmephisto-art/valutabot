@@ -59,13 +59,30 @@ export function ChatInterface() {
 
   const scrollToBottom = useCallback(() => {
     if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+        // Use a small delay to ensure content is rendered
+        setTimeout(() => {
+            scrollAreaRef.current?.scrollTo({
+                top: scrollAreaRef.current.scrollHeight,
+                behavior: 'smooth'
+            });
+        }, 100);
     }
   }, []);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages, scrollToBottom]);
+
+  // Auto-clear logic
+  useEffect(() => {
+    if (autoClearMinutes > 0) {
+        const timer = setTimeout(() => {
+            setMessages([]);
+            resetChat();
+        }, autoClearMinutes * 60 * 1000);
+        return () => clearTimeout(timer);
+    }
+  }, [autoClearMinutes, messages.length]);
 
   const getActionButtons = useCallback((): ActionButtonProps[] => [
     { id: 'rates', label: t('chat.showRates'), icon: LineChart },
@@ -100,7 +117,10 @@ export function ChatInterface() {
     setTimeout(() => {
       let component: React.ReactNode = null;
       if (id === 'rates') component = <LatestRates pairs={displayedPairs} />;
-      if (id === 'other_assets') component = <OtherAssetsView onShowRate={(from) => addMessage({ sender: 'bot', component: <LatestRates pairs={[`${from}/USD`]} /> })} />;
+      if (id === 'other_assets') component = <OtherAssetsView onShowRate={(from) => {
+          addMessage({ sender: 'bot', component: <LatestRates pairs={[`${from}/USD`]} /> });
+          scrollToBottom();
+      }} />;
       if (id === 'configure_pairs') component = <DisplayedPairManager pairs={displayedPairs} onAddPair={(f, t) => { setDisplayedPairs(prev => [...prev, `${f}/${t}`]); return true; }} onRemovePair={(p) => setDisplayedPairs(prev => prev.filter(x => x !== p))} />;
       if (id === 'convert') component = <CurrencyConverter />;
       if (id === 'alert') component = <NotificationManager onSetAlert={(data) => {
@@ -126,7 +146,7 @@ export function ChatInterface() {
   useEffect(() => {
     resetChat();
     preFetchInitialRates(firestore);
-  }, [lang]);
+  }, [lang, resetChat, firestore]);
 
   return (
     <div className="w-full max-w-md h-[85vh] max-h-[900px] flex flex-col bg-card rounded-2xl shadow-2xl overflow-hidden border">
@@ -141,7 +161,10 @@ export function ChatInterface() {
         <div className="flex items-center gap-1">
           <Popover open={autoClearPopoverOpen} onOpenChange={setAutoClearPopoverOpen}>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon"><Timer className="h-5 w-5" /></Button>
+              <Button variant="ghost" size="icon" className="relative">
+                <Timer className="h-5 w-5" />
+                {autoClearMinutes > 0 && <span className="absolute top-2 right-2 h-2 w-2 bg-primary rounded-full" />}
+              </Button>
             </PopoverTrigger>
             <PopoverContent className="w-80">
               <AutoClearManager currentMinutes={autoClearMinutes} onSetAutoClear={(m) => { setAutoClearMinutes(m); setAutoClearPopoverOpen(false); }} />
