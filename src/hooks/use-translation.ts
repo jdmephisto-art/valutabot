@@ -12,24 +12,21 @@ export function useTranslation() {
         return () => unsubscribe();
     }, []);
     
-    const setLang = (newLang: Language) => {
+    const setLang = useCallback((newLang: Language) => {
         setLangInLib(newLang);
-    };
+    }, []);
 
     const t = useCallback((key: string, params?: Record<string, string | number>) => {
         const keys = key.split('.');
         let result: any = translations[lang];
         for (const k of keys) {
             result = result?.[k];
-            if (result === undefined) {
-                // Return last part of key as fallback
-                return keys[keys.length - 1];
-            }
+            if (result === undefined) return keys[keys.length - 1];
         }
 
         if (typeof result === 'string' && params) {
             Object.keys(params).forEach(p => {
-                result = result.replace(`{${p}}`, String(params[p]));
+                result = result.replace(new RegExp(`\\{${p}\\}`, 'g'), String(params[p]));
             });
         }
         

@@ -7,7 +7,7 @@ import { useTranslation } from './use-translation';
 import { currencyApiPreloadedCurrencies } from '@/lib/preloaded-data';
 
 export function useCurrencies() {
-    const [currencies, setCurrencies] = useState<Currency[]>([]);
+    const [currencies, setCurrencies] = useState<Currency[]>(currencyApiPreloadedCurrencies);
     const [fiatCurrencies, setFiatCurrencies] = useState<Currency[]>([]);
     const [cryptoCurrencies, setCryptoCurrencies] = useState<Currency[]>([]);
     const [loading, setLoading] = useState(true);
@@ -22,13 +22,13 @@ export function useCurrencies() {
             setCryptoCurrencies(crypto);
         };
         
-        // Use the most comprehensive list for a fast initial render.
         filterAndSetCurrencies(currencyApiPreloadedCurrencies);
         setLoading(false);
 
-        // Then fetch the actual, source-dependent list in the background.
         getCurrenciesFromLib().then(freshCurrencies => {
-            filterAndSetCurrencies(freshCurrencies);
+            if (freshCurrencies && freshCurrencies.length > 0) {
+                filterAndSetCurrencies(freshCurrencies);
+            }
         });
     }, [lang]);
 
