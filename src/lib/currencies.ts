@@ -1,5 +1,5 @@
 import { Currency, ExchangeRate, DataSource, HistoricalRateResult } from '@/lib/types';
-import { format, isFuture, startOfDay, isAfter } from 'date-fns';
+import { format, isFuture, startOfDay, isAfter, isSameDay } from 'date-fns';
 import { currencyApiPreloadedCurrencies } from './preloaded-data';
 import { doc, getDoc, setDoc, Firestore } from 'firebase/firestore';
 
@@ -206,11 +206,13 @@ function getRateVsUsd(code: string): number | undefined {
     if (cryptoRatesCache[code] !== undefined) return cryptoRatesCache[code];
     if (nftRatesCache[code] !== undefined) return nftRatesCache[code];
     if (metalsRatesCache[code] !== undefined) return metalsRatesCache[code];
+    
     if (nbrbRatesCache[code] && nbrbRatesCache['USD']) {
         const codeInByn = nbrbRatesCache[code].rate / nbrbRatesCache[code].scale;
         const usdInByn = nbrbRatesCache['USD'].rate / nbrbRatesCache['USD'].scale;
         return codeInByn / usdInByn;
     }
+    
     if (worldCurrencyRatesCache[code] !== undefined) {
         return 1 / worldCurrencyRatesCache[code];
     }
@@ -252,6 +254,12 @@ export async function findRateAsync(from: string, to: string, db?: Firestore): P
 }
 
 export async function preFetchInitialRates(db?: Firestore) {
+    const tasks = [
+        _updateCryptoRatesCache(db),
+        _updateNbrbRatesCache(db),
+        _updateNFTRatesCache(db)
+    ];
+
     if (Date.now() - worldCurrencyRatesTimestamp > CACHE_TTL_RATES || Object.keys(worldCurrencyRatesCache).length === 0) {
         const worldData = await worldCurrencyApiFetch();
         if (worldData?.rates) {
@@ -259,11 +267,7 @@ export async function preFetchInitialRates(db?: Firestore) {
             worldCurrencyRatesTimestamp = Date.now();
         }
     }
-    const tasks = [
-        _updateCryptoRatesCache(db),
-        _updateNbrbRatesCache(db),
-        _updateNFTRatesCache(db)
-    ];
+    
     await Promise.allSettled(tasks);
     await _updateMetalsRatesCache(db);
 }
@@ -275,7 +279,7 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
     const currentRate = findRate(from, to);
 
     if (currentRate !== undefined) {
-        const isToday = format(date, 'yyyyMMdd') === format(new Date(), 'yyyyMMdd');
+        const isToday = isSameDay(date, new Date());
         return { 
             rate: currentRate, 
             date,
