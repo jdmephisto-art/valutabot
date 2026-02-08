@@ -103,7 +103,7 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
                 render={({ field }) => (
                     <FormItem className="w-1/3">
                     <FormLabel>{t('notifications.condition')}</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         </FormControl>
@@ -128,7 +128,7 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
                           step="0.0001" 
                           placeholder="e.g., 0.95" 
                           {...field} 
-                          value={field.value === undefined || field.value === null ? '' : field.value}
+                          value={field.value ?? ''}
                         />
                     </FormControl>
                     <FormMessage />

@@ -57,14 +57,13 @@ export function CurrencyConverter() {
   }
 
   return (
-    <Card className="bg-transparent border-0 shadow-none w-full overflow-hidden">
+    <Card className="bg-transparent border-0 shadow-none w-full -mx-4 w-[calc(100%+2rem)] overflow-hidden">
       <CardHeader className="px-4 pb-3">
         <CardTitle className="text-base font-bold text-primary">{t('converter.title')}</CardTitle>
       </CardHeader>
       <CardContent className="px-4 pb-4">
         <div className="space-y-5">
           <div className="space-y-4">
-            {/* Выбор валют - Идеальная симметрия 1fr - auto - 1fr */}
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 w-full">
               <div className="min-w-0">
                 <CurrencyCombobox 
@@ -96,7 +95,6 @@ export function CurrencyConverter() {
               </div>
             </div>
 
-            {/* Поля ввода - Строгая симметрия 50/50 */}
             <div className="grid grid-cols-2 gap-4 w-full">
               <div className="space-y-1.5 min-w-0">
                 <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest pl-0.5 truncate">{t('converter.amount')}</p>
