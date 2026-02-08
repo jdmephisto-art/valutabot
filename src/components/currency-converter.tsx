@@ -27,6 +27,7 @@ export function CurrencyConverter() {
         if (!fromCurrency || !toCurrency) return;
 
         setIsConverting(true);
+        // Принудительно прогреваем кэш из Firestore перед расчетом
         await preFetchInitialRates(firestore);
         const rate = await findRateAsync(fromCurrency, toCurrency, firestore);
         

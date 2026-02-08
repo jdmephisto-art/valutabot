@@ -128,7 +128,7 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
                           step="0.0001" 
                           placeholder="e.g., 0.95" 
                           {...field} 
-                          value={field.value ?? ''}
+                          value={field.value ?? ''} // Гарантируем, что value никогда не undefined
                         />
                     </FormControl>
                     <FormMessage />

@@ -16,7 +16,7 @@ export const cryptoCodes = [
     'BAYC', 'AZUKI', 'PUDGY' 
 ];
 
-const CACHE_TTL_RATES = 15 * 60 * 1000;
+const CACHE_TTL_RATES = 15 * 60 * 1000; // 15 минут
 
 let nbrbRatesCache: any = {};
 let nbrbRatesTimestamp = 0;
@@ -43,11 +43,14 @@ async function getCacheFromFirestore(db: Firestore, source: string) {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
             const data = docSnap.data();
+            // Проверяем актуальность данных (15 минут)
             if (Date.now() - data.updatedAt < CACHE_TTL_RATES) {
                 return data.rates;
             }
         }
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+        console.error(`Error reading cache from Firestore for ${source}:`, e);
+    }
     return null;
 }
 
@@ -59,7 +62,9 @@ function saveCacheToFirestore(db: Firestore, source: string, rates: any) {
             rates,
             updatedAt: Date.now()
         }, { merge: true });
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+        console.error(`Error saving cache to Firestore for ${source}:`, e);
+    }
 }
 
 async function nbrbApiFetch(endpoint: string) {
@@ -102,7 +107,11 @@ export async function _updateCryptoRatesCache(db?: Firestore): Promise<void> {
     
     if (db) {
         const cached = await getCacheFromFirestore(db, 'crypto');
-        if (cached) { cryptoRatesCache = cached; cryptoRatesTimestamp = Date.now(); return; }
+        if (cached) { 
+            cryptoRatesCache = cached; 
+            cryptoRatesTimestamp = Date.now(); 
+            return; 
+        }
     }
 
     const ids = [
@@ -144,7 +153,11 @@ async function _updateNFTRatesCache(db?: Firestore): Promise<void> {
     
     if (db) {
         const cached = await getCacheFromFirestore(db, 'nfts');
-        if (cached) { nftRatesCache = cached; nftRatesTimestamp = Date.now(); return; }
+        if (cached) { 
+            nftRatesCache = cached; 
+            nftRatesTimestamp = Date.now(); 
+            return; 
+        }
     }
 
     const nfts = {
@@ -170,9 +183,19 @@ async function _updateNFTRatesCache(db?: Firestore): Promise<void> {
 
 export async function _updateMetalsRatesCache(db?: Firestore): Promise<void> {
     if (Date.now() - metalsRatesTimestamp < CACHE_TTL_RATES && Object.keys(metalsRatesCache).length > 0) return;
+
+    if (db) {
+        const cached = await getCacheFromFirestore(db, 'metals');
+        if (cached) { 
+            metalsRatesCache = cached; 
+            metalsRatesTimestamp = Date.now(); 
+            return; 
+        }
+    }
     
     const data = await cbrMetalsApiFetch();
     if (data) {
+        // Берем курс рубля для конвертации из рублей в доллары
         const rubPerUsd = worldCurrencyRatesCache['RUB'] || 92; 
         if (data['1']) metalsRatesCache['XAU'] = parseFloat(data['1']) / rubPerUsd;
         if (data['2']) metalsRatesCache['XAG'] = parseFloat(data['2']) / rubPerUsd;
@@ -186,18 +209,46 @@ export async function _updateMetalsRatesCache(db?: Firestore): Promise<void> {
 
 export async function _updateNbrbRatesCache(db?: Firestore): Promise<void> {
     if (Date.now() - nbrbRatesTimestamp < CACHE_TTL_RATES && Object.keys(nbrbRatesCache).length > 0) return;
+    
     if (db) {
         const cached = await getCacheFromFirestore(db, 'nbrb');
-        if (cached) { nbrbRatesCache = cached; nbrbRatesTimestamp = Date.now(); return; }
+        if (cached) { 
+            nbrbRatesCache = cached; 
+            nbrbRatesTimestamp = Date.now(); 
+            return; 
+        }
     }
+
     const data = await nbrbApiFetch('rates?periodicity=0');
     if (data && Array.isArray(data)) {
         const temp: any = {};
-        data.forEach((r: any) => { temp[r.Cur_Abbreviation] = { rate: r.Cur_OfficialRate, scale: r.Cur_Scale }; });
+        data.forEach((r: any) => { 
+            temp[r.Cur_Abbreviation] = { rate: r.Cur_OfficialRate, scale: r.Cur_Scale }; 
+        });
         temp['BYN'] = { rate: 1, scale: 1 };
         nbrbRatesCache = temp;
         nbrbRatesTimestamp = Date.now();
         if (db) saveCacheToFirestore(db, 'nbrb', nbrbRatesCache);
+    }
+}
+
+async function _updateWorldCurrencyRatesCache(db?: Firestore): Promise<void> {
+    if (Date.now() - worldCurrencyRatesTimestamp < CACHE_TTL_RATES && Object.keys(worldCurrencyRatesCache).length > 0) return;
+
+    if (db) {
+        const cached = await getCacheFromFirestore(db, 'world');
+        if (cached) {
+            worldCurrencyRatesCache = cached;
+            worldCurrencyRatesTimestamp = Date.now();
+            return;
+        }
+    }
+
+    const data = await worldCurrencyApiFetch();
+    if (data?.rates) {
+        worldCurrencyRatesCache = data.rates;
+        worldCurrencyRatesTimestamp = Date.now();
+        if (db) saveCacheToFirestore(db, 'world', worldCurrencyRatesCache);
     }
 }
 
@@ -207,13 +258,17 @@ function getRateVsUsd(code: string): number | undefined {
     if (nftRatesCache[code] !== undefined) return nftRatesCache[code];
     if (metalsRatesCache[code] !== undefined) return metalsRatesCache[code];
     
+    // NBRB (BYN-based rates)
     if (nbrbRatesCache[code] && nbrbRatesCache['USD']) {
         const codeInByn = nbrbRatesCache[code].rate / nbrbRatesCache[code].scale;
         const usdInByn = nbrbRatesCache['USD'].rate / nbrbRatesCache['USD'].scale;
         return codeInByn / usdInByn;
     }
     
+    // WorldCurrency (USD-based rates)
     if (worldCurrencyRatesCache[code] !== undefined) {
+        // WorldCurrencyAPI returns rates AS base currency per 1 USD (e.g. 1 USD = 0.92 EUR)
+        // So to get value of 1 code in USD, it's 1 / rate
         return 1 / worldCurrencyRatesCache[code];
     }
     return undefined;
@@ -254,21 +309,16 @@ export async function findRateAsync(from: string, to: string, db?: Firestore): P
 }
 
 export async function preFetchInitialRates(db?: Firestore) {
+    // Параллельный прогрев всех кэшей из Firestore или API
     const tasks = [
+        _updateWorldCurrencyRatesCache(db),
         _updateCryptoRatesCache(db),
         _updateNbrbRatesCache(db),
         _updateNFTRatesCache(db)
     ];
-
-    if (Date.now() - worldCurrencyRatesTimestamp > CACHE_TTL_RATES || Object.keys(worldCurrencyRatesCache).length === 0) {
-        const worldData = await worldCurrencyApiFetch();
-        if (worldData?.rates) {
-            worldCurrencyRatesCache = worldData.rates;
-            worldCurrencyRatesTimestamp = Date.now();
-        }
-    }
     
     await Promise.allSettled(tasks);
+    // Металлы зависят от курса USD/RUB из мирового кэша, поэтому обновляем после
     await _updateMetalsRatesCache(db);
 }
 
@@ -278,12 +328,20 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
     await preFetchInitialRates(db);
     const currentRate = findRate(from, to);
 
+    // Если это сегодня, просто возвращаем текущий курс
+    if (isSameDay(date, new Date())) {
+        if (currentRate !== undefined) {
+            return { rate: currentRate, date };
+        }
+    }
+
+    // Для истории в прототипе используем текущий курс с пометкой (fallback)
+    // В реальном приложении здесь был бы вызов архива API
     if (currentRate !== undefined) {
-        const isToday = isSameDay(date, new Date());
         return { 
             rate: currentRate, 
             date,
-            isFallback: !isToday 
+            isFallback: true 
         };
     }
     
