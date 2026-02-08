@@ -27,4 +27,5 @@ export type Language = 'en' | 'ru';
 export type HistoricalRateResult = {
   rate: number;
   date: Date;
+  isFallback?: boolean;
 };

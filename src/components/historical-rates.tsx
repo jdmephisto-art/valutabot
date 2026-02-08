@@ -221,12 +221,12 @@ export function HistoricalRates() {
               <div className="text-center p-4 bg-muted/50 rounded-lg space-y-2">
                 <p className="text-sm text-muted-foreground">{t('history.rateOn', { date: date ? format(date, "PPP", { locale: dateLocale }) : '' })}</p>
                 <p className="text-2xl font-bold font-mono">{singleRate.rate.toFixed(4)}</p>
-                {date && format(singleRate.date, 'yyyyMMdd') !== format(date, 'yyyyMMdd') && (
-                    <div className="flex items-start gap-2 p-2 bg-orange-500/10 border border-orange-500/20 rounded text-left">
+                {singleRate.isFallback && (
+                    <div className="flex items-start gap-2 p-2 bg-orange-500/10 border border-orange-500/20 rounded text-left mt-2">
                         <Info className="h-4 w-4 text-orange-500 shrink-0 mt-0.5" />
                         <p className="text-[10px] text-orange-600 leading-tight">
                             {t('history.fallbackHint', { 
-                                requestedDate: format(date, "dd.MM.yyyy"), 
+                                requestedDate: date ? format(date, "dd.MM.yyyy") : '', 
                                 actualDate: format(singleRate.date, "dd.MM.yyyy") 
                             })}
                         </p>

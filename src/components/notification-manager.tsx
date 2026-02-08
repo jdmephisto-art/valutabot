@@ -42,7 +42,7 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
       from: 'USD',
       to: 'EUR',
       condition: 'above',
-      threshold: 1, // Инициализация значением, чтобы избежать ошибки React
+      threshold: 1,
     },
   });
 
@@ -123,7 +123,13 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
                     <FormItem className="flex-1">
                     <FormLabel>{t('notifications.threshold')}</FormLabel>
                     <FormControl>
-                        <Input type="number" step="0.0001" placeholder="e.g., 0.95" {...field} />
+                        <Input 
+                          type="number" 
+                          step="0.0001" 
+                          placeholder="e.g., 0.95" 
+                          {...field} 
+                          value={field.value ?? ''}
+                        />
                     </FormControl>
                     <FormMessage />
                     </FormItem>
