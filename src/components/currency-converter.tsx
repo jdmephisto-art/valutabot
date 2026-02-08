@@ -102,7 +102,7 @@ export function CurrencyConverter() {
                 <Input
                   type="text"
                   placeholder="0.00"
-                  value={amount}
+                  value={amount ?? ''}
                   onChange={handleAmountChange}
                   className="text-sm h-11 border-primary/30 focus-visible:ring-primary w-full bg-background/50"
                 />

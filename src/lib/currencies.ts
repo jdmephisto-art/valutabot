@@ -22,10 +22,8 @@ let unifiedRates: Record<string, number> = {
     'EUR': 1.08,
     'RUB': 0.0108,
     'BYN': 0.31,
-    'ARS': 0.00118,
-    'AFN': 0.014,
-    'BTC': 65000,
-    'TON': 5.4
+    'ARS': 0.0007,
+    'AFN': 0.014
 };
 
 const CACHE_TTL = 15 * 60 * 1000; // 15 минут
@@ -41,7 +39,7 @@ export function getDataSource(): DataSource {
 export async function preFetchInitialRates(db: Firestore) {
     const docRef = doc(db, 'rates_cache', 'unified');
     
-    // 1. Подписываемся на обновления из Firestore
+    // Подписка на обновления из Firestore
     onSnapshot(docRef, (snap) => {
         if (snap.exists()) {
             const data = snap.data();
@@ -49,12 +47,14 @@ export async function preFetchInitialRates(db: Firestore) {
         }
     });
 
-    // 2. Проверяем необходимость обновления данных в фоне
     const snap = await getDoc(docRef);
     const now = Date.now();
     
+    // Обновляем данные, если их нет или они старые
     if (!snap.exists() || (now - (snap.data()?.updatedAt || 0) > CACHE_TTL)) {
         updateAllRatesInCloud(db);
+    } else {
+        unifiedRates = { ...unifiedRates, ...snap.data().rates };
     }
 }
 
@@ -76,8 +76,8 @@ async function updateAllRatesInCloud(db: Firestore) {
         if (metals.status === 'fulfilled' && metals.value) Object.assign(newRates, metals.value);
         if (nfts.status === 'fulfilled' && nfts.value) Object.assign(newRates, nfts.value);
 
-        // Сохраняем объединенный реестр в Firestore
-        setDoc(doc(db, 'rates_cache', 'unified'), {
+        // Сохраняем в Firestore
+        await setDoc(doc(db, 'rates_cache', 'unified'), {
             rates: newRates,
             updatedAt: Date.now()
         }, { merge: true });
@@ -115,8 +115,8 @@ async function fetchWorld() {
         const rates: Record<string, number> = {};
         if (data?.rates) {
             Object.keys(data.rates).forEach(code => {
-                // API отдает: 1 USD = X Units. Цена 1 Unit в USD = 1/X
                 if (data.rates[code] !== 0) {
+                    // 1 USD = X Units. Цена 1 Unit в USD = 1/X
                     rates[code] = 1 / data.rates[code];
                 }
             });
@@ -216,7 +216,7 @@ export async function findRateAsync(from: string, to: string, db: Firestore): Pr
 export async function getHistoricalRate(from: string, to: string, date: Date, db: Firestore): Promise<HistoricalRateResult | undefined> {
     if (isAfter(startOfDay(date), startOfDay(new Date()))) return undefined;
     
-    // Для "сегодня" отдаем актуальный курс
+    // Для "сегодня" отдаем актуальный курс из кэша
     if (isSameDay(date, new Date())) {
         const rate = findRate(from, to);
         if (rate !== undefined) return { rate, date, isFallback: false };
@@ -224,8 +224,9 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
 
     const current = findRate(from, to);
     if (current !== undefined) {
+        // Симуляция истории с небольшим отклонением
         return { 
-            rate: current * (0.97 + Math.random() * 0.06), 
+            rate: current * (0.98 + Math.random() * 0.04), 
             date, 
             isFallback: !isSameDay(date, new Date()) 
         };
