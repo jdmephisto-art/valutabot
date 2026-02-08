@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { findRateAsync } from '@/lib/currencies';
+import { findRateAsync, preFetchInitialRates } from '@/lib/currencies';
 import { ArrowRightLeft } from 'lucide-react';
 import { Button } from './ui/button';
 import { useCurrencies } from '@/hooks/use-currencies';
@@ -27,13 +27,17 @@ export function CurrencyConverter() {
         if (!fromCurrency || !toCurrency) return;
 
         setIsConverting(true);
+        // Принудительно проверяем кэш перед расчетом
+        await preFetchInitialRates(firestore);
         const rate = await findRateAsync(fromCurrency, toCurrency, firestore);
         
         setDisplayRate(rate);
 
         if (rate && amount) {
           const result = parseFloat(amount) * rate;
-          setConvertedAmount(result > 1000 ? result.toFixed(2) : result.toFixed(8).replace(/\.?0+$/, ''));
+          // Для крипты и металлов больше знаков, для обычных валют 2-4
+          const isAsset = ['BTC', 'ETH', 'TON', 'XAU', 'XAG', 'NOT', 'DOGS'].includes(toCurrency) || rate < 0.01;
+          setConvertedAmount(result > 1000 ? result.toFixed(2) : result.toFixed(isAsset ? 8 : 4).replace(/\.?0+$/, ''));
         } else {
           setConvertedAmount('');
         }
@@ -55,15 +59,16 @@ export function CurrencyConverter() {
   }
 
   return (
-    <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
-      <CardHeader>
+    <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none w-full overflow-hidden">
+      <CardHeader className="px-4 pb-4">
         <CardTitle className="text-lg font-semibold">{t('converter.title')}</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-4">
         <div className="space-y-6">
-          <div className="flex flex-col gap-3">
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-              <div className="space-y-1">
+          <div className="flex flex-col gap-4">
+            {/* Выбор валют - Строгая симметрия */}
+            <div className="flex items-center gap-2 w-full">
+              <div className="flex-1">
                 <CurrencyCombobox 
                   value={fromCurrency}
                   onChange={setFromCurrency}
@@ -72,11 +77,16 @@ export function CurrencyConverter() {
                 />
               </div>
 
-              <Button variant="ghost" size="icon" onClick={handleSwapCurrencies} className="mt-0">
-                <ArrowRightLeft className="h-4 w-4 text-muted-foreground" />
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={handleSwapCurrencies} 
+                className="h-10 w-10 shrink-0 hover:bg-primary/10 transition-colors"
+              >
+                <ArrowRightLeft className="h-4 w-4 text-primary" />
               </Button>
 
-              <div className="space-y-1">
+              <div className="flex-1">
                 <CurrencyCombobox
                   value={toCurrency}
                   onChange={setToCurrency}
@@ -86,35 +96,38 @@ export function CurrencyConverter() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <p className="text-[10px] text-muted-foreground pl-1">{t('converter.amount')}</p>
+            {/* Поля ввода - Строгая симметрия */}
+            <div className="flex gap-4 w-full">
+              <div className="flex-1 space-y-1.5">
+                <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider pl-1">{t('converter.amount')}</p>
                 <Input
                   type="text"
                   placeholder="0.00"
                   value={amount}
                   onChange={handleAmountChange}
-                  className="text-sm"
+                  className="text-sm h-11 border-primary/20 focus-visible:ring-primary"
                 />
               </div>
-              <div className="space-y-1">
-                <p className="text-[10px] text-muted-foreground pl-1">{t('converter.converted')}</p>
+              <div className="flex-1 space-y-1.5">
+                <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider pl-1">{t('converter.converted')}</p>
                 <Input
                   type="text"
                   placeholder={isConverting ? "..." : "0.00"}
                   value={isConverting ? '' : convertedAmount}
                   readOnly
-                  className="bg-muted/50 text-sm font-semibold"
+                  className="bg-muted/30 text-sm font-semibold h-11 border-dashed border-primary/20"
                 />
               </div>
             </div>
           </div>
           
           {amount && !isConverting && convertedAmount && displayRate && (
-             <div className="pt-2 border-t border-border/50">
-               <p className="text-center text-muted-foreground text-[11px] font-mono break-all">
-                  1 {fromCurrency} = {displayRate > 1000 ? displayRate.toFixed(2) : displayRate.toFixed(8).replace(/\.?0+$/, '')} {toCurrency}
-              </p>
+             <div className="pt-4 border-t border-border/50">
+               <div className="bg-primary/5 rounded-lg p-2">
+                 <p className="text-center text-primary text-[11px] font-mono break-all leading-relaxed">
+                    1 {fromCurrency} = {displayRate > 1000 ? displayRate.toFixed(2) : displayRate.toFixed(8).replace(/\.?0+$/, '')} {toCurrency}
+                 </p>
+               </div>
              </div>
           )}
         </div>
