@@ -57,11 +57,11 @@ export function CurrencyConverter() {
   }
 
   return (
-    <Card className="bg-transparent border-0 shadow-none w-full -mx-4 w-[calc(100%+2rem)] overflow-hidden">
-      <CardHeader className="px-4 pb-3">
+    <Card className="bg-transparent border-0 shadow-none w-full px-[6px] py-2 overflow-hidden">
+      <CardHeader className="px-1 pb-3">
         <CardTitle className="text-base font-bold text-primary">{t('converter.title')}</CardTitle>
       </CardHeader>
-      <CardContent className="px-4 pb-4">
+      <CardContent className="px-1 pb-2">
         <div className="space-y-5">
           <div className="space-y-4">
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 w-full">
@@ -95,7 +95,7 @@ export function CurrencyConverter() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 w-full">
+            <div className="grid grid-cols-2 gap-3 w-full">
               <div className="space-y-1.5 min-w-0">
                 <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest pl-0.5 truncate">{t('converter.amount')}</p>
                 <Input
@@ -122,7 +122,7 @@ export function CurrencyConverter() {
           {amount && !isConverting && convertedAmount && displayRate && (
              <div className="pt-4 border-t border-border/50">
                <div className="bg-primary/10 rounded-lg p-2.5">
-                 <p className="text-center text-primary text-xs font-mono font-bold break-all leading-tight">
+                 <p className="text-center text-primary text-[11px] font-mono font-bold break-all leading-tight">
                     1 {fromCurrency} = {displayRate > 1000 ? displayRate.toFixed(2) : displayRate.toFixed(8).replace(/\.?0+$/, '')} {toCurrency}
                  </p>
                </div>
