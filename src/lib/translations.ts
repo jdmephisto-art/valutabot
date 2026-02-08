@@ -441,6 +441,10 @@ export const currencyNames: Record<string, Record<string, string>> = {
     'BAYC': 'Bored Ape Yacht Club',
     'AZUKI': 'Azuki',
     'PUDGY': 'Pudgy Penguins',
+    'AZN': 'Azerbaijani Manat',
+    'BAM': 'Bosnia-Herzegovina Mark',
+    'AWG': 'Aruban Florin',
+    'AOA': 'Angolan Kwanza'
   },
   ru: {
     'USD': 'Доллар США',
@@ -451,7 +455,7 @@ export const currencyNames: Record<string, Record<string, string>> = {
     'AFN': 'Афгани',
     'ALL': 'Албанский лек',
     'AMD': 'Армянский драм',
-    'ANG': 'Нидерландский антильский гульден',
+    'ANG': 'Гульден',
     'AOA': 'Ангольская кванза',
     'ARS': 'Аргентинское песо',
     'AUD': 'Австралийский доллар',

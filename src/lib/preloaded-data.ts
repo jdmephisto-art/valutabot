@@ -176,6 +176,7 @@ export const currencyApiPreloadedCurrencies: Currency[] = [
   { code: 'SAR', name: 'Saudi Riyal' },
   { code: 'SBD', name: 'Solomon Islands Dollar' },
   { code: 'SCR', name: 'Seychellois Rupee' },
+  { code: 'SCR', name: 'Seychellois Rupee' },
   { code: 'SDG', name: 'Sudanese Pound' },
   { code: 'SEK', name: 'Swedish Krona' },
   { code: 'SGD', name: 'Singapore Dollar' },

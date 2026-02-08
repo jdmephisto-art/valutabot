@@ -27,6 +27,9 @@ let unifiedRates: Record<string, number> = {
     'AMD': 0.0026,
     'ALL': 0.011,
     'ANG': 0.55,
+    'AZN': 0.58,
+    'BAM': 0.55,
+    'AWG': 0.55,
     'AOA': 0.0011
 };
 
@@ -61,7 +64,7 @@ export async function preFetchInitialRates(db: Firestore) {
         // Если данных нет или они устарели - запускаем обновление в фоне
         if (!snap.exists() || (now - (snap.data()?.updatedAt || 0) > CACHE_TTL)) {
             updateAllRatesInCloud(db);
-        } else {
+        } else if (snap.exists()) {
             unifiedRates = { ...unifiedRates, ...snap.data().rates };
         }
     } catch (e) {
@@ -123,6 +126,7 @@ async function fetchNbrb() {
 
 async function fetchWorld() {
     try {
+        // Мы запрашиваем базу USD, чтобы получить коэффициенты для всех доступных валют
         const res = await fetch('/api/worldcurrency?endpoint=rates&base=USD', { cache: 'no-store' });
         if (!res.ok) return null;
         const data = await res.json();
@@ -130,6 +134,7 @@ async function fetchWorld() {
         if (data?.rates) {
             Object.keys(data.rates).forEach(code => {
                 if (data.rates[code] !== 0) {
+                    // Если 1 USD = X единиц валюты, то 1 единица валюты = 1/X USD
                     rates[code] = 1 / data.rates[code];
                 }
             });
@@ -210,16 +215,25 @@ export function findRate(from: string, to: string): number | undefined {
 
 export async function getCurrencies(): Promise<Currency[]> {
     const cryptoCurrencies: Currency[] = cryptoCodes.map(code => ({ code, name: code }));
-    // Слияние предустановленных валют и тех, что уже есть в реестре unifiedRates
-    const currentCodes = Object.keys(unifiedRates);
-    const dynamicCurrencies: Currency[] = currentCodes.map(code => ({ code, name: code }));
     
-    const all = [...currencyApiPreloadedCurrencies, ...cryptoCurrencies, ...dynamicCurrencies];
+    // Динамически берем все коды, которые реально есть в базе
+    const dbCodes = Object.keys(unifiedRates);
+    const dbCurrencies: Currency[] = dbCodes.map(code => ({ code, name: code }));
+    
+    const all = [
+        ...currencyApiPreloadedCurrencies, 
+        ...cryptoCurrencies, 
+        ...dbCurrencies
+    ];
+    
+    // Удаляем дубликаты по коду
     const unique = Array.from(new Map(all.map(item => [item.code, item])).values());
     return unique.sort((a, b) => a.code.localeCompare(b.code));
 }
 
 export async function getLatestRates(pairs: string[], db: Firestore): Promise<ExchangeRate[]> {
+    // Убеждаемся, что база подгружена перед выдачей
+    await preFetchInitialRates(db);
     return pairs.map(p => {
         const [from, to] = p.split('/');
         return { from, to, rate: findRate(from, to) };
@@ -227,6 +241,7 @@ export async function getLatestRates(pairs: string[], db: Firestore): Promise<Ex
 }
 
 export async function findRateAsync(from: string, to: string, db: Firestore): Promise<number | undefined> {
+    await preFetchInitialRates(db);
     return findRate(from, to);
 }
 
