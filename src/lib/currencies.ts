@@ -1,7 +1,7 @@
 import { Currency, ExchangeRate, DataSource, HistoricalRateResult } from '@/lib/types';
 import { format, isFuture, startOfDay, isAfter, isSameDay } from 'date-fns';
 import { currencyApiPreloadedCurrencies } from './preloaded-data';
-import { doc, getDoc, setDoc, Firestore } from 'firebase/firestore';
+import { doc, getDoc, setDoc, Firestore, onSnapshot } from 'firebase/firestore';
 
 let activeDataSource: DataSource = 'nbrb';
 
@@ -16,18 +16,10 @@ export const cryptoCodes = [
     'BAYC', 'AZUKI', 'PUDGY' 
 ];
 
-const CACHE_TTL_RATES = 15 * 60 * 1000; // 15 минут
-
-let nbrbRatesCache: any = {};
-let nbrbRatesTimestamp = 0;
-let worldCurrencyRatesCache: any = {};
-let worldCurrencyRatesTimestamp = 0;
-let cryptoRatesCache: Record<string, number> = {};
-let cryptoRatesTimestamp = 0;
-let metalsRatesCache: Record<string, number> = {};
-let metalsRatesTimestamp = 0;
-let nftRatesCache: Record<string, number> = {};
-let nftRatesTimestamp = 0;
+// Глобальный реестр курсов (все в USD)
+// Цена 1 единицы валюты в долларах США
+let unifiedRates: Record<string, number> = { 'USD': 1 };
+const CACHE_TTL = 15 * 60 * 1000;
 
 export function setDataSource(source: DataSource) {
     activeDataSource = source;
@@ -37,314 +29,175 @@ export function getDataSource(): DataSource {
     return activeDataSource;
 }
 
-async function getCacheFromFirestore(db: Firestore, source: string) {
-    try {
-        const docRef = doc(db, 'rates_cache', source);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            // Проверяем актуальность данных (15 минут)
-            if (Date.now() - data.updatedAt < CACHE_TTL_RATES) {
-                return data.rates;
-            }
+// Фоновое обновление курсов
+export async function preFetchInitialRates(db: Firestore) {
+    const docRef = doc(db, 'rates_cache', 'unified');
+    
+    // 1. Сначала подписываемся на данные из БД для мгновенного UI
+    onSnapshot(docRef, (snap) => {
+        if (snap.exists()) {
+            unifiedRates = { ...unifiedRates, ...snap.data().rates };
         }
-    } catch (e) {
-        console.error(`Error reading cache from Firestore for ${source}:`, e);
+    });
+
+    // 2. Проверяем, нужно ли обновлять данные из API
+    const snap = await getDoc(docRef);
+    const now = Date.now();
+    
+    if (!snap.exists() || (now - (snap.data().updatedAt || 0) > CACHE_TTL)) {
+        updateAllRatesInCloud(db);
     }
-    return null;
 }
 
-function saveCacheToFirestore(db: Firestore, source: string, rates: any) {
+async function updateAllRatesInCloud(db: Firestore) {
+    const newRates: Record<string, number> = { 'USD': 1 };
+
     try {
-        const docRef = doc(db, 'rates_cache', source);
-        setDoc(docRef, {
-            source,
-            rates,
+        // Собираем данные параллельно
+        const [nbrb, world, crypto, metals, nfts] = await Promise.allSettled([
+            fetchNbrb(),
+            fetchWorld(),
+            fetchCrypto(),
+            fetchMetals(),
+            fetchNfts()
+        ]);
+
+        if (nbrb.status === 'fulfilled' && nbrb.value) Object.assign(newRates, nbrb.value);
+        if (world.status === 'fulfilled' && world.value) Object.assign(newRates, world.value);
+        if (crypto.status === 'fulfilled' && crypto.value) Object.assign(newRates, crypto.value);
+        if (metals.status === 'fulfilled' && metals.value) Object.assign(newRates, metals.value);
+        if (nfts.status === 'fulfilled' && nfts.value) Object.assign(newRates, nfts.value);
+
+        // Сохраняем объединенный результат
+        await setDoc(doc(db, 'rates_cache', 'unified'), {
+            rates: newRates,
             updatedAt: Date.now()
         }, { merge: true });
+
+        unifiedRates = newRates;
     } catch (e) {
-        console.error(`Error saving cache to Firestore for ${source}:`, e);
+        console.error('Failed to update cloud rates:', e);
     }
 }
 
-async function nbrbApiFetch(endpoint: string) {
-    try {
-        const response = await fetch(`https://api.nbrb.by/exrates/${endpoint}`, { cache: 'no-store' });
-        return response.ok ? response.json() : null;
-    } catch { return null; }
-}
-
-async function coingeckoApiFetch(ids: string) {
-    try {
-        const response = await fetch(`/api/coingecko?endpoint=simple/price&ids=${ids}&vs_currencies=usd`, { cache: 'no-store' });
-        return response.ok ? response.json() : null;
-    } catch { return null; }
-}
-
-async function coingeckoNftFetch(id: string) {
-    try {
-        const response = await fetch(`/api/coingecko?endpoint=nfts/${id}`, { cache: 'no-store' });
-        return response.ok ? response.json() : null;
-    } catch { return null; }
-}
-
-async function worldCurrencyApiFetch() {
-    try {
-        const response = await fetch(`/api/worldcurrency?endpoint=rates&base=USD`, { cache: 'no-store' });
-        return response.ok ? response.json() : null;
-    } catch { return null; }
-}
-
-async function cbrMetalsApiFetch() {
-    try {
-        const response = await fetch(`/api/cbr/metals`, { cache: 'no-store' });
-        return response.ok ? response.json() : null;
-    } catch { return null; }
-}
-
-export async function _updateCryptoRatesCache(db?: Firestore): Promise<void> {
-    if (Date.now() - cryptoRatesTimestamp < CACHE_TTL_RATES && Object.keys(cryptoRatesCache).length > 0) return;
-    
-    if (db) {
-        const cached = await getCacheFromFirestore(db, 'crypto');
-        if (cached) { 
-            cryptoRatesCache = cached; 
-            cryptoRatesTimestamp = Date.now(); 
-            return; 
-        }
-    }
-
-    const ids = [
-        'bitcoin', 'ethereum', 'litecoin', 'ripple', 'bitcoin-cash', 'dash', 'solana', 'the-open-network', 
-        'dogecoin', 'cardano', 'polkadot', 'tron', 'matic-network', 'avalanche-2', 'chainlink', 'tether', 
-        'usd-coin', 'dai', 'notcoin', 'dogs', 'render-token', 'fetch-ai', 'binancecoin', 'near', 'cosmos', 
-        'arbitrum', 'optimism', 'decentraland', 'aave', 'immutable-x', 'arweave', 'uniswap', 'maker', 
-        'the-sandbox', 'axie-infinity', 'shiba-inu', 'pepe', 'floki', 'bonk', 'filecoin', 'storj', 
-        'helium', 'theta-token', 'ondo-finance', 'okb', 'crypto-com-chain', 'singularitynet'
-    ].join(',');
-
-    const data = await coingeckoApiFetch(ids);
-    
-    if (data) {
-        const mapping: Record<string, string> = { 
-            'BTC': 'bitcoin', 'ETH': 'ethereum', 'TON': 'the-open-network', 'SOL': 'solana', 
-            'FET': 'fetch-ai', 'RNDR': 'render-token', 'BNB': 'binancecoin', 'NEAR': 'near', 
-            'ATOM': 'cosmos', 'ARB': 'arbitrum', 'OP': 'optimism', 'LTC': 'litecoin',
-            'XRP': 'ripple', 'BCH': 'bitcoin-cash', 'DOGE': 'dogecoin', 'ADA': 'cardano', 
-            'DOT': 'polkadot', 'NOT': 'notcoin', 'DOGS': 'dogs', 'USDT': 'tether', 'USDC': 'usd-coin',
-            'MANA': 'decentraland', 'AAVE': 'aave', 'IMX': 'immutable-x', 'AR': 'arweave',
-            'UNI': 'uniswap', 'MKR': 'maker', 'SAND': 'the-sandbox', 'AXS': 'axie-infinity',
-            'SHIB': 'shiba-inu', 'PEPE': 'pepe', 'FLOKI': 'floki', 'BONK': 'bonk',
-            'FIL': 'filecoin', 'STORJ': 'storj', 'HNT': 'helium', 'THETA': 'theta-token',
-            'ONDO': 'ondo-finance', 'OKB': 'okb', 'CRO': 'crypto-com-chain',
-            'TRX': 'tron', 'LINK': 'chainlink', 'AGIX': 'singularitynet'
-        };
-        Object.keys(mapping).forEach(code => {
-            const geckoId = mapping[code];
-            if (data[geckoId]?.usd) cryptoRatesCache[code] = data[geckoId].usd;
+// Хелперы для API (возвращают цену 1 единицы в USD)
+async function fetchNbrb() {
+    const res = await fetch('https://api.nbrb.by/exrates/rates?periodicity=0', { cache: 'no-store' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const rates: Record<string, number> = {};
+    const usdRate = data.find((r: any) => r.Cur_Abbreviation === 'USD');
+    if (usdRate) {
+        const usdInByn = usdRate.Cur_OfficialRate / usdRate.Cur_Scale;
+        data.forEach((r: any) => {
+            const valInByn = r.Cur_OfficialRate / r.Cur_Scale;
+            rates[r.Cur_Abbreviation] = valInByn / usdInByn;
         });
-        cryptoRatesTimestamp = Date.now();
-        if (db) saveCacheToFirestore(db, 'crypto', cryptoRatesCache);
+        rates['BYN'] = 1 / usdInByn;
     }
+    return rates;
 }
 
-async function _updateNFTRatesCache(db?: Firestore): Promise<void> {
-    if (Date.now() - nftRatesTimestamp < CACHE_TTL_RATES && Object.keys(nftRatesCache).length > 0) return;
-    
-    if (db) {
-        const cached = await getCacheFromFirestore(db, 'nfts');
-        if (cached) { 
-            nftRatesCache = cached; 
-            nftRatesTimestamp = Date.now(); 
-            return; 
-        }
-    }
-
-    const nfts = {
-        'BAYC': 'bored-ape-yacht-club',
-        'AZUKI': 'azuki',
-        'PUDGY': 'pudgy-penguins'
-    };
-
-    const temp: Record<string, number> = {};
-    for (const [code, id] of Object.entries(nfts)) {
-        const data = await coingeckoNftFetch(id);
-        if (data?.floor_price?.usd) {
-            temp[code] = data.floor_price.usd;
-        }
-    }
-
-    if (Object.keys(temp).length > 0) {
-        nftRatesCache = { ...nftRatesCache, ...temp };
-        nftRatesTimestamp = Date.now();
-        if (db) saveCacheToFirestore(db, 'nfts', nftRatesCache);
-    }
-}
-
-export async function _updateMetalsRatesCache(db?: Firestore): Promise<void> {
-    if (Date.now() - metalsRatesTimestamp < CACHE_TTL_RATES && Object.keys(metalsRatesCache).length > 0) return;
-
-    if (db) {
-        const cached = await getCacheFromFirestore(db, 'metals');
-        if (cached) { 
-            metalsRatesCache = cached; 
-            metalsRatesTimestamp = Date.now(); 
-            return; 
-        }
-    }
-    
-    const data = await cbrMetalsApiFetch();
-    if (data) {
-        // Берем курс рубля для конвертации из рублей в доллары
-        const rubPerUsd = worldCurrencyRatesCache['RUB'] || 92; 
-        if (data['1']) metalsRatesCache['XAU'] = parseFloat(data['1']) / rubPerUsd;
-        if (data['2']) metalsRatesCache['XAG'] = parseFloat(data['2']) / rubPerUsd;
-        if (data['3']) metalsRatesCache['XPT'] = parseFloat(data['3']) / rubPerUsd;
-        if (data['4']) metalsRatesCache['XPD'] = parseFloat(data['4']) / rubPerUsd;
-        
-        metalsRatesTimestamp = Date.now();
-        if (db) saveCacheToFirestore(db, 'metals', metalsRatesCache);
-    }
-}
-
-export async function _updateNbrbRatesCache(db?: Firestore): Promise<void> {
-    if (Date.now() - nbrbRatesTimestamp < CACHE_TTL_RATES && Object.keys(nbrbRatesCache).length > 0) return;
-    
-    if (db) {
-        const cached = await getCacheFromFirestore(db, 'nbrb');
-        if (cached) { 
-            nbrbRatesCache = cached; 
-            nbrbRatesTimestamp = Date.now(); 
-            return; 
-        }
-    }
-
-    const data = await nbrbApiFetch('rates?periodicity=0');
-    if (data && Array.isArray(data)) {
-        const temp: any = {};
-        data.forEach((r: any) => { 
-            temp[r.Cur_Abbreviation] = { rate: r.Cur_OfficialRate, scale: r.Cur_Scale }; 
-        });
-        temp['BYN'] = { rate: 1, scale: 1 };
-        nbrbRatesCache = temp;
-        nbrbRatesTimestamp = Date.now();
-        if (db) saveCacheToFirestore(db, 'nbrb', nbrbRatesCache);
-    }
-}
-
-async function _updateWorldCurrencyRatesCache(db?: Firestore): Promise<void> {
-    if (Date.now() - worldCurrencyRatesTimestamp < CACHE_TTL_RATES && Object.keys(worldCurrencyRatesCache).length > 0) return;
-
-    if (db) {
-        const cached = await getCacheFromFirestore(db, 'world');
-        if (cached) {
-            worldCurrencyRatesCache = cached;
-            worldCurrencyRatesTimestamp = Date.now();
-            return;
-        }
-    }
-
-    const data = await worldCurrencyApiFetch();
+async function fetchWorld() {
+    const res = await fetch('/api/worldcurrency?endpoint=rates&base=USD', { cache: 'no-store' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const rates: Record<string, number> = {};
     if (data?.rates) {
-        worldCurrencyRatesCache = data.rates;
-        worldCurrencyRatesTimestamp = Date.now();
-        if (db) saveCacheToFirestore(db, 'world', worldCurrencyRatesCache);
+        // API отдает: 1 USD = X Currency. Нам нужно: 1 Currency = 1/X USD
+        Object.keys(data.rates).forEach(code => {
+            rates[code] = 1 / data.rates[code];
+        });
     }
+    return rates;
 }
 
-function getRateVsUsd(code: string): number | undefined {
-    if (code === 'USD') return 1;
-    if (cryptoRatesCache[code] !== undefined) return cryptoRatesCache[code];
-    if (nftRatesCache[code] !== undefined) return nftRatesCache[code];
-    if (metalsRatesCache[code] !== undefined) return metalsRatesCache[code];
+async function fetchCrypto() {
+    const ids = 'bitcoin,ethereum,litecoin,ripple,bitcoin-cash,dash,solana,the-open-network,dogecoin,cardano,polkadot,tron,matic-network,avalanche-2,chainlink,tether,usd-coin,dai,notcoin,dogs,render-token,fetch-ai,binancecoin,near,cosmos,arbitrum,optimism,decentraland,aave,immutable-x,arweave,uniswap,maker,the-sandbox,axie-infinity,shiba-inu,pepe,floki,bonk,filecoin,storj,helium,theta-token,ondo-finance,okb,crypto-com-chain,singularitynet';
+    const res = await fetch(`/api/coingecko?endpoint=simple/price&ids=${ids}&vs_currencies=usd`, { cache: 'no-store' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const mapping: Record<string, string> = { 
+        'BTC': 'bitcoin', 'ETH': 'ethereum', 'TON': 'the-open-network', 'SOL': 'solana', 
+        'FET': 'fetch-ai', 'RNDR': 'render-token', 'BNB': 'binancecoin', 'NEAR': 'near', 
+        'ATOM': 'cosmos', 'ARB': 'arbitrum', 'OP': 'optimism', 'LTC': 'litecoin',
+        'XRP': 'ripple', 'BCH': 'bitcoin-cash', 'DOGE': 'dogecoin', 'ADA': 'cardano', 
+        'DOT': 'polkadot', 'NOT': 'notcoin', 'DOGS': 'dogs', 'USDT': 'tether', 'USDC': 'usd-coin',
+        'MANA': 'decentraland', 'AAVE': 'aave', 'IMX': 'immutable-x', 'AR': 'arweave',
+        'UNI': 'uniswap', 'MKR': 'maker', 'SAND': 'the-sandbox', 'AXS': 'axie-infinity',
+        'SHIB': 'shiba-inu', 'PEPE': 'pepe', 'FLOKI': 'floki', 'BONK': 'bonk',
+        'FIL': 'filecoin', 'STORJ': 'storj', 'HNT': 'helium', 'THETA': 'theta-token',
+        'ONDO': 'ondo-finance', 'OKB': 'okb', 'CRO': 'crypto-com-chain',
+        'TRX': 'tron', 'LINK': 'chainlink', 'AGIX': 'singularitynet'
+    };
+    const rates: Record<string, number> = {};
+    Object.keys(mapping).forEach(code => {
+        const id = mapping[code];
+        if (data[id]?.usd) rates[code] = data[id].usd;
+    });
+    return rates;
+}
+
+async function fetchMetals() {
+    const res = await fetch('/api/cbr/metals', { cache: 'no-store' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const rates: Record<string, number> = {};
+    // Нам нужен курс рубля, чтобы перевести из рублей в доллары
+    const rubRes = await fetch('https://www.cbr-xml-daily.ru/daily_json.js');
+    const rubData = await rubRes.json();
+    const rubPerUsd = rubData?.Valute?.USD?.Value || 92;
     
-    // NBRB (BYN-based rates)
-    if (nbrbRatesCache[code] && nbrbRatesCache['USD']) {
-        const codeInByn = nbrbRatesCache[code].rate / nbrbRatesCache[code].scale;
-        const usdInByn = nbrbRatesCache['USD'].rate / nbrbRatesCache['USD'].scale;
-        return codeInByn / usdInByn;
+    if (data['1']) rates['XAU'] = parseFloat(data['1']) / rubPerUsd;
+    if (data['2']) rates['XAG'] = parseFloat(data['2']) / rubPerUsd;
+    if (data['3']) rates['XPT'] = parseFloat(data['3']) / rubPerUsd;
+    if (data['4']) rates['XPD'] = parseFloat(data['4']) / rubPerUsd;
+    return rates;
+}
+
+async function fetchNfts() {
+    const nfts = { 'BAYC': 'bored-ape-yacht-club', 'AZUKI': 'azuki', 'PUDGY': 'pudgy-penguins' };
+    const rates: Record<string, number> = {};
+    for (const [code, id] of Object.entries(nfts)) {
+        const res = await fetch(`/api/coingecko?endpoint=nfts/${id}`, { cache: 'no-store' });
+        const data = await res.json();
+        if (data?.floor_price?.usd) rates[code] = data.floor_price.usd;
     }
-    
-    // WorldCurrency (USD-based rates)
-    if (worldCurrencyRatesCache[code] !== undefined) {
-        // WorldCurrencyAPI returns rates AS base currency per 1 USD (e.g. 1 USD = 0.92 EUR)
-        // So to get value of 1 code in USD, it's 1 / rate
-        return 1 / worldCurrencyRatesCache[code];
-    }
-    return undefined;
+    return rates;
 }
 
 export function findRate(from: string, to: string): number | undefined {
     if (from === to) return 1;
-    const fromUsd = getRateVsUsd(from);
-    const toUsd = getRateVsUsd(to);
-    
-    if (fromUsd !== undefined && toUsd !== undefined && toUsd !== 0) {
+    const fromUsd = unifiedRates[from];
+    const toUsd = unifiedRates[to];
+    if (fromUsd && toUsd) {
         return fromUsd / toUsd;
     }
     return undefined;
 }
 
 export async function getCurrencies(): Promise<Currency[]> {
-    const cryptoCurrencies: Currency[] = cryptoCodes.map(code => ({
-        code,
-        name: code
-    }));
+    const cryptoCurrencies: Currency[] = cryptoCodes.map(code => ({ code, name: code }));
     const all = [...currencyApiPreloadedCurrencies, ...cryptoCurrencies];
     const unique = Array.from(new Map(all.map(item => [item.code, item])).values());
     return unique.sort((a, b) => a.code.localeCompare(b.code));
 }
 
-export async function getLatestRates(pairs: string[], db?: Firestore): Promise<ExchangeRate[]> {
-    await preFetchInitialRates(db);
+export async function getLatestRates(pairs: string[], db: Firestore): Promise<ExchangeRate[]> {
     return pairs.map(p => {
         const [from, to] = p.split('/');
         return { from, to, rate: findRate(from, to) };
     });
 }
 
-export async function findRateAsync(from: string, to: string, db?: Firestore): Promise<number | undefined> {
-    await preFetchInitialRates(db);
+export async function findRateAsync(from: string, to: string, db: Firestore): Promise<number | undefined> {
     return findRate(from, to);
 }
 
-export async function preFetchInitialRates(db?: Firestore) {
-    // Параллельный прогрев всех кэшей из Firestore или API
-    const tasks = [
-        _updateWorldCurrencyRatesCache(db),
-        _updateCryptoRatesCache(db),
-        _updateNbrbRatesCache(db),
-        _updateNFTRatesCache(db)
-    ];
-    
-    await Promise.allSettled(tasks);
-    // Металлы зависят от курса USD/RUB из мирового кэша, поэтому обновляем после
-    await _updateMetalsRatesCache(db);
-}
-
-export async function getHistoricalRate(from: string, to: string, date: Date, db?: Firestore): Promise<HistoricalRateResult | undefined> {
+export async function getHistoricalRate(from: string, to: string, date: Date, db: Firestore): Promise<HistoricalRateResult | undefined> {
     if (isAfter(startOfDay(date), startOfDay(new Date()))) return undefined;
-    
-    await preFetchInitialRates(db);
-    const currentRate = findRate(from, to);
-
-    // Если это сегодня, просто возвращаем текущий курс
-    if (isSameDay(date, new Date())) {
-        if (currentRate !== undefined) {
-            return { rate: currentRate, date };
-        }
-    }
-
-    // Для истории в прототипе используем текущий курс с пометкой (fallback)
-    // В реальном приложении здесь был бы вызов архива API
-    if (currentRate !== undefined) {
-        return { 
-            rate: currentRate, 
-            date,
-            isFallback: true 
-        };
-    }
-    
+    const current = findRate(from, to);
+    if (current) return { rate: current, date, isFallback: !isSameDay(date, new Date()) };
     return undefined;
 }
 
@@ -353,15 +206,12 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
     const result: { date: string; rate: number }[] = [];
     const baseRate = findRate(from, to) || 1;
     const isCrypto = cryptoCodes.includes(from) || cryptoCodes.includes(to);
-    const volatility = isCrypto ? 0.12 : 0.008;
+    const volatility = isCrypto ? 0.08 : 0.005;
 
     for (let i = 0; i <= points; i++) {
         const d = new Date(startDate.getTime() + (endDate.getTime() - startDate.getTime()) * (i / points));
         const noise = 1 + (Math.random() - 0.5) * volatility;
-        result.push({
-            date: format(d, 'dd.MM'),
-            rate: baseRate * noise
-        });
+        result.push({ date: format(d, 'dd.MM'), rate: baseRate * noise });
     }
     return result;
 }

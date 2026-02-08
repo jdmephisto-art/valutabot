@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { findRateAsync, preFetchInitialRates } from '@/lib/currencies';
+import { findRate, preFetchInitialRates } from '@/lib/currencies';
 import { ArrowRightLeft } from 'lucide-react';
 import { Button } from './ui/button';
 import { useCurrencies } from '@/hooks/use-currencies';
@@ -23,14 +23,14 @@ export function CurrencyConverter() {
   const [isConverting, setIsConverting] = useState(false);
 
   useEffect(() => {
-    const convert = async () => {
-        if (!fromCurrency || !toCurrency) return;
+    preFetchInitialRates(firestore);
+  }, [firestore]);
 
+  useEffect(() => {
+    const convert = () => {
+        if (!fromCurrency || !toCurrency) return;
         setIsConverting(true);
-        // Принудительно прогреваем кэш из Firestore перед расчетом
-        await preFetchInitialRates(firestore);
-        const rate = await findRateAsync(fromCurrency, toCurrency, firestore);
-        
+        const rate = findRate(fromCurrency, toCurrency);
         setDisplayRate(rate);
 
         if (rate && amount) {
@@ -43,7 +43,7 @@ export function CurrencyConverter() {
         setIsConverting(false);
     };
     convert();
-  }, [fromCurrency, toCurrency, amount, firestore]);
+  }, [fromCurrency, toCurrency, amount]);
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;

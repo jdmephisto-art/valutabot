@@ -126,9 +126,9 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
                         <Input 
                           type="number" 
                           step="0.0001" 
-                          placeholder="e.g., 0.95" 
+                          placeholder="0.95" 
                           {...field} 
-                          value={field.value ?? ''} // Гарантируем, что value никогда не undefined
+                          value={field.value ?? ''} 
                         />
                     </FormControl>
                     <FormMessage />
