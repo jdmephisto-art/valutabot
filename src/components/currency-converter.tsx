@@ -112,7 +112,7 @@ export function CurrencyConverter() {
                 <Input
                   type="text"
                   placeholder={isConverting ? "..." : "0.00"}
-                  value={isConverting ? '' : convertedAmount}
+                  value={isConverting ? '' : (convertedAmount || '0.00')}
                   readOnly
                   className="bg-muted/50 text-sm font-bold h-11 border-dashed border-primary/30 w-full"
                 />
