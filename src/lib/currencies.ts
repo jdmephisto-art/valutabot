@@ -1,5 +1,5 @@
 import { Currency, ExchangeRate, DataSource, HistoricalRateResult } from '@/lib/types';
-import { format, isFuture, startOfDay, isAfter, isSameDay } from 'date-fns';
+import { format, isFuture, startOfDay, isAfter, isSameDay, eachDayOfInterval } from 'date-fns';
 import { currencyApiPreloadedCurrencies } from './preloaded-data';
 import { doc, getDoc, setDoc, Firestore, onSnapshot } from 'firebase/firestore';
 
@@ -305,15 +305,37 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
 }
 
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
-    const points = 7;
-    const result: { date: string; rate: number }[] = [];
     const baseRate = findRate(from, to) || 1;
-    const volatility = cryptoCodes.includes(from) || cryptoCodes.includes(to) ? 0.05 : 0.003;
+    // Уменьшаем волатильность для более гладких и реалистичных графиков
+    const volatility = cryptoCodes.includes(from) || cryptoCodes.includes(to) ? 0.03 : 0.002;
 
-    for (let i = 0; i <= points; i++) {
-        const d = new Date(startDate.getTime() + (endDate.getTime() - startDate.getTime()) * (i / points));
-        const noise = 1 + (Math.random() - 0.5) * volatility;
-        result.push({ date: format(d, 'dd.MM'), rate: baseRate * noise });
+    try {
+        // Генерируем точки на каждый день интервала
+        const days = eachDayOfInterval({ 
+            start: startOfDay(startDate), 
+            end: startOfDay(endDate) 
+        });
+        
+        // Ограничиваем количество точек до 12-14 для чистоты графика
+        let sampledDays = days;
+        if (days.length > 14) {
+            const step = Math.ceil(days.length / 10);
+            sampledDays = days.filter((_, i) => i % step === 0);
+            const lastDay = days[days.length - 1];
+            if (!sampledDays.some(d => isSameDay(d, lastDay))) {
+                sampledDays.push(lastDay);
+            }
+        }
+
+        return sampledDays.map((d) => {
+            const randomFactor = 1 + (Math.random() - 0.5) * volatility;
+            return {
+                date: format(d, 'dd.MM'),
+                rate: baseRate * randomFactor
+            };
+        });
+    } catch (e) {
+        console.error('Error generating dynamics:', e);
+        return [];
     }
-    return result;
 }

@@ -24,7 +24,7 @@ export function HistoricalRates() {
   const dataSource = getDataSource();
   const { currencies } = useCurrencies();
   const { toast } = useToast();
-  const { t, dateLocale } = useTranslation();
+  const { t, dateLocale, lang } = useTranslation();
   const firestore = useFirestore();
   const [fromCurrency, setFromCurrency] = useState('USD');
   const [toCurrency, setToCurrency] = useState('EUR');
@@ -41,7 +41,7 @@ export function HistoricalRates() {
   const [rangeStartPopoverOpen, setRangeStartPopoverOpen] = useState(false);
   const [rangeEndPopoverOpen, setRangeEndPopoverOpen] = useState(false);
 
-  const [dynamicsRange, setDynamicsRange] = useState<DateRange | undefined>({ from: subDays(new Date(), 14), to: new Date() });
+  const [dynamicsRange, setDynamicsRange] = useState<DateRange | undefined>({ from: subDays(new Date(), 7), to: new Date() });
   const [dynamicsData, setDynamicsData] = useState<any[]>([]);
   const [fetchingDynamics, setFetchingDynamics] = useState(false);
   const [dynamicsStartPopoverOpen, setDynamicsStartPopoverOpen] = useState(false);
@@ -124,7 +124,18 @@ export function HistoricalRates() {
     setDynamicsData([]);
   }
 
-  const chartConfig = { rate: { label: t('history.dynamicsFor', { from: fromCurrency, to: toCurrency }), color: 'hsl(var(--primary))' } };
+  const chartConfig = { 
+    rate: { 
+      label: t('history.dynamicsFor', { from: fromCurrency, to: toCurrency }), 
+      color: 'hsl(var(--primary))' 
+    } 
+  };
+
+  const numberFormatter = (val: number) => {
+    if (val === 0) return '0';
+    const options = { minimumFractionDigits: 2, maximumFractionDigits: 4 };
+    return val.toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US', options);
+  };
 
   return (
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
@@ -188,17 +199,11 @@ export function HistoricalRates() {
                                 tickLine={false} 
                                 axisLine={false} 
                                 tickMargin={8} 
-                                tickFormatter={(val) => {
-                                  if (val === 0) return '0';
-                                  if (val > 100) return val.toFixed(0);
-                                  if (val > 10) return val.toFixed(2);
-                                  if (val > 0.01) return val.toFixed(4);
-                                  return val.toFixed(6);
-                                }} 
+                                tickFormatter={numberFormatter} 
                                 width={60}
                                 domain={['dataMin', 'dataMax']}
                             />
-                            <ChartTooltip content={<ChartTooltipContent />} />
+                            <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter(Number(value))} />} />
                             <Area dataKey="rate" type="monotone" fill="var(--color-rate)" stroke="var(--color-rate)" fillOpacity={0.4} />
                         </AreaChart>
                     </ChartContainer>
@@ -222,7 +227,7 @@ export function HistoricalRates() {
             {singleRate !== undefined && singleRate !== null && (
               <div className="text-center p-4 bg-muted/50 rounded-lg space-y-2">
                 <p className="text-sm text-muted-foreground">{t('history.rateOn', { date: date ? format(date, "PPP", { locale: dateLocale }) : '' })}</p>
-                <p className="text-2xl font-bold font-mono">{singleRate.rate.toFixed(4)}</p>
+                <p className="text-2xl font-bold font-mono">{numberFormatter(singleRate.rate)}</p>
                 {singleRate.isFallback && (
                     <div className="flex items-start gap-2 p-2 bg-orange-500/10 border border-orange-500/20 rounded text-left mt-2">
                         <Info className="h-4 w-4 text-orange-500 shrink-0 mt-0.5" />
@@ -266,8 +271,8 @@ export function HistoricalRates() {
              <Button onClick={handleFetchRangeRate} className="w-full" disabled={fetchingRange || !range?.from || !range?.to}>{fetchingRange ? t('latestRates.loading') : t('history.compareRates')}</Button>
              {rangeResult && (
                 <div className="p-4 bg-muted/50 rounded-lg space-y-2">
-                    <div className="flex justify-between items-center"><span className="text-sm text-muted-foreground">{t('history.start', { date: range?.from ? format(range.from, "LLL dd", { locale: dateLocale }) : '' })}</span><span className="font-mono font-medium">{rangeResult.startRate.toFixed(4)}</span></div>
-                    <div className="flex justify-between items-center"><span className="text-sm text-muted-foreground">{t('history.end', { date: range?.to ? format(range.to, "LLL dd", { locale: dateLocale }) : '' })}</span><span className="font-mono font-medium">{rangeResult.endRate.toFixed(4)}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-sm text-muted-foreground">{t('history.start', { date: range?.from ? format(range.from, "LLL dd", { locale: dateLocale }) : '' })}</span><span className="font-mono font-medium">{numberFormatter(rangeResult.startRate)}</span></div>
+                    <div className="flex justify-between items-center"><span className="text-sm text-muted-foreground">{t('history.end', { date: range?.to ? format(range.to, "LLL dd", { locale: dateLocale }) : '' })}</span><span className="font-mono font-medium">{numberFormatter(rangeResult.endRate)}</span></div>
                     <div className="flex justify-between items-center pt-2 border-t"><span className="text-sm font-semibold">{t('history.change')}</span><span className={cn("font-semibold flex items-center gap-1", rangeResult.endRate >= rangeResult.startRate ? 'text-positive' : 'text-negative')}>{rangeResult.endRate >= rangeResult.startRate ? <TrendingUp size={16} /> : <TrendingDown size={16} />}{(((rangeResult.endRate - rangeResult.startRate) / rangeResult.startRate) * 100).toFixed(2)}%</span></div>
                 </div>
              )}
