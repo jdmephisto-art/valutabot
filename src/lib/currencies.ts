@@ -22,11 +22,12 @@ let unifiedRates: Record<string, number> = {
     'EUR': 1.08,
     'RUB': 0.0108,
     'BYN': 0.31,
-    'ARS': 0.000714, // Пример для Аргентинского песо
-    'AFN': 0.0145,   // Пример для Афгани
-    'AMD': 0.0026,   // Пример для Драма
-    'ALL': 0.011,    // Пример для Лека
-    'ANG': 0.55      // Пример для Гульдена
+    'ARS': 0.000714,
+    'AFN': 0.0145,
+    'AMD': 0.0026,
+    'ALL': 0.011,
+    'ANG': 0.55,
+    'AOA': 0.0011
 };
 
 const CACHE_TTL = 15 * 60 * 1000; // 15 минут
@@ -70,9 +71,8 @@ export async function preFetchInitialRates(db: Firestore) {
 
 /**
  * Агрегирует данные из всех API и сохраняет в Firestore.
- * Все курсы приводятся к стоимости 1 единицы актива в USD.
  */
-async function updateAllRatesInCloud(db: Firestore) {
+export async function updateAllRatesInCloud(db: Firestore) {
     const newRates: Record<string, number> = { 'USD': 1 };
 
     try {
@@ -90,7 +90,7 @@ async function updateAllRatesInCloud(db: Firestore) {
         if (metals.status === 'fulfilled' && metals.value) Object.assign(newRates, metals.value);
         if (nfts.status === 'fulfilled' && nfts.value) Object.assign(newRates, nfts.value);
 
-        // Сохраняем в Firestore для всех клиентов
+        // Сохраняем в Firestore
         await setDoc(doc(db, 'rates_cache', 'unified'), {
             rates: newRates,
             updatedAt: Date.now()
@@ -110,11 +110,9 @@ async function fetchNbrb() {
         const rates: Record<string, number> = {};
         const usdRate = data.find((r: any) => r.Cur_Abbreviation === 'USD');
         if (usdRate) {
-            // Цена 1 BYN в USD
             const bynPriceInUsd = 1 / (usdRate.Cur_OfficialRate / usdRate.Cur_Scale);
             data.forEach((r: any) => {
                 const valInByn = r.Cur_OfficialRate / r.Cur_Scale;
-                // Цена 1 Cur в USD = (Цена Cur в BYN) * (Цена BYN в USD)
                 rates[r.Cur_Abbreviation] = valInByn * bynPriceInUsd;
             });
             rates['BYN'] = bynPriceInUsd;
@@ -132,7 +130,6 @@ async function fetchWorld() {
         if (data?.rates) {
             Object.keys(data.rates).forEach(code => {
                 if (data.rates[code] !== 0) {
-                    // 1 USD = X Units. Значит 1 Unit = 1/X USD.
                     rates[code] = 1 / data.rates[code];
                 }
             });
@@ -206,7 +203,6 @@ export function findRate(from: string, to: string): number | undefined {
     const fromPriceInUsd = unifiedRates[from];
     const toPriceInUsd = unifiedRates[to];
     if (fromPriceInUsd !== undefined && toPriceInUsd !== undefined && toPriceInUsd !== 0) {
-        // Кросс-курс: (Сколько USD за 1 From) / (Сколько USD за 1 To)
         return fromPriceInUsd / toPriceInUsd;
     }
     return undefined;
@@ -214,7 +210,11 @@ export function findRate(from: string, to: string): number | undefined {
 
 export async function getCurrencies(): Promise<Currency[]> {
     const cryptoCurrencies: Currency[] = cryptoCodes.map(code => ({ code, name: code }));
-    const all = [...currencyApiPreloadedCurrencies, ...cryptoCurrencies];
+    // Слияние предустановленных валют и тех, что уже есть в реестре unifiedRates
+    const currentCodes = Object.keys(unifiedRates);
+    const dynamicCurrencies: Currency[] = currentCodes.map(code => ({ code, name: code }));
+    
+    const all = [...currencyApiPreloadedCurrencies, ...cryptoCurrencies, ...dynamicCurrencies];
     const unique = Array.from(new Map(all.map(item => [item.code, item])).values());
     return unique.sort((a, b) => a.code.localeCompare(b.code));
 }
@@ -233,7 +233,6 @@ export async function findRateAsync(from: string, to: string, db: Firestore): Pr
 export async function getHistoricalRate(from: string, to: string, date: Date, db: Firestore): Promise<HistoricalRateResult | undefined> {
     if (isAfter(startOfDay(date), startOfDay(new Date()))) return undefined;
     
-    // Для "сегодня" отдаем актуальный курс из кэша
     if (isSameDay(date, new Date())) {
         const rate = findRate(from, to);
         if (rate !== undefined) return { rate, date, isFallback: false };
@@ -241,7 +240,6 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
 
     const current = findRate(from, to);
     if (current !== undefined) {
-        // Симуляция истории с небольшим отклонением (в реальном приложении здесь был бы запрос к API истории)
         return { 
             rate: current * (0.98 + Math.random() * 0.04), 
             date, 
