@@ -72,7 +72,7 @@ export function HistoricalRates() {
       setSingleRate(undefined);
       try {
           const result = await getHistoricalRate(fromCurrency, toCurrency, date, firestore);
-          if (result === undefined) {
+          if (!result) {
               setSingleRate(null);
               toast({ variant: 'destructive', title: t('history.noRate') });
           } else {
@@ -94,7 +94,7 @@ export function HistoricalRates() {
       try {
           const startRes = await getHistoricalRate(fromCurrency, toCurrency, range.from, firestore);
           const endRes = await getHistoricalRate(fromCurrency, toCurrency, range.to, firestore);
-          if (startRes !== undefined && endRes !== undefined) {
+          if (startRes && endRes) {
             setRangeResult({ startRate: startRes.rate, endRate: endRes.rate });
           } else {
             setRangeResult(null);

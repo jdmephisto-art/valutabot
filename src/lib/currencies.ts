@@ -269,7 +269,6 @@ export async function preFetchInitialRates(db?: Firestore) {
 }
 
 export async function getHistoricalRate(from: string, to: string, date: Date, db?: Firestore): Promise<HistoricalRateResult | undefined> {
-    // Проверка на будущее с учетом начала дня
     if (isAfter(startOfDay(date), startOfDay(new Date()))) return undefined;
     
     await preFetchInitialRates(db);
@@ -277,7 +276,6 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
 
     if (currentRate !== undefined) {
         const isToday = format(date, 'yyyyMMdd') === format(new Date(), 'yyyyMMdd');
-        // Возвращаем текущий актуальный курс как fallback, если на выбранную дату (включая сегодня) нет специфических данных
         return { 
             rate: currentRate, 
             date,
