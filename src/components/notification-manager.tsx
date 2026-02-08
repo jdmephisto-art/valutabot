@@ -42,7 +42,7 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
       from: 'USD',
       to: 'EUR',
       condition: 'above',
-      threshold: 0,
+      threshold: 1, // Инициализация значением, чтобы избежать ошибки React
     },
   });
 

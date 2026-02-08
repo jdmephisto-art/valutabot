@@ -1,5 +1,5 @@
 import { Currency, ExchangeRate, DataSource, HistoricalRateResult } from '@/lib/types';
-import { format, subDays, isFuture } from 'date-fns';
+import { format, isFuture } from 'date-fns';
 import { currencyApiPreloadedCurrencies } from './preloaded-data';
 import { doc, getDoc, setDoc, Firestore } from 'firebase/firestore';
 
@@ -12,7 +12,8 @@ export const cryptoCodes = [
     'FET', 'RNDR', 'AGIX', 'UNI', 'AAVE', 'MKR', 'SAND', 'MANA', 'AXS', 'IMX',
     'SHIB', 'PEPE', 'FLOKI', 'BONK', 'FIL', 'AR', 'STORJ', 'HNT', 'THETA',
     'ONDO', 'BNB', 'OKB', 'CRO', 'NEAR', 'ATOM', 'ARB', 'OP',
-    'XAU', 'XAG', 'XPT', 'XPD'
+    'XAU', 'XAG', 'XPT', 'XPD',
+    'BAYC', 'AZUKI', 'PUDGY' // Добавлены NFT коды
 ];
 
 const CACHE_TTL_RATES = 15 * 60 * 1000;
@@ -25,6 +26,8 @@ let cryptoRatesCache: Record<string, number> = {};
 let cryptoRatesTimestamp = 0;
 let metalsRatesCache: Record<string, number> = {};
 let metalsRatesTimestamp = 0;
+let nftRatesCache: Record<string, number> = {};
+let nftRatesTimestamp = 0;
 
 export function setDataSource(source: DataSource) {
     activeDataSource = source;
@@ -69,6 +72,13 @@ async function nbrbApiFetch(endpoint: string) {
 async function coingeckoApiFetch(ids: string) {
     try {
         const response = await fetch(`/api/coingecko?endpoint=simple/price&ids=${ids}&vs_currencies=usd`, { cache: 'no-store' });
+        return response.ok ? response.json() : null;
+    } catch { return null; }
+}
+
+async function coingeckoNftFetch(id: string) {
+    try {
+        const response = await fetch(`/api/coingecko?endpoint=nfts/${id}`, { cache: 'no-store' });
         return response.ok ? response.json() : null;
     } catch { return null; }
 }
@@ -128,6 +138,35 @@ export async function _updateCryptoRatesCache(db?: Firestore): Promise<void> {
     }
 }
 
+async function _updateNFTRatesCache(db?: Firestore): Promise<void> {
+    if (Date.now() - nftRatesTimestamp < CACHE_TTL_RATES && Object.keys(nftRatesCache).length > 0) return;
+    
+    if (db) {
+        const cached = await getCacheFromFirestore(db, 'nfts');
+        if (cached) { nftRatesCache = cached; nftRatesTimestamp = Date.now(); return; }
+    }
+
+    const nfts = {
+        'BAYC': 'bored-ape-yacht-club',
+        'AZUKI': 'azuki',
+        'PUDGY': 'pudgy-penguins'
+    };
+
+    const temp: Record<string, number> = {};
+    for (const [code, id] of Object.entries(nfts)) {
+        const data = await coingeckoNftFetch(id);
+        if (data?.floor_price?.usd) {
+            temp[code] = data.floor_price.usd;
+        }
+    }
+
+    if (Object.keys(temp).length > 0) {
+        nftRatesCache = { ...nftRatesCache, ...temp };
+        nftRatesTimestamp = Date.now();
+        if (db) saveCacheToFirestore(db, 'nfts', nftRatesCache);
+    }
+}
+
 export async function _updateMetalsRatesCache(db?: Firestore): Promise<void> {
     if (Date.now() - metalsRatesTimestamp < CACHE_TTL_RATES && Object.keys(metalsRatesCache).length > 0) return;
     
@@ -164,6 +203,7 @@ export async function _updateNbrbRatesCache(db?: Firestore): Promise<void> {
 function getRateVsUsd(code: string): number | undefined {
     if (code === 'USD') return 1;
     if (cryptoRatesCache[code] !== undefined) return cryptoRatesCache[code];
+    if (nftRatesCache[code] !== undefined) return nftRatesCache[code];
     if (metalsRatesCache[code] !== undefined) return metalsRatesCache[code];
     if (nbrbRatesCache[code] && nbrbRatesCache['USD']) {
         const codeInByn = nbrbRatesCache[code].rate / nbrbRatesCache[code].scale;
@@ -220,7 +260,8 @@ export async function preFetchInitialRates(db?: Firestore) {
     }
     const tasks = [
         _updateCryptoRatesCache(db),
-        _updateNbrbRatesCache(db)
+        _updateNbrbRatesCache(db),
+        _updateNFTRatesCache(db) // Добавлено обновление NFT
     ];
     await Promise.allSettled(tasks);
     await _updateMetalsRatesCache(db);
