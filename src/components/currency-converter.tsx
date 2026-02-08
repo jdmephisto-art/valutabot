@@ -33,7 +33,7 @@ export function CurrencyConverter() {
         const rate = findRate(fromCurrency, toCurrency);
         setDisplayRate(rate);
 
-        if (rate && amount) {
+        if (rate && amount && !isNaN(parseFloat(amount))) {
           const result = parseFloat(amount) * rate;
           const isAsset = ['BTC', 'ETH', 'TON', 'XAU', 'XAG', 'NOT', 'DOGS'].includes(toCurrency) || rate < 0.01;
           setConvertedAmount(result > 1000 ? result.toFixed(2) : result.toFixed(isAsset ? 8 : 4).replace(/\.?0+$/, ''));
@@ -47,7 +47,7 @@ export function CurrencyConverter() {
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    if (/^\d*\.?\d*$/.test(value)) {
+    if (value === '' || /^\d*\.?\d*$/.test(value)) {
       setAmount(value);
     }
   };
