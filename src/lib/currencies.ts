@@ -13,7 +13,7 @@ export const cryptoCodes = [
     'SHIB', 'PEPE', 'FLOKI', 'BONK', 'FIL', 'AR', 'STORJ', 'HNT', 'THETA',
     'ONDO', 'BNB', 'OKB', 'CRO', 'NEAR', 'ATOM', 'ARB', 'OP',
     'XAU', 'XAG', 'XPT', 'XPD',
-    'BAYC', 'AZUKI', 'PUDGY' // Добавлены NFT коды
+    'BAYC', 'AZUKI', 'PUDGY' 
 ];
 
 const CACHE_TTL_RATES = 15 * 60 * 1000;
@@ -111,7 +111,7 @@ export async function _updateCryptoRatesCache(db?: Firestore): Promise<void> {
         'usd-coin', 'dai', 'notcoin', 'dogs', 'render-token', 'fetch-ai', 'binancecoin', 'near', 'cosmos', 
         'arbitrum', 'optimism', 'decentraland', 'aave', 'immutable-x', 'arweave', 'uniswap', 'maker', 
         'the-sandbox', 'axie-infinity', 'shiba-inu', 'pepe', 'floki', 'bonk', 'filecoin', 'storj', 
-        'helium', 'theta-token', 'ondo-finance', 'okb', 'crypto-com-chain'
+        'helium', 'theta-token', 'ondo-finance', 'okb', 'crypto-com-chain', 'singularitynet'
     ].join(',');
 
     const data = await coingeckoApiFetch(ids);
@@ -127,7 +127,8 @@ export async function _updateCryptoRatesCache(db?: Firestore): Promise<void> {
             'UNI': 'uniswap', 'MKR': 'maker', 'SAND': 'the-sandbox', 'AXS': 'axie-infinity',
             'SHIB': 'shiba-inu', 'PEPE': 'pepe', 'FLOKI': 'floki', 'BONK': 'bonk',
             'FIL': 'filecoin', 'STORJ': 'storj', 'HNT': 'helium', 'THETA': 'theta-token',
-            'ONDO': 'ondo-finance', 'OKB': 'okb', 'CRO': 'crypto-com-chain'
+            'ONDO': 'ondo-finance', 'OKB': 'okb', 'CRO': 'crypto-com-chain',
+            'TRX': 'tron', 'LINK': 'chainlink', 'AGIX': 'singularitynet'
         };
         Object.keys(mapping).forEach(code => {
             const geckoId = mapping[code];
@@ -261,7 +262,7 @@ export async function preFetchInitialRates(db?: Firestore) {
     const tasks = [
         _updateCryptoRatesCache(db),
         _updateNbrbRatesCache(db),
-        _updateNFTRatesCache(db) // Добавлено обновление NFT
+        _updateNFTRatesCache(db)
     ];
     await Promise.allSettled(tasks);
     await _updateMetalsRatesCache(db);
