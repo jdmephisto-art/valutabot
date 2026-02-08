@@ -1,22 +1,8 @@
-
-import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
-
-const firebaseConfig = {
-  apiKey: "AIzaSyAs-placeholder",
-  authDomain: "valutabot-placeholder.firebaseapp.com",
-  projectId: "valutabot-placeholder",
-  storageBucket: "valutabot-placeholder.appspot.com",
-  messagingSenderId: "000000000000",
-  appId: "1:000000000000:web:000000000000"
+export const firebaseConfig = {
+  "projectId": "studio-724575683-23bb2",
+  "appId": "1:565103468525:web:0d24f11726324c6001d1e4",
+  "apiKey": "AIzaSyCA3wyBx_5_-iJAeLJEjzlcZcu8AqHhiks",
+  "authDomain": "studio-724575683-23bb2.firebaseapp.com",
+  "measurementId": "",
+  "messagingSenderId": "565103468525"
 };
-
-export function getFirebaseConfig() {
-  return firebaseConfig;
-}
-
-export function initializeFirebaseApp(): FirebaseApp {
-  if (getApps().length > 0) {
-    return getApps()[0];
-  }
-  return initializeApp(firebaseConfig);
-}

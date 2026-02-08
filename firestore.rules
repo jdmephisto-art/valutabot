@@ -1,0 +1,103 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * ValutaBot Security Rules Documentation
+     *
+     * Core Philosophy: 
+     * This ruleset implements a strict path-based ownership model for user-specific data and a 
+     * public-read model for global reference data (Currencies and Exchange Rates). 
+     * Authorization is determined primarily by the user's authenticated UID compared against the document path.
+     *
+     * Data Structure:
+     * - /users/{userId}: Root profile for each user.
+     * - /users/{userId}/notifications/{notificationId}: User-specific currency alerts.
+     * - /currencies/{currencyId}: Global list of supported currencies.
+     * - /exchange_rates/{exchangeRateId}: Real-time rate data.
+     *
+     * Key Security Decisions:
+     * 1. Authorization Independence: We use the document path to verify ownership, avoiding costly get() lookups.
+     * 2. Public Read Access: Currencies and Exchange Rates are readable by everyone (including non-authenticated users) 
+     *    to support public-facing features, while writes are restricted.
+     * 3. Relational Integrity: On creation of user documents and notifications, the rules enforce that internal 
+     *    ID/userId fields must match the path and the authenticated user's UID.
+     * 4. Immutability: Ownership fields (like userId) are made immutable after creation to prevent data hijacking.
+     *
+     * Denormalization for Authorization:
+     * Notifications include a 'userId' field that is validated against the path to ensure the rule 'isOwner(userId)' 
+     * is always accurate and self-contained within the request.
+     */
+
+    // --- Helper Functions ---
+
+    /** Checks if the user is authenticated. */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /** Checks if the authenticated user's UID matches the provided userId. */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /** Checks if the document exists and the user is the owner. Used for updates and deletes. */
+    function isExistingOwner(userId) {
+      return resource != null && isOwner(userId);
+    }
+
+    // --- Collection Rules ---
+
+    /**
+     * @description Rules for the User profile collection. Users can only access and manage their own profile.
+     * @path /users/{userId}
+     * @allow Authenticated user matching the {userId} (get, list, create, update, delete)
+     * @deny Any user attempting to access a different user's profile.
+     * @principle Pattern 1 (Ownership) & Pattern 4 (Self-Creation).
+     */
+    match /users/{userId} {
+      allow get, list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+
+      /**
+       * @description Rules for user-specific notifications. Sub-collection path-based ownership.
+       * @path /users/{userId}/notifications/{notificationId}
+       * @allow User matching the parent {userId} (get, list, create, update, delete)
+       * @deny Accessing notifications belonging to another user.
+       * @principle Pattern 1 (Ownership) with relational integrity validation.
+       */
+      match /notifications/{notificationId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+    }
+
+    /**
+     * @description Rules for the Currencies collection. This is global reference data.
+     * @path /currencies/{currencyId}
+     * @allow Anyone (get, list)
+     * @deny Any client-side write operation (create, update, delete)
+     * @principle Pattern 5 (Public Read). System data is read-only for clients.
+     */
+    match /currencies/{currencyId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; 
+    }
+
+    /**
+     * @description Rules for Exchange Rates. Real-time data available to all users.
+     * @path /exchange_rates/{exchangeRateId}
+     * @allow Anyone (get, list)
+     * @deny Any client-side write operation (create, update, delete)
+     * @principle Pattern 5 (Public Read). Rates are managed by backend processes.
+     */
+    match /exchange_rates/{exchangeRateId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+  }
+}
