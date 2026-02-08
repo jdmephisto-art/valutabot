@@ -30,11 +30,13 @@ export function CurrencyConverter() {
     const convert = () => {
         if (!fromCurrency || !toCurrency) return;
         setIsConverting(true);
+        // Запрос курса из нашей библиотеки, которая теперь синхронизирована с Firestore
         const rate = findRate(fromCurrency, toCurrency);
         setDisplayRate(rate);
 
         if (rate && amount && !isNaN(parseFloat(amount))) {
           const result = parseFloat(amount) * rate;
+          // Логика форматирования для очень дешевых валют или крипто
           const isAsset = rate < 0.001 || ['BTC', 'ETH', 'TON', 'XAU', 'XAG', 'NOT', 'DOGS', 'ARS', 'AFN'].includes(toCurrency);
           setConvertedAmount(result > 1000 ? result.toFixed(2) : result.toFixed(isAsset ? 8 : 4).replace(/\.?0+$/, ''));
         } else {

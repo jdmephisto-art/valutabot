@@ -22,8 +22,11 @@ let unifiedRates: Record<string, number> = {
     'EUR': 1.08,
     'RUB': 0.0108,
     'BYN': 0.31,
-    'ARS': 0.0007,
-    'AFN': 0.014
+    'ARS': 0.000714, // Пример для Аргентинского песо
+    'AFN': 0.0145,   // Пример для Афгани
+    'AMD': 0.0026,   // Пример для Драма
+    'ALL': 0.011,    // Пример для Лека
+    'ANG': 0.55      // Пример для Гульдена
 };
 
 const CACHE_TTL = 15 * 60 * 1000; // 15 минут
@@ -36,10 +39,13 @@ export function getDataSource(): DataSource {
     return activeDataSource;
 }
 
+/**
+ * Загружает начальные курсы из Firestore и подписывается на обновления.
+ */
 export async function preFetchInitialRates(db: Firestore) {
     const docRef = doc(db, 'rates_cache', 'unified');
     
-    // Подписка на обновления из Firestore
+    // Подписка на обновления в реальном времени
     onSnapshot(docRef, (snap) => {
         if (snap.exists()) {
             const data = snap.data();
@@ -47,17 +53,25 @@ export async function preFetchInitialRates(db: Firestore) {
         }
     });
 
-    const snap = await getDoc(docRef);
-    const now = Date.now();
-    
-    // Обновляем данные, если их нет или они старые
-    if (!snap.exists() || (now - (snap.data()?.updatedAt || 0) > CACHE_TTL)) {
-        updateAllRatesInCloud(db);
-    } else {
-        unifiedRates = { ...unifiedRates, ...snap.data().rates };
+    try {
+        const snap = await getDoc(docRef);
+        const now = Date.now();
+        
+        // Если данных нет или они устарели - запускаем обновление в фоне
+        if (!snap.exists() || (now - (snap.data()?.updatedAt || 0) > CACHE_TTL)) {
+            updateAllRatesInCloud(db);
+        } else {
+            unifiedRates = { ...unifiedRates, ...snap.data().rates };
+        }
+    } catch (e) {
+        console.error('Firestore pre-fetch failed, using local seed:', e);
     }
 }
 
+/**
+ * Агрегирует данные из всех API и сохраняет в Firestore.
+ * Все курсы приводятся к стоимости 1 единицы актива в USD.
+ */
 async function updateAllRatesInCloud(db: Firestore) {
     const newRates: Record<string, number> = { 'USD': 1 };
 
@@ -76,7 +90,7 @@ async function updateAllRatesInCloud(db: Firestore) {
         if (metals.status === 'fulfilled' && metals.value) Object.assign(newRates, metals.value);
         if (nfts.status === 'fulfilled' && nfts.value) Object.assign(newRates, nfts.value);
 
-        // Сохраняем в Firestore
+        // Сохраняем в Firestore для всех клиентов
         await setDoc(doc(db, 'rates_cache', 'unified'), {
             rates: newRates,
             updatedAt: Date.now()
@@ -96,9 +110,11 @@ async function fetchNbrb() {
         const rates: Record<string, number> = {};
         const usdRate = data.find((r: any) => r.Cur_Abbreviation === 'USD');
         if (usdRate) {
+            // Цена 1 BYN в USD
             const bynPriceInUsd = 1 / (usdRate.Cur_OfficialRate / usdRate.Cur_Scale);
             data.forEach((r: any) => {
                 const valInByn = r.Cur_OfficialRate / r.Cur_Scale;
+                // Цена 1 Cur в USD = (Цена Cur в BYN) * (Цена BYN в USD)
                 rates[r.Cur_Abbreviation] = valInByn * bynPriceInUsd;
             });
             rates['BYN'] = bynPriceInUsd;
@@ -116,7 +132,7 @@ async function fetchWorld() {
         if (data?.rates) {
             Object.keys(data.rates).forEach(code => {
                 if (data.rates[code] !== 0) {
-                    // 1 USD = X Units. Цена 1 Unit в USD = 1/X
+                    // 1 USD = X Units. Значит 1 Unit = 1/X USD.
                     rates[code] = 1 / data.rates[code];
                 }
             });
@@ -190,6 +206,7 @@ export function findRate(from: string, to: string): number | undefined {
     const fromPriceInUsd = unifiedRates[from];
     const toPriceInUsd = unifiedRates[to];
     if (fromPriceInUsd !== undefined && toPriceInUsd !== undefined && toPriceInUsd !== 0) {
+        // Кросс-курс: (Сколько USD за 1 From) / (Сколько USD за 1 To)
         return fromPriceInUsd / toPriceInUsd;
     }
     return undefined;
@@ -224,7 +241,7 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
 
     const current = findRate(from, to);
     if (current !== undefined) {
-        // Симуляция истории с небольшим отклонением
+        // Симуляция истории с небольшим отклонением (в реальном приложении здесь был бы запрос к API истории)
         return { 
             rate: current * (0.98 + Math.random() * 0.04), 
             date, 
