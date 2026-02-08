@@ -42,6 +42,7 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
       from: 'USD',
       to: 'EUR',
       condition: 'above',
+      threshold: 0,
     },
   });
 

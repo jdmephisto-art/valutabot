@@ -95,7 +95,15 @@ export async function _updateCryptoRatesCache(db?: Firestore): Promise<void> {
         if (cached) { cryptoRatesCache = cached; cryptoRatesTimestamp = Date.now(); return; }
     }
 
-    const ids = 'bitcoin,ethereum,litecoin,ripple,bitcoin-cash,dash,solana,the-open-network,dogecoin,cardano,polkadot,tron,matic-network,avalanche-2,chainlink,tether,usd-coin,dai,notcoin,dogs,render-token,fetch-ai,binancecoin,near,cosmos,arbitrum,optimism';
+    const ids = [
+        'bitcoin', 'ethereum', 'litecoin', 'ripple', 'bitcoin-cash', 'dash', 'solana', 'the-open-network', 
+        'dogecoin', 'cardano', 'polkadot', 'tron', 'matic-network', 'avalanche-2', 'chainlink', 'tether', 
+        'usd-coin', 'dai', 'notcoin', 'dogs', 'render-token', 'fetch-ai', 'binancecoin', 'near', 'cosmos', 
+        'arbitrum', 'optimism', 'decentraland', 'aave', 'immutable-x', 'arweave', 'uniswap', 'maker', 
+        'the-sandbox', 'axie-infinity', 'shiba-inu', 'pepe', 'floki', 'bonk', 'filecoin', 'storj', 
+        'helium', 'theta-token', 'ondo-finance', 'okb', 'crypto-com-chain'
+    ].join(',');
+
     const data = await coingeckoApiFetch(ids);
     
     if (data) {
@@ -104,7 +112,12 @@ export async function _updateCryptoRatesCache(db?: Firestore): Promise<void> {
             'FET': 'fetch-ai', 'RNDR': 'render-token', 'BNB': 'binancecoin', 'NEAR': 'near', 
             'ATOM': 'cosmos', 'ARB': 'arbitrum', 'OP': 'optimism', 'LTC': 'litecoin',
             'XRP': 'ripple', 'BCH': 'bitcoin-cash', 'DOGE': 'dogecoin', 'ADA': 'cardano', 
-            'DOT': 'polkadot', 'NOT': 'notcoin', 'DOGS': 'dogs', 'USDT': 'tether', 'USDC': 'usd-coin'
+            'DOT': 'polkadot', 'NOT': 'notcoin', 'DOGS': 'dogs', 'USDT': 'tether', 'USDC': 'usd-coin',
+            'MANA': 'decentraland', 'AAVE': 'aave', 'IMX': 'immutable-x', 'AR': 'arweave',
+            'UNI': 'uniswap', 'MKR': 'maker', 'SAND': 'the-sandbox', 'AXS': 'axie-infinity',
+            'SHIB': 'shiba-inu', 'PEPE': 'pepe', 'FLOKI': 'floki', 'BONK': 'bonk',
+            'FIL': 'filecoin', 'STORJ': 'storj', 'HNT': 'helium', 'THETA': 'theta-token',
+            'ONDO': 'ondo-finance', 'OKB': 'okb', 'CRO': 'crypto-com-chain'
         };
         Object.keys(mapping).forEach(code => {
             const geckoId = mapping[code];
@@ -120,12 +133,7 @@ export async function _updateMetalsRatesCache(db?: Firestore): Promise<void> {
     
     const data = await cbrMetalsApiFetch();
     if (data) {
-        // Чтобы металлы считались верно, нам нужен актуальный курс RUB к USD
-        // Если в кэше пусто, используем значение по умолчанию или ждем worldCurrency
         const rubPerUsd = worldCurrencyRatesCache['RUB'] || 92; 
-        
-        // ЦБ дает цену за ГРАММ в РУБЛЯХ. 
-        // Цена в USD за ГРАММ = RUB_Price / RUB_Per_USD
         if (data['1']) metalsRatesCache['XAU'] = parseFloat(data['1']) / rubPerUsd;
         if (data['2']) metalsRatesCache['XAG'] = parseFloat(data['2']) / rubPerUsd;
         if (data['3']) metalsRatesCache['XPT'] = parseFloat(data['3']) / rubPerUsd;
@@ -155,26 +163,16 @@ export async function _updateNbrbRatesCache(db?: Firestore): Promise<void> {
 
 function getRateVsUsd(code: string): number | undefined {
     if (code === 'USD') return 1;
-    
-    // 1. Проверяем кэш криптовалют (хранит USD за 1 единицу)
     if (cryptoRatesCache[code] !== undefined) return cryptoRatesCache[code];
-    
-    // 2. Проверяем кэш металлов (хранит USD за 1 грамм)
     if (metalsRatesCache[code] !== undefined) return metalsRatesCache[code];
-    
-    // 3. Проверяем кэш НБРБ (рассчитываем через кросс-курс к доллару)
     if (nbrbRatesCache[code] && nbrbRatesCache['USD']) {
         const codeInByn = nbrbRatesCache[code].rate / nbrbRatesCache[code].scale;
         const usdInByn = nbrbRatesCache['USD'].rate / nbrbRatesCache['USD'].scale;
         return codeInByn / usdInByn;
     }
-    
-    // 4. Проверяем мировой кэш (там хранятся Code per 1 USD)
-    // Чтобы получить USD за 1 единицу: 1 / Rate
     if (worldCurrencyRatesCache[code] !== undefined) {
         return 1 / worldCurrencyRatesCache[code];
     }
-    
     return undefined;
 }
 
@@ -213,7 +211,6 @@ export async function findRateAsync(from: string, to: string, db?: Firestore): P
 }
 
 export async function preFetchInitialRates(db?: Firestore) {
-    // 1. Сначала тянем мировые курсы (база для экзотики и металлов)
     if (Date.now() - worldCurrencyRatesTimestamp > CACHE_TTL_RATES || Object.keys(worldCurrencyRatesCache).length === 0) {
         const worldData = await worldCurrencyApiFetch();
         if (worldData?.rates) {
@@ -221,33 +218,24 @@ export async function preFetchInitialRates(db?: Firestore) {
             worldCurrencyRatesTimestamp = Date.now();
         }
     }
-
-    // 2. Параллельно обновляем остальные кэши
     const tasks = [
         _updateCryptoRatesCache(db),
         _updateNbrbRatesCache(db)
     ];
     await Promise.allSettled(tasks);
-
-    // 3. Металлы зависят от курса RUB, поэтому обновляем их после worldCurrency
     await _updateMetalsRatesCache(db);
 }
 
 export async function getHistoricalRate(from: string, to: string, date: Date): Promise<HistoricalRateResult | undefined> {
     if (isFuture(date)) return undefined;
-    
     await preFetchInitialRates();
-
-    // Для истории в прототипе используем текущий курс с небольшим отклонением (волатильность)
     const currentRate = findRate(from, to);
     if (currentRate !== undefined) {
-        // Генерируем псевдо-реалистичный шум в зависимости от типа актива
         const isCrypto = cryptoCodes.includes(from) || cryptoCodes.includes(to);
         const volatility = isCrypto ? 0.15 : 0.02;
         const noise = 1 + (Math.random() - 0.5) * volatility;
         return { rate: currentRate * noise, date };
     }
-
     return undefined;
 }
 
