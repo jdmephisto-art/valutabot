@@ -35,7 +35,7 @@ export function CurrencyConverter() {
 
         if (rate && amount && !isNaN(parseFloat(amount))) {
           const result = parseFloat(amount) * rate;
-          const isAsset = ['BTC', 'ETH', 'TON', 'XAU', 'XAG', 'NOT', 'DOGS'].includes(toCurrency) || rate < 0.01;
+          const isAsset = rate < 0.001 || ['BTC', 'ETH', 'TON', 'XAU', 'XAG', 'NOT', 'DOGS', 'ARS', 'AFN'].includes(toCurrency);
           setConvertedAmount(result > 1000 ? result.toFixed(2) : result.toFixed(isAsset ? 8 : 4).replace(/\.?0+$/, ''));
         } else {
           setConvertedAmount('');
@@ -66,7 +66,7 @@ export function CurrencyConverter() {
         <div className="space-y-5">
           <div className="space-y-4">
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 w-full">
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <CurrencyCombobox 
                   value={fromCurrency}
                   onChange={setFromCurrency}
@@ -86,7 +86,7 @@ export function CurrencyConverter() {
                 </Button>
               </div>
 
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <CurrencyCombobox
                   value={toCurrency}
                   onChange={setToCurrency}
