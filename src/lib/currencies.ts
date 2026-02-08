@@ -1,5 +1,5 @@
 import { Currency, ExchangeRate, DataSource, HistoricalRateResult } from '@/lib/types';
-import { format, isFuture, startOfDay } from 'date-fns';
+import { format, isFuture, startOfDay, isAfter } from 'date-fns';
 import { currencyApiPreloadedCurrencies } from './preloaded-data';
 import { doc, getDoc, setDoc, Firestore } from 'firebase/firestore';
 
@@ -268,16 +268,16 @@ export async function preFetchInitialRates(db?: Firestore) {
     await _updateMetalsRatesCache(db);
 }
 
-export async function getHistoricalRate(from: string, to: string, date: Date): Promise<HistoricalRateResult | undefined> {
-    if (isFuture(date)) return undefined;
+export async function getHistoricalRate(from: string, to: string, date: Date, db?: Firestore): Promise<HistoricalRateResult | undefined> {
+    // Проверка на будущее с учетом начала дня
+    if (isAfter(startOfDay(date), startOfDay(new Date()))) return undefined;
     
-    await preFetchInitialRates();
+    await preFetchInitialRates(db);
     const currentRate = findRate(from, to);
 
     if (currentRate !== undefined) {
         const isToday = format(date, 'yyyyMMdd') === format(new Date(), 'yyyyMMdd');
-        // Если запрашиваемая дата - сегодня или курс на дату не найден,
-        // возвращаем текущий актуальный курс как fallback
+        // Возвращаем текущий актуальный курс как fallback, если на выбранную дату (включая сегодня) нет специфических данных
         return { 
             rate: currentRate, 
             date,

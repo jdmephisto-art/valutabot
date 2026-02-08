@@ -18,12 +18,14 @@ import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/hooks/use-translation';
 import { CurrencyCombobox } from './currency-combobox';
 import type { HistoricalRateResult } from '@/lib/types';
+import { useFirestore } from '@/firebase';
 
 export function HistoricalRates() {
   const dataSource = getDataSource();
   const { currencies } = useCurrencies();
   const { toast } = useToast();
   const { t, dateLocale } = useTranslation();
+  const firestore = useFirestore();
   const [fromCurrency, setFromCurrency] = useState('USD');
   const [toCurrency, setToCurrency] = useState('EUR');
   const [activeTab, setActiveTab] = useState('dynamics');
@@ -69,7 +71,7 @@ export function HistoricalRates() {
       setFetchingSingle(true);
       setSingleRate(undefined);
       try {
-          const result = await getHistoricalRate(fromCurrency, toCurrency, date);
+          const result = await getHistoricalRate(fromCurrency, toCurrency, date, firestore);
           if (result === undefined) {
               setSingleRate(null);
               toast({ variant: 'destructive', title: t('history.noRate') });
@@ -90,8 +92,8 @@ export function HistoricalRates() {
       setFetchingRange(true);
       setRangeResult(undefined);
       try {
-          const startRes = await getHistoricalRate(fromCurrency, toCurrency, range.from);
-          const endRes = await getHistoricalRate(fromCurrency, toCurrency, range.to);
+          const startRes = await getHistoricalRate(fromCurrency, toCurrency, range.from, firestore);
+          const endRes = await getHistoricalRate(fromCurrency, toCurrency, range.to, firestore);
           if (startRes !== undefined && endRes !== undefined) {
             setRangeResult({ startRate: startRes.rate, endRate: endRes.rate });
           } else {
