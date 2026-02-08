@@ -16,8 +16,6 @@ export const cryptoCodes = [
     'BAYC', 'AZUKI', 'PUDGY' 
 ];
 
-// Реестр стоимости 1 единицы актива в USD. 
-// Инициализируем базовыми значениями как страховку до первой загрузки из БД.
 let unifiedRates: Record<string, number> = { 
     'USD': 1,
     'EUR': 1.08,
@@ -33,7 +31,7 @@ let unifiedRates: Record<string, number> = {
     'TON': 5.2
 };
 
-const CACHE_TTL = 15 * 60 * 1000; // 15 минут
+const CACHE_TTL = 15 * 60 * 1000;
 
 export function setDataSource(source: DataSource) {
     activeDataSource = source;
@@ -43,9 +41,6 @@ export function getDataSource(): DataSource {
     return activeDataSource;
 }
 
-/**
- * Загружает начальные курсы из Firestore и подписывается на обновления.
- */
 export async function preFetchInitialRates(db: Firestore) {
     const docRef = doc(db, 'rates_cache', 'unified');
     
@@ -69,14 +64,10 @@ export async function preFetchInitialRates(db: Firestore) {
     }
 }
 
-/**
- * Агрегирует данные из всех API (Каскад) и сохраняет в Firestore.
- */
 export async function updateAllRatesInCloud(db: Firestore) {
     const newRates: Record<string, number> = { 'USD': 1 };
 
     try {
-        // Опрашиваем все доступные источники параллельно
         const results = await Promise.allSettled([
             fetchNbrb(),
             fetchCbr(),
@@ -87,14 +78,6 @@ export async function updateAllRatesInCloud(db: Firestore) {
             fetchCurrencyApi(),
             fetchCoinlayer()
         ]);
-
-        // Порядок слияния важен: более приоритетные источники перезаписывают менее приоритетные.
-        // Иерархия (от низшего к высшему): 
-        // 1. WorldCurrency/Fixer/CurrencyApi (Резерв фиат)
-        // 2. Coinlayer/CMC (Резерв крипто)
-        // 3. CoinGecko (Основной крипто/фиат)
-        // 4. CBR (Официальный RUB/Металлы)
-        // 5. NBRB (Официальный BYN)
 
         const [nbrb, cbr, gecko, cmc, world, fixer, curApi, clayer] = results;
 
@@ -141,10 +124,8 @@ async function fetchNbrb() {
 
 async function fetchCbr() {
     try {
-        const [dailyRes, metalsRes] = await Promise.all([
-            fetch('https://www.cbr-xml-daily.ru/daily_json.js', { cache: 'no-store' }),
-            fetch('/api/cbr/metals', { cache: 'no-store' })
-        ]);
+        const dailyRes = await fetch('https://www.cbr-xml-daily.ru/daily_json.js', { cache: 'no-store' });
+        if (!dailyRes.ok) return null;
         
         const rates: Record<string, number> = {};
         const daily = await dailyRes.json();
@@ -156,14 +137,6 @@ async function fetchCbr() {
                 const v = daily.Valute[code];
                 rates[code] = (v.Value / v.Nominal) / rubPerUsd;
             });
-
-            if (metalsRes.ok) {
-                const metals = await metalsRes.json();
-                if (metals['1']) rates['XAU'] = parseFloat(metals['1']) / rubPerUsd;
-                if (metals['2']) rates['XAG'] = parseFloat(metals['2']) / rubPerUsd;
-                if (metals['3']) rates['XPT'] = parseFloat(metals['3']) / rubPerUsd;
-                if (metals['4']) rates['XPD'] = parseFloat(metals['4']) / rubPerUsd;
-            }
         }
         return rates;
     } catch { return null; }
@@ -285,15 +258,18 @@ export function findRate(from: string, to: string): number | undefined {
 
 export async function getCurrencies(): Promise<Currency[]> {
     const dbCodes = Object.keys(unifiedRates);
-    const dbCurrencies: Currency[] = dbCodes.map(code => ({ code, name: code }));
+    const preloadedMap = new Map(currencyApiPreloadedCurrencies.map(c => [c.code, c]));
+    const allCodes = Array.from(new Set([...dbCodes, ...preloadedMap.keys()]));
     
-    const all = [
-        ...currencyApiPreloadedCurrencies, 
-        ...dbCurrencies
-    ];
+    const result = allCodes.map(code => {
+        const preloaded = preloadedMap.get(code);
+        return {
+            code,
+            name: preloaded ? preloaded.name : code
+        };
+    });
     
-    const unique = Array.from(new Map(all.map(item => [item.code, item])).values());
-    return unique.sort((a, b) => a.code.localeCompare(b.code));
+    return result.sort((a, b) => a.code.localeCompare(b.code));
 }
 
 export async function getLatestRates(pairs: string[], db: Firestore): Promise<ExchangeRate[]> {
