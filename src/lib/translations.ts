@@ -113,6 +113,7 @@ export const translations = {
       apiPlanErrorTitle: 'Feature Unavailable',
       apiPlanErrorDesc: 'Historical data is not available on the free plan of WorldCurrencyAPI. Please switch to the NBRB data source to use this feature.',
       fallbackHint: "On {requestedDate} the official rate was not set. Showing last available rate from {actualDate}.",
+      futureDate: "Historical data for future dates is not available.",
     },
     tracking: {
       title: 'Track Currency Pairs',
@@ -303,6 +304,7 @@ export const translations = {
       apiPlanErrorTitle: 'Функция недоступна',
       apiPlanErrorDesc: 'Исторические данные недоступны на бесплатном тарифе WorldCurrencyAPI. Пожалуйста, переключитесь на источник данных НБРБ, чтобы использовать эту функцию.',
       fallbackHint: "На {requestedDate} официальный курс не установлен. Показан последний доступный курс за {actualDate}.",
+      futureDate: "Исторические данные для будущих дат недоступны.",
     },
     tracking: {
       title: 'Отслеживание валютных пар',

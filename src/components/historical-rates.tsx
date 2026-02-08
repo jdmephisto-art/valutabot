@@ -1,17 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { getDynamicsForPeriod, getHistoricalRate, getDataSource } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
-import { format, subDays } from 'date-fns';
-import { CalendarIcon, TrendingDown, TrendingUp, ArrowRightLeft, Info } from 'lucide-react';
+import { format, subDays, isFuture, startOfDay } from 'date-fns';
+import { CalendarIcon, TrendingDown, TrendingUp, ArrowRightLeft, Info, AlertCircle } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useToast } from '@/hooks/use-toast';
@@ -47,8 +48,15 @@ export function HistoricalRates() {
   const [dynamicsStartPopoverOpen, setDynamicsStartPopoverOpen] = useState(false);
   const [dynamicsEndPopoverOpen, setDynamicsEndPopoverOpen] = useState(false);
 
+  const hasFutureDate = useMemo(() => {
+    if (activeTab === 'single') return date && isFuture(startOfDay(date));
+    if (activeTab === 'dynamics') return (dynamicsRange?.from && isFuture(startOfDay(dynamicsRange.from))) || (dynamicsRange?.to && isFuture(startOfDay(dynamicsRange.to)));
+    if (activeTab === 'range') return (range?.from && isFuture(startOfDay(range.from))) || (range?.to && isFuture(startOfDay(range.to)));
+    return false;
+  }, [activeTab, date, dynamicsRange, range]);
+
   const handleFetchDynamics = async () => {
-    if (dynamicsRange?.from && dynamicsRange.to) {
+    if (dynamicsRange?.from && dynamicsRange.to && !hasFutureDate) {
         setFetchingDynamics(true);
         setDynamicsData([]);
         try {
@@ -67,7 +75,7 @@ export function HistoricalRates() {
   };
 
   const handleFetchSingleRate = async () => {
-    if (date) {
+    if (date && !hasFutureDate) {
       setFetchingSingle(true);
       setSingleRate(undefined);
       try {
@@ -88,7 +96,7 @@ export function HistoricalRates() {
   };
 
   const handleFetchRangeRate = async () => {
-    if (range?.from && range.to) {
+    if (range?.from && range.to && !hasFutureDate) {
       setFetchingRange(true);
       setRangeResult(undefined);
       try {
@@ -188,7 +196,17 @@ export function HistoricalRates() {
                     </PopoverContent>
                 </Popover>
             </div>
-            <Button onClick={handleFetchDynamics} className="w-full" disabled={fetchingDynamics || !dynamicsRange?.from || !dynamicsRange?.to}>{fetchingDynamics ? t('latestRates.loading') : t('history.showDynamics')}</Button>
+            
+            {hasFutureDate && (
+              <Alert variant="destructive" className="py-2 px-3">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  {t('history.futureDate')}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <Button onClick={handleFetchDynamics} className="w-full" disabled={fetchingDynamics || !dynamicsRange?.from || !dynamicsRange?.to || hasFutureDate}>{fetchingDynamics ? t('latestRates.loading') : t('history.showDynamics')}</Button>
             {dynamicsData.length > 0 && (
                 <div className="h-[250px] w-full pt-4">
                     <ChartContainer config={chartConfig}>
@@ -223,7 +241,17 @@ export function HistoricalRates() {
                   <Calendar mode="single" selected={date} onSelect={(d) => { setDate(d); setSingleDatePopoverOpen(false); }} locale={dateLocale} />
               </PopoverContent>
             </Popover>
-            <Button onClick={handleFetchSingleRate} className="w-full" disabled={fetchingSingle || !date}>{fetchingSingle ? t('latestRates.loading') : t('history.getRate')}</Button>
+
+            {hasFutureDate && (
+              <Alert variant="destructive" className="py-2 px-3">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  {t('history.futureDate')}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <Button onClick={handleFetchSingleRate} className="w-full" disabled={fetchingSingle || !date || hasFutureDate}>{fetchingSingle ? t('latestRates.loading') : t('history.getRate')}</Button>
             {singleRate !== undefined && singleRate !== null && (
               <div className="text-center p-4 bg-muted/50 rounded-lg space-y-2">
                 <p className="text-sm text-muted-foreground">{t('history.rateOn', { date: date ? format(date, "PPP", { locale: dateLocale }) : '' })}</p>
@@ -268,7 +296,17 @@ export function HistoricalRates() {
                     </PopoverContent>
                 </Popover>
              </div>
-             <Button onClick={handleFetchRangeRate} className="w-full" disabled={fetchingRange || !range?.from || !range?.to}>{fetchingRange ? t('latestRates.loading') : t('history.compareRates')}</Button>
+
+             {hasFutureDate && (
+              <Alert variant="destructive" className="py-2 px-3">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  {t('history.futureDate')}
+                </AlertDescription>
+              </Alert>
+            )}
+
+             <Button onClick={handleFetchRangeRate} className="w-full" disabled={fetchingRange || !range?.from || !range?.to || hasFutureDate}>{fetchingRange ? t('latestRates.loading') : t('history.compareRates')}</Button>
              {rangeResult && (
                 <div className="p-4 bg-muted/50 rounded-lg space-y-2">
                     <div className="flex justify-between items-center"><span className="text-sm text-muted-foreground">{t('history.start', { date: range?.from ? format(range.from, "LLL dd", { locale: dateLocale }) : '' })}</span><span className="font-mono font-medium">{numberFormatter(rangeResult.startRate)}</span></div>
