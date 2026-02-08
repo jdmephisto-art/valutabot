@@ -219,11 +219,15 @@ export function ChatInterface() {
         <AnimatePresence initial={false}>
           {messages.map((message) => (
             <motion.div key={message.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={cn('flex items-end gap-2', message.sender === 'user' ? 'justify-end' : 'justify-start')}>
-              <div className={cn('max-w-[85%] rounded-lg p-3', message.sender === 'user' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground')}>
-                {message.text && <p>{message.text}</p>}
+              <div className={cn(
+                'rounded-lg', 
+                message.component ? 'w-full p-0 overflow-hidden' : 'max-w-[85%] p-3',
+                message.sender === 'user' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'
+              )}>
+                {message.text && <p className={cn(message.component && "p-3 pb-0")}>{message.text}</p>}
                 {message.component}
                 {message.options && (
-                  <div className="flex flex-col gap-2 mt-3">
+                  <div className="flex flex-col gap-2 mt-3 p-3 pt-0">
                     {message.options.map(option => <Button key={option.id} variant="outline" size="sm" onClick={() => handleActionClick(option.id)} className="justify-start"><option.icon className="mr-2 h-4 w-4" />{option.label}</Button>)}
                   </div>
                 )}

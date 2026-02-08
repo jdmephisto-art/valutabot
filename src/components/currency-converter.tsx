@@ -57,15 +57,15 @@ export function CurrencyConverter() {
   }
 
   return (
-    <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none w-full max-w-full overflow-hidden">
-      <CardHeader className="px-3 pb-3">
-        <CardTitle className="text-base font-semibold">{t('converter.title')}</CardTitle>
+    <Card className="bg-transparent border-0 shadow-none w-full overflow-hidden">
+      <CardHeader className="px-4 pb-3">
+        <CardTitle className="text-base font-bold text-primary">{t('converter.title')}</CardTitle>
       </CardHeader>
-      <CardContent className="px-3">
+      <CardContent className="px-4 pb-4">
         <div className="space-y-5">
           <div className="space-y-4">
-            {/* Выбор валют - Строгая сетка 1fr-auto-1fr */}
-            <div className="grid grid-cols-[1fr_40px_1fr] items-center gap-1 w-full">
+            {/* Выбор валют - Идеальная симметрия 1fr - auto - 1fr */}
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 w-full">
               <div className="min-w-0">
                 <CurrencyCombobox 
                   value={fromCurrency}
@@ -80,9 +80,9 @@ export function CurrencyConverter() {
                   variant="ghost" 
                   size="icon" 
                   onClick={handleSwapCurrencies} 
-                  className="h-8 w-8 hover:bg-primary/10 transition-colors shrink-0"
+                  className="h-9 w-9 hover:bg-primary/10 transition-colors shrink-0"
                 >
-                  <ArrowRightLeft className="h-3.5 w-3.5 text-primary" />
+                  <ArrowRightLeft className="h-4 w-4 text-primary" />
                 </Button>
               </div>
 
@@ -96,35 +96,35 @@ export function CurrencyConverter() {
               </div>
             </div>
 
-            {/* Поля ввода - Строгая симметрия 50/50 через Grid */}
-            <div className="grid grid-cols-2 gap-3 w-full">
+            {/* Поля ввода - Строгая симметрия 50/50 */}
+            <div className="grid grid-cols-2 gap-4 w-full">
               <div className="space-y-1.5 min-w-0">
-                <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider pl-0.5 truncate">{t('converter.amount')}</p>
+                <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest pl-0.5 truncate">{t('converter.amount')}</p>
                 <Input
                   type="text"
                   placeholder="0.00"
                   value={amount}
                   onChange={handleAmountChange}
-                  className="text-xs h-9 border-primary/20 focus-visible:ring-primary w-full"
+                  className="text-sm h-11 border-primary/30 focus-visible:ring-primary w-full bg-background/50"
                 />
               </div>
               <div className="space-y-1.5 min-w-0">
-                <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider pl-0.5 truncate">{t('converter.converted')}</p>
+                <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest pl-0.5 truncate">{t('converter.converted')}</p>
                 <Input
                   type="text"
                   placeholder={isConverting ? "..." : "0.00"}
                   value={isConverting ? '' : convertedAmount}
                   readOnly
-                  className="bg-muted/30 text-xs font-semibold h-9 border-dashed border-primary/20 w-full"
+                  className="bg-muted/50 text-sm font-bold h-11 border-dashed border-primary/30 w-full"
                 />
               </div>
             </div>
           </div>
           
           {amount && !isConverting && convertedAmount && displayRate && (
-             <div className="pt-3 border-t border-border/50">
-               <div className="bg-primary/5 rounded-md p-1.5">
-                 <p className="text-center text-primary text-[10px] font-mono break-all leading-tight">
+             <div className="pt-4 border-t border-border/50">
+               <div className="bg-primary/10 rounded-lg p-2.5">
+                 <p className="text-center text-primary text-xs font-mono font-bold break-all leading-tight">
                     1 {fromCurrency} = {displayRate > 1000 ? displayRate.toFixed(2) : displayRate.toFixed(8).replace(/\.?0+$/, '')} {toCurrency}
                  </p>
                </div>
