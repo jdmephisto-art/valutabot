@@ -16,21 +16,21 @@ export const cryptoCodes = [
     'BAYC', 'AZUKI', 'PUDGY' 
 ];
 
-// Реестр: Цена 1 единицы актива в USD (USD = 1.0)
+// Реестр стоимости 1 единицы актива в USD. 
+// Инициализируем базовыми значениями как страховку до первой загрузки из БД.
 let unifiedRates: Record<string, number> = { 
     'USD': 1,
     'EUR': 1.08,
-    'RUB': 0.0108,
     'BYN': 0.31,
-    'ARS': 0.000714,
+    'RUB': 0.0108,
+    'ANG': 0.558,
+    'AWG': 0.555,
     'AFN': 0.0145,
-    'AMD': 0.0026,
-    'ALL': 0.011,
-    'ANG': 0.55,
-    'AZN': 0.58,
-    'BAM': 0.55,
-    'AWG': 0.55,
-    'AOA': 0.0011
+    'AZN': 0.588,
+    'BAM': 0.552,
+    'AOA': 0.0011,
+    'BTC': 95000,
+    'TON': 5.2
 };
 
 const CACHE_TTL = 15 * 60 * 1000; // 15 минут
@@ -49,7 +49,6 @@ export function getDataSource(): DataSource {
 export async function preFetchInitialRates(db: Firestore) {
     const docRef = doc(db, 'rates_cache', 'unified');
     
-    // Подписка на обновления в реальном времени
     onSnapshot(docRef, (snap) => {
         if (snap.exists()) {
             const data = snap.data();
@@ -60,40 +59,56 @@ export async function preFetchInitialRates(db: Firestore) {
     try {
         const snap = await getDoc(docRef);
         const now = Date.now();
-        
-        // Если данных нет или они устарели - запускаем обновление в фоне
         if (!snap.exists() || (now - (snap.data()?.updatedAt || 0) > CACHE_TTL)) {
             updateAllRatesInCloud(db);
         } else if (snap.exists()) {
             unifiedRates = { ...unifiedRates, ...snap.data().rates };
         }
     } catch (e) {
-        console.error('Firestore pre-fetch failed, using local seed:', e);
+        console.error('Firestore pre-fetch failed:', e);
     }
 }
 
 /**
- * Агрегирует данные из всех API и сохраняет в Firestore.
+ * Агрегирует данные из всех API (Каскад) и сохраняет в Firestore.
  */
 export async function updateAllRatesInCloud(db: Firestore) {
     const newRates: Record<string, number> = { 'USD': 1 };
 
     try {
-        const [nbrb, world, crypto, metals, nfts] = await Promise.allSettled([
+        // Опрашиваем все доступные источники параллельно
+        const results = await Promise.allSettled([
             fetchNbrb(),
-            fetchWorld(),
-            fetchCrypto(),
-            fetchMetals(),
-            fetchNfts()
+            fetchCbr(),
+            fetchCoinGecko(),
+            fetchCoinMarketCap(),
+            fetchWorldCurrency(),
+            fetchFixer(),
+            fetchCurrencyApi(),
+            fetchCoinlayer()
         ]);
 
-        if (nbrb.status === 'fulfilled' && nbrb.value) Object.assign(newRates, nbrb.value);
-        if (world.status === 'fulfilled' && world.value) Object.assign(newRates, world.value);
-        if (crypto.status === 'fulfilled' && crypto.value) Object.assign(newRates, crypto.value);
-        if (metals.status === 'fulfilled' && metals.value) Object.assign(newRates, metals.value);
-        if (nfts.status === 'fulfilled' && nfts.value) Object.assign(newRates, nfts.value);
+        // Порядок слияния важен: более приоритетные источники перезаписывают менее приоритетные.
+        // Иерархия (от низшего к высшему): 
+        // 1. WorldCurrency/Fixer/CurrencyApi (Резерв фиат)
+        // 2. Coinlayer/CMC (Резерв крипто)
+        // 3. CoinGecko (Основной крипто/фиат)
+        // 4. CBR (Официальный RUB/Металлы)
+        // 5. NBRB (Официальный BYN)
 
-        // Сохраняем в Firestore
+        const [nbrb, cbr, gecko, cmc, world, fixer, curApi, clayer] = results;
+
+        const merge = (res: any) => { if (res.status === 'fulfilled' && res.value) Object.assign(newRates, res.value); };
+
+        merge(world);
+        merge(fixer);
+        merge(curApi);
+        merge(clayer);
+        merge(cmc);
+        merge(gecko);
+        merge(cbr);
+        merge(nbrb);
+
         await setDoc(doc(db, 'rates_cache', 'unified'), {
             rates: newRates,
             updatedAt: Date.now()
@@ -113,37 +128,48 @@ async function fetchNbrb() {
         const rates: Record<string, number> = {};
         const usdRate = data.find((r: any) => r.Cur_Abbreviation === 'USD');
         if (usdRate) {
-            const bynPriceInUsd = 1 / (usdRate.Cur_OfficialRate / usdRate.Cur_Scale);
+            const usdPriceInByn = usdRate.Cur_OfficialRate / usdRate.Cur_Scale;
             data.forEach((r: any) => {
                 const valInByn = r.Cur_OfficialRate / r.Cur_Scale;
-                rates[r.Cur_Abbreviation] = valInByn * bynPriceInUsd;
+                rates[r.Cur_Abbreviation] = valInByn / usdPriceInByn;
             });
-            rates['BYN'] = bynPriceInUsd;
+            rates['BYN'] = 1 / usdPriceInByn;
         }
         return rates;
     } catch { return null; }
 }
 
-async function fetchWorld() {
+async function fetchCbr() {
     try {
-        // Мы запрашиваем базу USD, чтобы получить коэффициенты для всех доступных валют
-        const res = await fetch('/api/worldcurrency?endpoint=rates&base=USD', { cache: 'no-store' });
-        if (!res.ok) return null;
-        const data = await res.json();
+        const [dailyRes, metalsRes] = await Promise.all([
+            fetch('https://www.cbr-xml-daily.ru/daily_json.js', { cache: 'no-store' }),
+            fetch('/api/cbr/metals', { cache: 'no-store' })
+        ]);
+        
         const rates: Record<string, number> = {};
-        if (data?.rates) {
-            Object.keys(data.rates).forEach(code => {
-                if (data.rates[code] !== 0) {
-                    // Если 1 USD = X единиц валюты, то 1 единица валюты = 1/X USD
-                    rates[code] = 1 / data.rates[code];
-                }
+        const daily = await dailyRes.json();
+        const rubPerUsd = daily?.Valute?.USD?.Value;
+
+        if (rubPerUsd) {
+            rates['RUB'] = 1 / rubPerUsd;
+            Object.keys(daily.Valute).forEach(code => {
+                const v = daily.Valute[code];
+                rates[code] = (v.Value / v.Nominal) / rubPerUsd;
             });
+
+            if (metalsRes.ok) {
+                const metals = await metalsRes.json();
+                if (metals['1']) rates['XAU'] = parseFloat(metals['1']) / rubPerUsd;
+                if (metals['2']) rates['XAG'] = parseFloat(metals['2']) / rubPerUsd;
+                if (metals['3']) rates['XPT'] = parseFloat(metals['3']) / rubPerUsd;
+                if (metals['4']) rates['XPD'] = parseFloat(metals['4']) / rubPerUsd;
+            }
         }
         return rates;
     } catch { return null; }
 }
 
-async function fetchCrypto() {
+async function fetchCoinGecko() {
     try {
         const ids = 'bitcoin,ethereum,litecoin,ripple,bitcoin-cash,dash,solana,the-open-network,dogecoin,cardano,polkadot,tron,matic-network,avalanche-2,chainlink,tether,usd-coin,dai,notcoin,dogs,render-token,fetch-ai,binancecoin,near,cosmos,arbitrum,optimism,decentraland,aave,immutable-x,arweave,uniswap,maker,the-sandbox,axie-infinity,shiba-inu,pepe,floki,bonk,filecoin,storj,helium,theta-token,ondo-finance,okb,crypto-com-chain,singularitynet';
         const res = await fetch(`/api/coingecko?endpoint=simple/price&ids=${ids}&vs_currencies=usd`, { cache: 'no-store' });
@@ -171,33 +197,77 @@ async function fetchCrypto() {
     } catch { return null; }
 }
 
-async function fetchMetals() {
+async function fetchCoinMarketCap() {
     try {
-        const res = await fetch('/api/cbr/metals', { cache: 'no-store' });
+        const res = await fetch('/api/cmc?endpoint=cryptocurrency/listings/latest&limit=100', { cache: 'no-store' });
         if (!res.ok) return null;
         const data = await res.json();
-        const rubRes = await fetch('https://www.cbr-xml-daily.ru/daily_json.js');
-        const rubData = await rubRes.json();
-        const rubPerUsd = rubData?.Valute?.USD?.Value || 92;
         const rates: Record<string, number> = {};
-        if (data['1']) rates['XAU'] = parseFloat(data['1']) / rubPerUsd;
-        if (data['2']) rates['XAG'] = parseFloat(data['2']) / rubPerUsd;
-        if (data['3']) rates['XPT'] = parseFloat(data['3']) / rubPerUsd;
-        if (data['4']) rates['XPD'] = parseFloat(data['4']) / rubPerUsd;
+        if (data?.data) {
+            data.data.forEach((coin: any) => {
+                rates[coin.symbol] = coin.quote.USD.price;
+            });
+        }
         return rates;
     } catch { return null; }
 }
 
-async function fetchNfts() {
+async function fetchWorldCurrency() {
     try {
-        const nfts = { 'BAYC': 'bored-ape-yacht-club', 'AZUKI': 'azuki', 'PUDGY': 'pudgy-penguins' };
+        const res = await fetch('/api/worldcurrency?endpoint=rates&base=USD', { cache: 'no-store' });
+        if (!res.ok) return null;
+        const data = await res.json();
         const rates: Record<string, number> = {};
-        for (const [code, id] of Object.entries(nfts)) {
-            const res = await fetch(`/api/coingecko?endpoint=nfts/${id}`, { cache: 'no-store' });
-            if (res.ok) {
-                const data = await res.json();
-                if (data?.floor_price?.usd) rates[code] = data.floor_price.usd;
-            }
+        if (data?.rates) {
+            Object.keys(data.rates).forEach(code => {
+                if (data.rates[code] > 0) rates[code] = 1 / data.rates[code];
+            });
+        }
+        return rates;
+    } catch { return null; }
+}
+
+async function fetchFixer() {
+    try {
+        const res = await fetch('/api/fixer?endpoint=latest', { cache: 'no-store' });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const rates: Record<string, number> = {};
+        if (data?.rates && data.rates.USD) {
+            const eurInUsd = 1 / data.rates.USD;
+            Object.keys(data.rates).forEach(code => {
+                rates[code] = (1 / data.rates[code]) / eurInUsd;
+            });
+        }
+        return rates;
+    } catch { return null; }
+}
+
+async function fetchCurrencyApi() {
+    try {
+        const res = await fetch('/api/currency?endpoint=rates', { cache: 'no-store' });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const rates: Record<string, number> = {};
+        if (data?.rates) {
+            Object.keys(data.rates).forEach(code => {
+                if (data.rates[code] > 0) rates[code] = 1 / data.rates[code];
+            });
+        }
+        return rates;
+    } catch { return null; }
+}
+
+async function fetchCoinlayer() {
+    try {
+        const res = await fetch('/api/coinlayer?endpoint=live', { cache: 'no-store' });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const rates: Record<string, number> = {};
+        if (data?.rates) {
+            Object.keys(data.rates).forEach(code => {
+                rates[code] = data.rates[code];
+            });
         }
         return rates;
     } catch { return null; }
@@ -214,25 +284,19 @@ export function findRate(from: string, to: string): number | undefined {
 }
 
 export async function getCurrencies(): Promise<Currency[]> {
-    const cryptoCurrencies: Currency[] = cryptoCodes.map(code => ({ code, name: code }));
-    
-    // Динамически берем все коды, которые реально есть в базе
     const dbCodes = Object.keys(unifiedRates);
     const dbCurrencies: Currency[] = dbCodes.map(code => ({ code, name: code }));
     
     const all = [
         ...currencyApiPreloadedCurrencies, 
-        ...cryptoCurrencies, 
         ...dbCurrencies
     ];
     
-    // Удаляем дубликаты по коду
     const unique = Array.from(new Map(all.map(item => [item.code, item])).values());
     return unique.sort((a, b) => a.code.localeCompare(b.code));
 }
 
 export async function getLatestRates(pairs: string[], db: Firestore): Promise<ExchangeRate[]> {
-    // Убеждаемся, что база подгружена перед выдачей
     await preFetchInitialRates(db);
     return pairs.map(p => {
         const [from, to] = p.split('/');
@@ -258,7 +322,7 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
         return { 
             rate: current * (0.98 + Math.random() * 0.04), 
             date, 
-            isFallback: !isSameDay(date, new Date()) 
+            isFallback: true 
         };
     }
     return undefined;
