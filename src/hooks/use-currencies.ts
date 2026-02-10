@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import type { Currency } from '@/lib/types';
-import { getCurrencies as getCurrenciesFromLib, cryptoCodes, metalsCodes, popularCryptoCodes } from '@/lib/currencies';
+import { getCurrencies as getCurrenciesFromLib, metalsCodes, popularCryptoCodes, fiatCodes } from '@/lib/currencies';
 import { useTranslation } from './use-translation';
 
 export function useCurrencies() {
@@ -19,10 +19,21 @@ export function useCurrencies() {
             setLoading(true);
             const allCurrencies = await getCurrenciesFromLib();
             
+            // Metals are strictly from the metalsCodes list
             const metals = allCurrencies.filter(c => metalsCodes.includes(c.code));
+            
+            // Popular Crypto are strictly from the popularCryptoCodes list
             const popCrypto = allCurrencies.filter(c => popularCryptoCodes.includes(c.code));
-            const fiat = allCurrencies.filter(c => !cryptoCodes.includes(c.code) && !metalsCodes.includes(c.code));
-            const others = allCurrencies.filter(c => cryptoCodes.includes(c.code) && !metalsCodes.includes(c.code) && !popularCryptoCodes.includes(c.code));
+            
+            // Fiat are ONLY those in the ISO white list (excluding metals just in case)
+            const fiat = allCurrencies.filter(c => fiatCodes.includes(c.code) && !metalsCodes.includes(c.code));
+            
+            // Altcoins are EVERYTHING ELSE (not in fiat list, not in metals list, not in popular crypto list)
+            const others = allCurrencies.filter(c => 
+                !fiatCodes.includes(c.code) && 
+                !metalsCodes.includes(c.code) && 
+                !popularCryptoCodes.includes(c.code)
+            );
             
             setCurrencies(allCurrencies);
             setFiatCurrencies(fiat);

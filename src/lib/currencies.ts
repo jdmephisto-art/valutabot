@@ -8,6 +8,11 @@ let activeDataSource: DataSource = 'nbrb';
 export const metalsCodes = ['XAU', 'XAG', 'XPT', 'XPD'];
 export const popularCryptoCodes = ['BTC', 'ETH', 'TON', 'SOL', 'USDT', 'BNB', 'XRP', 'USDC', 'ADA', 'DOGE', 'TRX', 'LINK', 'MATIC'];
 
+// Standard ISO 4217 Fiat Currency Codes
+export const fiatCodes = [
+    'AED', 'AFN', 'ALL', 'AMD', 'ANG', 'AOA', 'ARS', 'AUD', 'AWG', 'AZN', 'BAM', 'BBD', 'BDT', 'BGN', 'BHD', 'BIF', 'BMD', 'BND', 'BOB', 'BRL', 'BSD', 'BTN', 'BWP', 'BYN', 'BZD', 'CAD', 'CDF', 'CHF', 'CLP', 'CNY', 'COP', 'CRC', 'CUC', 'CUP', 'CVE', 'CZK', 'DJF', 'DKK', 'DOP', 'DZD', 'EGP', 'ERN', 'ETB', 'EUR', 'FJD', 'FKP', 'GBP', 'GEL', 'GGP', 'GHS', 'GIP', 'GMD', 'GNF', 'GTQ', 'GYD', 'HKD', 'HNL', 'HRK', 'HTG', 'HUF', 'IDR', 'ILS', 'IMP', 'INR', 'IQD', 'IRR', 'ISK', 'JEP', 'JMD', 'JOD', 'JPY', 'KES', 'KGS', 'KHR', 'KMF', 'KPW', 'KRW', 'KWD', 'KYD', 'KZT', 'LAK', 'LBP', 'LKR', 'LRD', 'LSL', 'LYD', 'MAD', 'MDL', 'MGA', 'MKD', 'MMK', 'MNT', 'MOP', 'MRU', 'MUR', 'MVR', 'MWK', 'MXN', 'MYR', 'MZN', 'NAD', 'NGN', 'NIO', 'NOK', 'NPR', 'NZD', 'OMR', 'PAB', 'PEN', 'PGK', 'PHP', 'PKR', 'PLN', 'PYG', 'QAR', 'RON', 'RSD', 'RUB', 'RWF', 'SAR', 'SBD', 'SCR', 'SDG', 'SEK', 'SGD', 'SHP', 'SLL', 'SOS', 'SRD', 'SSP', 'STN', 'SYP', 'SZL', 'THB', 'TJS', 'TMT', 'TND', 'TOP', 'TRY', 'TTD', 'TWD', 'TZS', 'UAH', 'UGX', 'USD', 'UYU', 'UZS', 'VES', 'VND', 'VUV', 'WST', 'XAF', 'XCD', 'XDR', 'XOF', 'XPF', 'YER', 'ZAR', 'ZMW', 'ZWL'
+];
+
 export const cryptoCodes = [
     'BTC', 'ETH', 'LTC', 'XRP', 'BCH', 'BTG', 'DASH', 'EOS', 
     'SOL', 'TON', 'DOGE', 'ADA', 'DOT', 'TRX', 'MATIC', 'AVAX', 'LINK',
@@ -15,7 +20,6 @@ export const cryptoCodes = [
     'FET', 'RNDR', 'AGIX', 'UNI', 'AAVE', 'MKR', 'SAND', 'MANA', 'AXS', 'IMX',
     'SHIB', 'PEPE', 'FLOKI', 'BONK', 'FIL', 'AR', 'STORJ', 'HNT', 'THETA',
     'ONDO', 'BNB', 'OKB', 'CRO', 'NEAR', 'ATOM', 'ARB', 'OP',
-    'XAU', 'XAG', 'XPT', 'XPD',
     'BAYC', 'AZUKI', 'PUDGY' 
 ];
 
@@ -24,12 +28,6 @@ let unifiedRates: Record<string, number> = {
     'EUR': 1.08,
     'BYN': 0.31,
     'RUB': 0.0108,
-    'ANG': 0.552,
-    'AFN': 0.0145,
-    'AZN': 0.588,
-    'BAM': 0.552,
-    'AOA': 0.0011,
-    'AWG': 0.555,
     'BTC': 95000,
     'TON': 5.2
 };
@@ -71,7 +69,6 @@ export async function updateAllRatesInCloud(db: Firestore) {
     const newRates: Record<string, number> = { 'USD': 1 };
 
     try {
-        // Каскадный опрос источников
         const [nbrb, cbr, gecko] = await Promise.allSettled([
             fetchNbrb(),
             fetchCbr(),
@@ -80,7 +77,6 @@ export async function updateAllRatesInCloud(db: Firestore) {
 
         const merge = (res: any) => { if (res.status === 'fulfilled' && res.value) Object.assign(newRates, res.value); };
 
-        // Резервные источники (только если основные недоступны или неполны)
         const [cmc, world, fixer, curApi, clayer] = await Promise.allSettled([
             fetchCoinMarketCap(),
             fetchWorldCurrency(),
