@@ -6,21 +6,19 @@ import { doc, getDoc, setDoc, Firestore, onSnapshot } from 'firebase/firestore';
 let activeDataSource: DataSource = 'nbrb';
 
 export const metalsCodes = ['XAU', 'XAG', 'XPT', 'XPD'];
-export const popularCryptoCodes = ['BTC', 'ETH', 'TON', 'SOL', 'USDT', 'BNB', 'XRP', 'USDC', 'ADA', 'DOGE', 'TRX', 'LINK', 'MATIC'];
+export const popularCryptoCodes = ['BTC', 'ETH', 'TON', 'SOL', 'USDT', 'BNB', 'XRP', 'USDC', 'ADA', 'DOGE', 'TRX', 'LINK', 'MATIC', 'AVAX', 'DOT', 'UNI', 'SHIB', 'DAI', 'LTC', 'NEAR'];
 
-// Standard ISO 4217 Fiat Currency Codes
+// Standard ISO 4217 Fiat Currency Codes (White List)
 export const fiatCodes = [
     'AED', 'AFN', 'ALL', 'AMD', 'ANG', 'AOA', 'ARS', 'AUD', 'AWG', 'AZN', 'BAM', 'BBD', 'BDT', 'BGN', 'BHD', 'BIF', 'BMD', 'BND', 'BOB', 'BRL', 'BSD', 'BTN', 'BWP', 'BYN', 'BZD', 'CAD', 'CDF', 'CHF', 'CLP', 'CNY', 'COP', 'CRC', 'CUC', 'CUP', 'CVE', 'CZK', 'DJF', 'DKK', 'DOP', 'DZD', 'EGP', 'ERN', 'ETB', 'EUR', 'FJD', 'FKP', 'GBP', 'GEL', 'GGP', 'GHS', 'GIP', 'GMD', 'GNF', 'GTQ', 'GYD', 'HKD', 'HNL', 'HRK', 'HTG', 'HUF', 'IDR', 'ILS', 'IMP', 'INR', 'IQD', 'IRR', 'ISK', 'JEP', 'JMD', 'JOD', 'JPY', 'KES', 'KGS', 'KHR', 'KMF', 'KPW', 'KRW', 'KWD', 'KYD', 'KZT', 'LAK', 'LBP', 'LKR', 'LRD', 'LSL', 'LYD', 'MAD', 'MDL', 'MGA', 'MKD', 'MMK', 'MNT', 'MOP', 'MRU', 'MUR', 'MVR', 'MWK', 'MXN', 'MYR', 'MZN', 'NAD', 'NGN', 'NIO', 'NOK', 'NPR', 'NZD', 'OMR', 'PAB', 'PEN', 'PGK', 'PHP', 'PKR', 'PLN', 'PYG', 'QAR', 'RON', 'RSD', 'RUB', 'RWF', 'SAR', 'SBD', 'SCR', 'SDG', 'SEK', 'SGD', 'SHP', 'SLL', 'SOS', 'SRD', 'SSP', 'STN', 'SYP', 'SZL', 'THB', 'TJS', 'TMT', 'TND', 'TOP', 'TRY', 'TTD', 'TWD', 'TZS', 'UAH', 'UGX', 'USD', 'UYU', 'UZS', 'VES', 'VND', 'VUV', 'WST', 'XAF', 'XCD', 'XDR', 'XOF', 'XPF', 'YER', 'ZAR', 'ZMW', 'ZWL'
 ];
 
-export const cryptoCodes = [
-    'BTC', 'ETH', 'LTC', 'XRP', 'BCH', 'BTG', 'DASH', 'EOS', 
-    'SOL', 'TON', 'DOGE', 'ADA', 'DOT', 'TRX', 'MATIC', 'AVAX', 'LINK',
-    'USDT', 'USDC', 'DAI', 'NOT', 'DOGS',
-    'FET', 'RNDR', 'AGIX', 'UNI', 'AAVE', 'MKR', 'SAND', 'MANA', 'AXS', 'IMX',
-    'SHIB', 'PEPE', 'FLOKI', 'BONK', 'FIL', 'AR', 'STORJ', 'HNT', 'THETA',
-    'ONDO', 'BNB', 'OKB', 'CRO', 'NEAR', 'ATOM', 'ARB', 'OP',
-    'BAYC', 'AZUKI', 'PUDGY' 
+// Curated list of high-interest Altcoins (removed "junk" like 611, ABC etc.)
+export const curatedAltcoinCodes = [
+    'NOT', 'DOGS', 'FET', 'RNDR', 'AGIX', 'AAVE', 'MKR', 'SAND', 'MANA', 'AXS', 'IMX',
+    'PEPE', 'FLOKI', 'BONK', 'FIL', 'AR', 'STORJ', 'HNT', 'THETA', 'ONDO', 'OKB', 'CRO',
+    'ATOM', 'ARB', 'OP', 'ICP', 'ETC', 'XMR', 'XLM', 'SUI', 'APT', 'HBAR', 'STX', 'TAO',
+    'TIA', 'SEI', 'INJ', 'GALA', '1INCH', 'GRT', 'RUNE', 'LDO', 'BCH', 'FTM', 'EOS', 'VET'
 ];
 
 let unifiedRates: Record<string, number> = { 
@@ -172,7 +170,7 @@ async function fetchCoinGecko() {
 
 async function fetchCoinMarketCap() {
     try {
-        const res = await fetch('/api/cmc?endpoint=cryptocurrency/listings/latest&limit=200', { cache: 'no-store' });
+        const res = await fetch('/api/cmc?endpoint=cryptocurrency/listings/latest&limit=100', { cache: 'no-store' });
         if (!res.ok) return null;
         const data = await res.json();
         const rates: Record<string, number> = {};
@@ -259,9 +257,16 @@ export function findRate(from: string, to: string): number | undefined {
 export async function getCurrencies(): Promise<Currency[]> {
     const dbCodes = Object.keys(unifiedRates);
     const preloadedMap = new Map(currencyApiPreloadedCurrencies.map(c => [c.code, c]));
-    const allCodes = Array.from(new Set([...dbCodes, ...preloadedMap.keys()]));
     
-    const result = allCodes.map(code => {
+    // Approved List = ISO Fiat + Metals + Popular Crypto + Curated Altcoins
+    const approvedCodes = new Set([...fiatCodes, ...metalsCodes, ...popularCryptoCodes, ...curatedAltcoinCodes]);
+    
+    const allAvailableCodes = Array.from(new Set([...dbCodes, ...preloadedMap.keys()]));
+    
+    // Filter out anything not in the approved list
+    const filteredCodes = allAvailableCodes.filter(code => approvedCodes.has(code));
+    
+    const result = filteredCodes.map(code => {
         const preloaded = preloadedMap.get(code);
         return {
             code,
@@ -300,7 +305,8 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
 
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
     const baseRate = findRate(from, to) || 1;
-    const volatility = cryptoCodes.includes(from) || cryptoCodes.includes(to) ? 0.03 : 0.002;
+    const isCrypto = curatedAltcoinCodes.includes(from) || curatedAltcoinCodes.includes(to) || popularCryptoCodes.includes(from) || popularCryptoCodes.includes(to);
+    const volatility = isCrypto ? 0.03 : 0.002;
     try {
         const days = eachDayOfInterval({ start: startOfDay(startDate), end: startOfDay(endDate) });
         let sampledDays = days;
