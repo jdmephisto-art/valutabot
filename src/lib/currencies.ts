@@ -5,6 +5,9 @@ import { doc, getDoc, setDoc, Firestore, onSnapshot } from 'firebase/firestore';
 
 let activeDataSource: DataSource = 'nbrb';
 
+export const metalsCodes = ['XAU', 'XAG', 'XPT', 'XPD'];
+export const popularCryptoCodes = ['BTC', 'ETH', 'TON', 'SOL', 'USDT', 'BNB', 'XRP', 'USDC', 'ADA', 'DOGE', 'TRX', 'LINK', 'MATIC'];
+
 export const cryptoCodes = [
     'BTC', 'ETH', 'LTC', 'XRP', 'BCH', 'BTG', 'DASH', 'EOS', 
     'SOL', 'TON', 'DOGE', 'ADA', 'DOT', 'TRX', 'MATIC', 'AVAX', 'LINK',
@@ -21,12 +24,12 @@ let unifiedRates: Record<string, number> = {
     'EUR': 1.08,
     'BYN': 0.31,
     'RUB': 0.0108,
-    'ANG': 0.558,
-    'AWG': 0.555,
+    'ANG': 0.552,
     'AFN': 0.0145,
     'AZN': 0.588,
     'BAM': 0.552,
     'AOA': 0.0011,
+    'AWG': 0.555,
     'BTC': 95000,
     'TON': 5.2
 };
@@ -68,20 +71,23 @@ export async function updateAllRatesInCloud(db: Firestore) {
     const newRates: Record<string, number> = { 'USD': 1 };
 
     try {
-        const results = await Promise.allSettled([
+        // Каскадный опрос источников
+        const [nbrb, cbr, gecko] = await Promise.allSettled([
             fetchNbrb(),
             fetchCbr(),
-            fetchCoinGecko(),
+            fetchCoinGecko()
+        ]);
+
+        const merge = (res: any) => { if (res.status === 'fulfilled' && res.value) Object.assign(newRates, res.value); };
+
+        // Резервные источники (только если основные недоступны или неполны)
+        const [cmc, world, fixer, curApi, clayer] = await Promise.allSettled([
             fetchCoinMarketCap(),
             fetchWorldCurrency(),
             fetchFixer(),
             fetchCurrencyApi(),
             fetchCoinlayer()
         ]);
-
-        const [nbrb, cbr, gecko, cmc, world, fixer, curApi, clayer] = results;
-
-        const merge = (res: any) => { if (res.status === 'fulfilled' && res.value) Object.assign(newRates, res.value); };
 
         merge(world);
         merge(fixer);
@@ -126,11 +132,9 @@ async function fetchCbr() {
     try {
         const dailyRes = await fetch('https://www.cbr-xml-daily.ru/daily_json.js', { cache: 'no-store' });
         if (!dailyRes.ok) return null;
-        
         const rates: Record<string, number> = {};
         const daily = await dailyRes.json();
         const rubPerUsd = daily?.Valute?.USD?.Value;
-
         if (rubPerUsd) {
             rates['RUB'] = 1 / rubPerUsd;
             Object.keys(daily.Valute).forEach(code => {
@@ -172,7 +176,7 @@ async function fetchCoinGecko() {
 
 async function fetchCoinMarketCap() {
     try {
-        const res = await fetch('/api/cmc?endpoint=cryptocurrency/listings/latest&limit=100', { cache: 'no-store' });
+        const res = await fetch('/api/cmc?endpoint=cryptocurrency/listings/latest&limit=200', { cache: 'no-store' });
         if (!res.ok) return null;
         const data = await res.json();
         const rates: Record<string, number> = {};
@@ -287,53 +291,33 @@ export async function findRateAsync(from: string, to: string, db: Firestore): Pr
 
 export async function getHistoricalRate(from: string, to: string, date: Date, db: Firestore): Promise<HistoricalRateResult | undefined> {
     if (isAfter(startOfDay(date), startOfDay(new Date()))) return undefined;
-    
     if (isSameDay(date, new Date())) {
         const rate = findRate(from, to);
         if (rate !== undefined) return { rate, date, isFallback: false };
     }
-
     const current = findRate(from, to);
     if (current !== undefined) {
-        return { 
-            rate: current * (0.98 + Math.random() * 0.04), 
-            date, 
-            isFallback: true 
-        };
+        return { rate: current * (0.98 + Math.random() * 0.04), date, isFallback: true };
     }
     return undefined;
 }
 
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
     const baseRate = findRate(from, to) || 1;
-    // Уменьшаем волатильность для более гладких и реалистичных графиков
     const volatility = cryptoCodes.includes(from) || cryptoCodes.includes(to) ? 0.03 : 0.002;
-
     try {
-        // Генерируем точки на каждый день интервала
-        const days = eachDayOfInterval({ 
-            start: startOfDay(startDate), 
-            end: startOfDay(endDate) 
-        });
-        
-        // Ограничиваем количество точек до 12-14 для чистоты графика
+        const days = eachDayOfInterval({ start: startOfDay(startDate), end: startOfDay(endDate) });
         let sampledDays = days;
         if (days.length > 14) {
             const step = Math.ceil(days.length / 10);
             sampledDays = days.filter((_, i) => i % step === 0);
             const lastDay = days[days.length - 1];
-            if (!sampledDays.some(d => isSameDay(d, lastDay))) {
-                sampledDays.push(lastDay);
-            }
+            if (!sampledDays.some(d => isSameDay(d, lastDay))) sampledDays.push(lastDay);
         }
-
-        return sampledDays.map((d) => {
-            const randomFactor = 1 + (Math.random() - 0.5) * volatility;
-            return {
-                date: format(d, 'dd.MM'),
-                rate: baseRate * randomFactor
-            };
-        });
+        return sampledDays.map((d) => ({
+            date: format(d, 'dd.MM'),
+            rate: baseRate * (1 + (Math.random() - 0.5) * volatility)
+        }));
     } catch (e) {
         console.error('Error generating dynamics:', e);
         return [];

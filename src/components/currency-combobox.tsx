@@ -27,7 +27,7 @@ export function CurrencyCombobox({
   placeholder,
   disabled,
 }: CurrencyComboboxProps) {
-  const { currencies, fiatCurrencies, cryptoCurrencies, loading } = useCurrencies();
+  const { currencies, fiatCurrencies, metalCurrencies, popularCrypto, altcoins, loading } = useCurrencies();
   const { t, getCurrencyName } = useTranslation();
   const [open, setOpen] = React.useState(false);
   const [searchTerm, setSearchTerm] = React.useState('');
@@ -40,7 +40,9 @@ export function CurrencyCombobox({
   };
 
   const filteredFiat = React.useMemo(() => fiatCurrencies.filter(filterByTerm), [fiatCurrencies, searchTerm, getCurrencyName]);
-  const filteredCrypto = React.useMemo(() => cryptoCurrencies.filter(filterByTerm), [cryptoCurrencies, searchTerm, getCurrencyName]);
+  const filteredMetals = React.useMemo(() => metalCurrencies.filter(filterByTerm), [metalCurrencies, searchTerm, getCurrencyName]);
+  const filteredPopular = React.useMemo(() => popularCrypto.filter(filterByTerm), [popularCrypto, searchTerm, getCurrencyName]);
+  const filteredAltcoins = React.useMemo(() => altcoins.filter(filterByTerm), [altcoins, searchTerm, getCurrencyName]);
 
   const selectedCurrency = React.useMemo(
     () => currencies.find((currency) => currency.code.toLowerCase() === value.toLowerCase()),
@@ -109,21 +111,33 @@ export function CurrencyCombobox({
             value={searchTerm}
             onValueChange={setSearchTerm}
           />
-          <ScrollArea className="h-[250px] p-1">
-            {filteredFiat.length === 0 && filteredCrypto.length === 0 ? (
+          <ScrollArea className="h-[350px] p-1">
+            {filteredFiat.length === 0 && filteredMetals.length === 0 && filteredPopular.length === 0 && filteredAltcoins.length === 0 ? (
                 <div className="p-2 text-center text-sm text-muted-foreground">{t('combobox.notFound')}</div>
             ) : (
                 <>
                     {filteredFiat.length > 0 && (
                         <>
-                            <div className="px-2 pt-2 pb-1 text-xs font-medium text-muted-foreground">{t('combobox.fiat')}</div>
+                            <div className="px-2 pt-2 pb-1 text-xs font-bold text-primary uppercase tracking-wider">{t('combobox.fiat')}</div>
                             {filteredFiat.map(renderCurrencyOption)}
                         </>
                     )}
-                    {filteredCrypto.length > 0 && (
+                    {filteredMetals.length > 0 && (
                         <>
-                            <div className="px-2 pt-2 pb-1 text-xs font-medium text-muted-foreground">{t('combobox.crypto')}</div>
-                            {filteredCrypto.map(renderCurrencyOption)}
+                            <div className="px-2 pt-4 pb-1 text-xs font-bold text-amber-600 uppercase tracking-wider">{t('combobox.metals')}</div>
+                            {filteredMetals.map(renderCurrencyOption)}
+                        </>
+                    )}
+                    {filteredPopular.length > 0 && (
+                        <>
+                            <div className="px-2 pt-4 pb-1 text-xs font-bold text-positive uppercase tracking-wider">{t('combobox.popularCrypto')}</div>
+                            {filteredPopular.map(renderCurrencyOption)}
+                        </>
+                    )}
+                    {filteredAltcoins.length > 0 && (
+                        <>
+                            <div className="px-2 pt-4 pb-1 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t('combobox.altcoins')}</div>
+                            {filteredAltcoins.map(renderCurrencyOption)}
                         </>
                     )}
                 </>

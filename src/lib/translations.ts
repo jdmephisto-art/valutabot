@@ -186,8 +186,10 @@ export const translations = {
       placeholder: 'Select a currency...',
       searchPlaceholder: 'Search currency...',
       notFound: 'Currency not found.',
-      fiat: 'Fiat currencies',
-      crypto: 'Crypto & Assets',
+      fiat: 'Fiat Currencies',
+      metals: 'Precious Metals',
+      popularCrypto: 'Popular Crypto',
+      altcoins: 'Altcoins & Tokens',
     }
   },
   ru: {
@@ -378,7 +380,9 @@ export const translations = {
       searchPlaceholder: 'Поиск валюты...',
       notFound: 'Валюта не найдена.',
       fiat: 'Фиатные валюты',
-      crypto: 'Криптовалюты и активы',
+      metals: 'Драгоценные металлы',
+      popularCrypto: 'Популярная крипта',
+      altcoins: 'Альткоины и токены',
     }
   }
 };
