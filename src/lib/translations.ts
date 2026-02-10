@@ -370,7 +370,19 @@ export const translations = {
       'LINK': 'Chainlink',
       'MATIC': 'Polygon',
       'NOT': 'Notcoin',
-      'DOGS': 'DOGS'
+      'DOGS': 'DOGS',
+      '1INCH': '1inch Network',
+      'AAVE': 'Aave',
+      'OG': 'OG Fan Token',
+      'ABC': 'Alphacat',
+      '611': 'SixEleven',
+      'A': 'Alpha Token',
+      'AB': 'ABCC Token',
+      '2Z': '2Z Token',
+      'ARB': 'Arbitrum',
+      'OP': 'Optimism',
+      'UNI': 'Uniswap',
+      'LDO': 'Lido DAO'
     }
   },
   ru: {
@@ -630,7 +642,7 @@ export const translations = {
       'ILS': 'Израильский шекель',
       'IMP': 'Мэнский фунт',
       'INR': 'Индийская рупия',
-      'IQD': 'Иракский динар',
+      'IQD': 'Ираqi динар',
       'IRR': 'Иранский риал',
       'ISK': 'Исландская крона',
       'JEP': 'Джерсийский фунт',
@@ -744,7 +756,19 @@ export const translations = {
       'LINK': 'Чейнлинк',
       'MATIC': 'Полигон',
       'NOT': 'Ноткоин',
-      'DOGS': 'ДОГС'
+      'DOGS': 'ДОГС',
+      '1INCH': '1inch Network',
+      'AAVE': 'Aave',
+      'OG': 'OG Fan Token',
+      'ABC': 'Alphacat',
+      '611': 'SixEleven',
+      'A': 'Alpha Token',
+      'AB': 'ABCC Token',
+      '2Z': '2Z Token',
+      'ARB': 'Arbitrum',
+      'OP': 'Optimism',
+      'UNI': 'Uniswap',
+      'LDO': 'Lido DAO'
     }
   }
 };

@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -55,30 +56,35 @@ export function CurrencyCombobox({
     }
   }, [open]);
   
-  const renderCurrencyOption = (currency: Currency) => (
-    <button
-        key={currency.code}
-        onClick={() => {
-            onChange(currency.code);
-            setOpen(false);
-        }}
-        className={cn(
-            "w-full text-left p-2 text-sm flex items-start justify-start hover:bg-accent rounded-sm",
-            value.toLowerCase() === currency.code.toLowerCase() && "bg-accent"
-        )}
-    >
-        <Check
+  const renderCurrencyOption = (currency: Currency) => {
+    const name = getCurrencyName(currency.code);
+    const hasProperName = name !== currency.code;
+
+    return (
+        <button
+            key={currency.code}
+            onClick={() => {
+                onChange(currency.code);
+                setOpen(false);
+            }}
             className={cn(
-            'mr-2 h-4 w-4 shrink-0 mt-0.5',
-            value.toLowerCase() === currency.code.toLowerCase() ? 'opacity-100' : 'opacity-0'
+                "w-full text-left p-2 text-sm flex items-start justify-start hover:bg-accent rounded-sm",
+                value.toLowerCase() === currency.code.toLowerCase() && "bg-accent"
             )}
-        />
-        <div className="flex-1 whitespace-normal text-left">
-           <span className="font-semibold">{currency.code}</span>
-           <span className="text-xs ml-1">{getCurrencyName(currency.code)}</span>
-        </div>
-    </button>
-  );
+        >
+            <Check
+                className={cn(
+                'mr-2 h-4 w-4 shrink-0 mt-0.5',
+                value.toLowerCase() === currency.code.toLowerCase() ? 'opacity-100' : 'opacity-0'
+                )}
+            />
+            <div className="flex-1 whitespace-normal text-left">
+               <span className="font-semibold">{currency.code}</span>
+               {hasProperName && <span className="text-xs ml-1 text-muted-foreground">{name}</span>}
+            </div>
+        </button>
+    );
+  };
 
 
   return (
