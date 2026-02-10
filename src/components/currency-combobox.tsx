@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -33,23 +32,32 @@ export function CurrencyCombobox({
   const [open, setOpen] = React.useState(false);
   const [searchTerm, setSearchTerm] = React.useState('');
 
-  const filterByTerm = (currency: Currency) => {
-    if (!searchTerm) return true;
-    const term = searchTerm.toLowerCase();
-    return currency.code.toLowerCase().includes(term) ||
-           getCurrencyName(currency.code).toLowerCase().includes(term);
-  };
-
-  const filteredFiat = React.useMemo(() => fiatCurrencies.filter(filterByTerm), [fiatCurrencies, searchTerm, getCurrencyName]);
-  const filteredMetals = React.useMemo(() => metalCurrencies.filter(filterByTerm), [metalCurrencies, searchTerm, getCurrencyName]);
-  const filteredPopular = React.useMemo(() => popularCrypto.filter(filterByTerm), [popularCrypto, searchTerm, getCurrencyName]);
-  const filteredAltcoins = React.useMemo(() => altcoins.filter(filterByTerm), [altcoins, searchTerm, getCurrencyName]);
-
   const selectedCurrency = React.useMemo(
     () => currencies.find((currency) => currency.code.toLowerCase() === value.toLowerCase()),
     [currencies, value]
   );
   
+  // High performance filtering: done once when searchTerm or currencies change
+  const filteredData = React.useMemo(() => {
+    const term = searchTerm.toLowerCase();
+    const filterFn = (c: Currency) => {
+        if (!term) return true;
+        return c.code.toLowerCase().includes(term) || getCurrencyName(c.code).toLowerCase().includes(term);
+    };
+    
+    return {
+        fiat: fiatCurrencies.filter(filterFn),
+        metals: metalCurrencies.filter(filterFn),
+        popular: popularCrypto.filter(filterFn),
+        alt: altcoins.filter(filterFn)
+    };
+  }, [fiatCurrencies, metalCurrencies, popularCrypto, altcoins, searchTerm, getCurrencyName]);
+
+  const isEmpty = filteredData.fiat.length === 0 && 
+                  filteredData.metals.length === 0 && 
+                  filteredData.popular.length === 0 && 
+                  filteredData.alt.length === 0;
+
   React.useEffect(() => {
     if (!open) {
       setSearchTerm('');
@@ -68,7 +76,7 @@ export function CurrencyCombobox({
                 setOpen(false);
             }}
             className={cn(
-                "w-full text-left p-2 text-sm flex items-start justify-start hover:bg-accent rounded-sm",
+                "w-full text-left p-2 text-sm flex items-start justify-start hover:bg-accent rounded-sm transition-colors",
                 value.toLowerCase() === currency.code.toLowerCase() && "bg-accent"
             )}
         >
@@ -110,43 +118,44 @@ export function CurrencyCombobox({
           <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-72 p-0">
-        <Command>
+      <PopoverContent className="w-72 p-0 shadow-xl border-border/60">
+        <Command shouldFilter={false}>
           <CommandInput 
             placeholder={t('combobox.searchPlaceholder')}
             value={searchTerm}
             onValueChange={setSearchTerm}
+            className="border-none focus:ring-0"
           />
           <ScrollArea className="h-[350px] p-1">
-            {filteredFiat.length === 0 && filteredMetals.length === 0 && filteredPopular.length === 0 && filteredAltcoins.length === 0 ? (
-                <div className="p-2 text-center text-sm text-muted-foreground">{t('combobox.notFound')}</div>
+            {isEmpty ? (
+                <div className="p-4 text-center text-sm text-muted-foreground animate-in fade-in">{t('combobox.notFound')}</div>
             ) : (
-                <>
-                    {filteredFiat.length > 0 && (
-                        <>
-                            <div className="px-2 pt-2 pb-1 text-xs font-bold text-primary uppercase tracking-wider">{t('combobox.fiat')}</div>
-                            {filteredFiat.map(renderCurrencyOption)}
-                        </>
+                <div className="space-y-1">
+                    {filteredData.fiat.length > 0 && (
+                        <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+                            <div className="px-2 pt-2 pb-1 text-[10px] font-bold text-primary uppercase tracking-widest opacity-70">{t('combobox.fiat')}</div>
+                            {filteredData.fiat.map(renderCurrencyOption)}
+                        </div>
                     )}
-                    {filteredMetals.length > 0 && (
-                        <>
-                            <div className="px-2 pt-4 pb-1 text-xs font-bold text-amber-600 uppercase tracking-wider">{t('combobox.metals')}</div>
-                            {filteredMetals.map(renderCurrencyOption)}
-                        </>
+                    {filteredData.metals.length > 0 && (
+                        <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+                            <div className="px-2 pt-4 pb-1 text-[10px] font-bold text-amber-600 uppercase tracking-widest opacity-70">{t('combobox.metals')}</div>
+                            {filteredData.metals.map(renderCurrencyOption)}
+                        </div>
                     )}
-                    {filteredPopular.length > 0 && (
-                        <>
-                            <div className="px-2 pt-4 pb-1 text-xs font-bold text-positive uppercase tracking-wider">{t('combobox.popularCrypto')}</div>
-                            {filteredPopular.map(renderCurrencyOption)}
-                        </>
+                    {filteredData.popular.length > 0 && (
+                        <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+                            <div className="px-2 pt-4 pb-1 text-[10px] font-bold text-positive uppercase tracking-widest opacity-70">{t('combobox.popularCrypto')}</div>
+                            {filteredData.popular.map(renderCurrencyOption)}
+                        </div>
                     )}
-                    {filteredAltcoins.length > 0 && (
-                        <>
-                            <div className="px-2 pt-4 pb-1 text-xs font-bold text-muted-foreground uppercase tracking-wider">{t('combobox.altcoins')}</div>
-                            {filteredAltcoins.map(renderCurrencyOption)}
-                        </>
+                    {filteredData.alt.length > 0 && (
+                        <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+                            <div className="px-2 pt-4 pb-1 text-[10px] font-bold text-muted-foreground uppercase tracking-widest opacity-70">{t('combobox.altcoins')}</div>
+                            {filteredData.alt.map(renderCurrencyOption)}
+                        </div>
                     )}
-                </>
+                </div>
             )}
           </ScrollArea>
         </Command>
