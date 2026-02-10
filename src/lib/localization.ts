@@ -30,13 +30,9 @@ export function getLang(): Language {
 
 export function getCurrencyName(code: string, language: Language): string {
     const names = currencyNames[language] as Record<string, string> | undefined;
+    
     let name = names?.[code];
 
-    if (!name && language === 'ru') {
-        const englishNames = currencyNames['en'] as Record<string, string>;
-        name = englishNames?.[code];
-    }
-    
     if (!name) {
         const preload = currencyApiPreloadedCurrencies.find(c => c.code === code);
         name = preload?.name;
