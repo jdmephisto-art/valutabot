@@ -8,9 +8,18 @@ import { FirebaseClientProvider } from '@/firebase';
 import Script from 'next/script';
 
 export const metadata: Metadata = {
-  title: 'ВалютаБот / CurrencyBot',
-  description: 'Телеграм бот для курсов валют / Telegram bot for currency rates',
+  title: 'ВалютаБот | Мониторинг курсов валют и крипты',
+  description: 'Интеллектуальный помощник для мониторинга курсов валют, криптовалют, металлов и NFT-активов в реальном времени.',
   manifest: '/manifest.json',
+  metadataBase: new URL('https://valutabot.app'), // Замените на ваш будущий домен
+  openGraph: {
+    title: 'ВалютаБот - Ваш финансовый трекер в Telegram стиле',
+    description: 'Конвертер, графики, уведомления о курсах и отслеживание активов.',
+    url: 'https://valutabot.app',
+    siteName: 'ВалютаБот',
+    locale: 'ru_RU',
+    type: 'website',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
@@ -44,18 +53,6 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
-        <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"
-          strategy="afterInteractive"
-        />
-        <Script id="google-analytics" strategy="afterInteractive">
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-XXXXXXXXXX');
-          `}
-        </Script>
       </head>
       <body
         className={cn('font-body antialiased', 'min-h-screen bg-background')}
