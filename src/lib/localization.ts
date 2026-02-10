@@ -1,6 +1,5 @@
 import { translations as allTranslations, currencyNames } from './translations';
 import type { Language } from './types';
-import { currencyApiPreloadedCurrencies } from './preloaded-data';
 
 let lang: Language = 'ru';
 
@@ -30,15 +29,7 @@ export function getLang(): Language {
 
 export function getCurrencyName(code: string, language: Language): string {
     const names = currencyNames[language] as Record<string, string> | undefined;
-    
-    let name = names?.[code];
-
-    if (!name) {
-        const preload = currencyApiPreloadedCurrencies.find(c => c.code === code);
-        name = preload?.name;
-    }
-    
-    return name ?? code;
+    return names?.[code] ?? code;
 }
 
 export const translations = allTranslations;
