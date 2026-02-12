@@ -1,24 +1,38 @@
-
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
 import { LanguageManager } from '@/components/language-manager';
 import { FirebaseClientProvider } from '@/firebase';
-import Script from 'next/script';
 
 export const metadata: Metadata = {
   title: 'ВалютаБот | Мониторинг курсов валют и крипты',
-  description: 'Интеллектуальный помощник для мониторинга курсов валют, криптовалют, металлов и NFT-активов в реальном времени.',
+  description: 'Интеллектуальный помощник для мониторинга курсов валют, криптовалют, металлов и NFT в реальном времени.',
   manifest: '/manifest.json',
-  metadataBase: new URL('https://valutabot.app'), // Замените на ваш будущий домен
+  metadataBase: new URL('https://valutabot.app'),
+  keywords: ['курс валют', 'криптовалюта', 'конвертер', 'биткоин', 'телеграм бот', 'финансы'],
+  authors: [{ name: 'ValutaBot Team' }],
   openGraph: {
-    title: 'ВалютаБот - Ваш финансовый трекер в Telegram стиле',
-    description: 'Конвертер, графики, уведомления о курсах и отслеживание активов.',
+    title: 'ВалютаБот - Ваш финансовый трекер',
+    description: 'Конвертер, графики, уведомления о курсах и отслеживание активов в стиле Telegram.',
     url: 'https://valutabot.app',
     siteName: 'ВалютаБот',
+    images: [
+      {
+        url: 'https://picsum.photos/seed/valuta-og/1200/630',
+        width: 1200,
+        height: 630,
+        alt: 'ВалютаБот Интерфейс',
+      },
+    ],
     locale: 'ru_RU',
     type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'ВалютаБот | Мониторинг курсов',
+    description: 'Умный конвертер и трекер валют в вашем кармане.',
+    images: ['https://picsum.photos/seed/valuta-og/1200/630'],
   },
   appleWebApp: {
     capable: true,
@@ -28,7 +42,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#3b82f6',
+  themeColor: '#2962FF',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
@@ -40,6 +54,20 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "ВалютаБот",
+    "description": "Мониторинг курсов валют и криптовалют в реальном времени.",
+    "applicationCategory": "FinanceApplication",
+    "operatingSystem": "All",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    }
+  };
+
   return (
     <html lang="ru">
       <head>
@@ -52,6 +80,10 @@ export default function RootLayout({
         <link
           href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
           rel="stylesheet"
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
       <body
