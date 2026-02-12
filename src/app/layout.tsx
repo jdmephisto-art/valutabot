@@ -10,13 +10,13 @@ export const metadata: Metadata = {
   title: 'ВалютаБот | Мониторинг курсов валют и крипты',
   description: 'Интеллектуальный помощник для мониторинга курсов валют, криптовалют, металлов и NFT в реальном времени. Умный конвертер и уведомления в Telegram.',
   manifest: '/manifest.json',
-  metadataBase: new URL('https://valutabot.app'),
+  metadataBase: new URL('https://valutabot.web.app'),
   keywords: ['курс валют', 'криптовалюта', 'конвертер', 'биткоин', 'телеграм бот', 'финансы', 'мониторинг'],
   authors: [{ name: 'ValutaBot Team' }],
   openGraph: {
     title: 'ВалютаБот - Ваш финансовый трекер',
     description: 'Конвертер, графики, уведомления о курсах и отслеживание активов в стиле Telegram.',
-    url: 'https://valutabot.app',
+    url: 'https://valutabot.web.app',
     siteName: 'ВалютаБот',
     images: [
       {
