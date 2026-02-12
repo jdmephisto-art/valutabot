@@ -8,6 +8,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: '/',
       disallow: '/api/',
     },
-    sitemap: 'https://valutabot.web.app/sitemap.xml',
+    sitemap: 'https://valutabot.vercel.app/sitemap.xml',
   };
 }
