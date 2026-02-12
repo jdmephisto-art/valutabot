@@ -1,3 +1,4 @@
+
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
@@ -7,10 +8,10 @@ import { FirebaseClientProvider } from '@/firebase';
 
 export const metadata: Metadata = {
   title: 'ВалютаБот | Мониторинг курсов валют и крипты',
-  description: 'Интеллектуальный помощник для мониторинга курсов валют, криптовалют, металлов и NFT в реальном времени.',
+  description: 'Интеллектуальный помощник для мониторинга курсов валют, криптовалют, металлов и NFT в реальном времени. Умный конвертер и уведомления в Telegram.',
   manifest: '/manifest.json',
   metadataBase: new URL('https://valutabot.app'),
-  keywords: ['курс валют', 'криптовалюта', 'конвертер', 'биткоин', 'телеграм бот', 'финансы'],
+  keywords: ['курс валют', 'криптовалюта', 'конвертер', 'биткоин', 'телеграм бот', 'финансы', 'мониторинг'],
   authors: [{ name: 'ValutaBot Team' }],
   openGraph: {
     title: 'ВалютаБот - Ваш финансовый трекер',
