@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Box } from 'lucide-react';
+import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Box, ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LatestRates } from '@/components/latest-rates';
@@ -65,6 +65,15 @@ export function ChatInterface() {
                 behavior: 'smooth'
             });
         }, 150);
+    }
+  }, []);
+
+  const scrollToTop = useCallback(() => {
+    if (scrollAreaRef.current) {
+        scrollAreaRef.current.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
     }
   }, []);
 
@@ -215,26 +224,53 @@ export function ChatInterface() {
           <Button variant="ghost" size="icon" onClick={resetChat}><Eraser className="h-5 w-5" /></Button>
         </div>
       </header>
-      <div ref={scrollAreaRef} className="flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth">
-        <AnimatePresence initial={false}>
-          {messages.map((message) => (
-            <motion.div key={message.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={cn('flex items-end gap-2', message.sender === 'user' ? 'justify-end' : 'justify-start')}>
-              <div className={cn(
-                'rounded-lg', 
-                message.component ? 'w-full p-0 overflow-hidden' : 'max-w-[85%] p-3',
-                message.sender === 'user' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'
-              )}>
-                {message.text && <p className={cn(message.component && "p-3 pb-0")}>{message.text}</p>}
-                {message.component}
-                {message.options && (
-                  <div className="flex flex-col gap-2 mt-3 p-3 pt-0">
-                    {message.options.map(option => <Button key={option.id} variant="outline" size="sm" onClick={() => handleActionClick(option.id)} className="justify-start"><option.icon className="mr-2 h-4 w-4" />{option.label}</Button>)}
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
+      
+      <div className="flex-1 relative overflow-hidden">
+        <div ref={scrollAreaRef} className="h-full overflow-y-auto p-4 space-y-6 scroll-smooth">
+          <AnimatePresence initial={false}>
+            {messages.map((message) => (
+              <motion.div key={message.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={cn('flex items-end gap-2', message.sender === 'user' ? 'justify-end' : 'justify-start')}>
+                <div className={cn(
+                  'rounded-lg', 
+                  message.component ? 'w-full p-0 overflow-hidden' : 'max-w-[85%] p-3',
+                  message.sender === 'user' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'
+                )}>
+                  {message.text && <p className={cn(message.component && "p-3 pb-0")}>{message.text}</p>}
+                  {message.component}
+                  {message.options && (
+                    <div className="flex flex-col gap-2 mt-3 p-3 pt-0">
+                      {message.options.map(option => <Button key={option.id} variant="outline" size="sm" onClick={() => handleActionClick(option.id)} className="justify-start"><option.icon className="mr-2 h-4 w-4" />{option.label}</Button>)}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+
+        {/* Floating Scroll Buttons */}
+        {messages.length > 3 && (
+          <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-10">
+            <Button 
+              variant="secondary" 
+              size="icon" 
+              onClick={scrollToTop}
+              className="rounded-full shadow-lg h-9 w-9 bg-background/80 backdrop-blur hover:bg-background"
+              title="To Top"
+            >
+              <ArrowUp className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant="secondary" 
+              size="icon" 
+              onClick={scrollToBottom}
+              className="rounded-full shadow-lg h-9 w-9 bg-background/80 backdrop-blur hover:bg-background"
+              title="To Bottom"
+            >
+              <ArrowDown className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
