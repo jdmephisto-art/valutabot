@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Box, ArrowUp, ArrowDown, Send } from 'lucide-react';
+import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Box, ArrowUp, ArrowDown, Send, CircleHelp, Smartphone, Apple, Monitor } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LatestRates } from '@/components/latest-rates';
@@ -47,6 +47,7 @@ export function ChatInterface() {
   const [dataSource, setDataSourceState] = useState<DataSource>(getDataSource());
   const [autoClearMinutes, setAutoClearMinutes] = useState(0);
   const [autoClearPopoverOpen, setAutoClearPopoverOpen] = useState(false);
+  const [pwaPopoverOpen, setPwaPopoverOpen] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const componentId = useId();
@@ -206,7 +207,7 @@ export function ChatInterface() {
             size="icon" 
             className="text-primary hover:bg-primary/10"
             title={t('chat.openInTelegram')}
-            onClick={() => window.open('https://t.me/jdmephisto_bot', '_blank')}
+            onClick={() => window.open('https://t.me/CurrencyAll_bot', '_blank')}
           >
             <Send className="h-5 w-5" />
           </Button>
@@ -231,6 +232,45 @@ export function ChatInterface() {
             </DropdownMenuContent>
           </DropdownMenu>
           <Button variant="ghost" size="icon" onClick={resetChat}><Eraser className="h-5 w-5" /></Button>
+          
+          <Popover open={pwaPopoverOpen} onOpenChange={setPwaPopoverOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10">
+                <CircleHelp className="h-5 w-5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0 overflow-hidden border-primary/20 shadow-2xl" align="end">
+              <div className="p-4 bg-primary text-primary-foreground">
+                <h3 className="font-bold flex items-center gap-2">
+                  <Smartphone className="h-4 w-4" />
+                  {t('pwa.title')}
+                </h3>
+                <p className="text-xs opacity-90 mt-1">{t('pwa.description')}</p>
+              </div>
+              <div className="p-4 space-y-4 bg-card">
+                <div className="flex gap-3">
+                  <Apple className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+                  <p className="text-sm">{t('pwa.ios')}</p>
+                </div>
+                <div className="flex gap-3">
+                  <Smartphone className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+                  <p className="text-sm">{t('pwa.android')}</p>
+                </div>
+                <div className="flex gap-3">
+                  <Monitor className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+                  <p className="text-sm">{t('pwa.pc')}</p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full mt-2" 
+                  onClick={() => setPwaPopoverOpen(false)}
+                >
+                  {t('chat.bot.pairUntracked').includes('прекратил') ? 'Закрыть' : 'Close'}
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </header>
       

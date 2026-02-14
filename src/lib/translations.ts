@@ -15,6 +15,7 @@ export const translations = {
       showDisplayedPairManager: 'Configure List',
       showOtherAssets: 'Other Assets',
       openInTelegram: 'Open in Telegram',
+      installGuide: 'Install App',
       user: {
         rates: 'Show latest rates',
         convert: 'I want to convert currency',
@@ -35,6 +36,13 @@ export const translations = {
         pairRemovedFromList: "The pair {pair} has been removed from the list.",
         otherAssetsView: "Here are various assets grouped by category. Click on any to see details.",
       },
+    },
+    pwa: {
+      title: 'Install App',
+      description: 'Add CurrencyBot to your home screen for quick access.',
+      ios: 'iOS: Tap "Share" and then "Add to Home Screen".',
+      android: 'Android: Tap menu (3 dots) and select "Install app".',
+      pc: 'PC: Click the install icon in the address bar.',
     },
     otherAssets: {
       title: "Asset Catalog",
@@ -470,6 +478,7 @@ export const translations = {
       showDisplayedPairManager: 'Настроить список',
       showOtherAssets: 'Иные активы',
       openInTelegram: 'Открыть в Telegram',
+      installGuide: 'Установить приложение',
       user: {
         rates: 'Показать последние курсы',
         convert: 'Я хочу конвертировать валюту',
@@ -490,6 +499,13 @@ export const translations = {
         pairRemovedFromList: "Пара {pair} удалена из списка.",
         otherAssetsView: "Вот различные активы, разбитые по категориям. Нажмите на любой, чтобы увидеть детали.",
       },
+    },
+    pwa: {
+      title: 'Установить приложение',
+      description: 'Добавьте ВалютаБот на главный экран для быстрого доступа.',
+      ios: 'iOS: Нажмите кнопку "Поделиться", затем "На экран "Домой"".',
+      android: 'Android: Нажмите на 3 точки и выберите "Установить приложение".',
+      pc: 'ПК: Нажмите на иконку установки в адресной строке браузера.',
     },
     otherAssets: {
       title: "Каталог активов",
@@ -839,7 +855,7 @@ export const translations = {
       'BCH': 'Биткоин Кэш',
       'FET': 'Искусственный интеллект (FET)',
       'RENDER': 'Render Токен',
-      'PEPE': 'Пепе',
+      'PEPE': 'Pepe',
       'ICP': 'Internet Computer',
       'ETC': 'Эфириум Классик',
       'XMR': 'Монеро',
