@@ -1,4 +1,3 @@
-
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
@@ -88,12 +87,15 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={cn('font-body antialiased', 'min-h-screen bg-background')}
+        className={cn('font-body antialiased min-h-screen bg-futuristic relative')}
         suppressHydrationWarning
       >
+        <div className="fixed inset-0 bg-grid pointer-events-none z-0 opacity-40" />
         <FirebaseClientProvider>
           <LanguageManager />
-          {children}
+          <div className="relative z-10">
+            {children}
+          </div>
           <Toaster />
         </FirebaseClientProvider>
       </body>

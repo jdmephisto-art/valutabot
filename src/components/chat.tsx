@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Box, ArrowUp, ArrowDown } from 'lucide-react';
+import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Box, ArrowUp, ArrowDown, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LatestRates } from '@/components/latest-rates';
@@ -191,16 +191,25 @@ export function ChatInterface() {
   }, [lang, resetChat, firestore]);
 
   return (
-    <div className="w-full max-w-md h-[85vh] max-h-[900px] flex flex-col bg-card rounded-2xl shadow-2xl overflow-hidden border">
-      <header className="flex items-center justify-between p-4 border-b">
+    <div className="w-full max-w-md h-[88vh] max-h-[900px] flex flex-col bg-card/90 backdrop-blur-xl rounded-2xl shadow-2xl overflow-hidden border border-white/20">
+      <header className="flex items-center justify-between p-4 border-b bg-background/50">
         <div className="flex items-center gap-3">
-          <Bot className="h-10 w-10 text-primary" />
+          <Bot className="h-10 w-10 text-primary animate-pulse" />
           <div>
             <h1 className="text-lg font-bold">{t('chat.title')}</h1>
             <p className="text-sm text-positive">{t('chat.online')}</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="text-primary hover:bg-primary/10"
+            title={t('chat.openInTelegram')}
+            onClick={() => window.open('https://t.me/jdmephisto_bot', '_blank')}
+          >
+            <Send className="h-5 w-5" />
+          </Button>
           <Popover open={autoClearPopoverOpen} onOpenChange={setAutoClearPopoverOpen}>
             <PopoverTrigger asChild>
               <Button variant="ghost" size="icon" className="relative">
@@ -225,21 +234,21 @@ export function ChatInterface() {
         </div>
       </header>
       
-      <div className="flex-1 relative overflow-hidden">
+      <div className="flex-1 relative overflow-hidden bg-transparent">
         <div ref={scrollAreaRef} className="h-full overflow-y-auto p-4 space-y-6 scroll-smooth">
           <AnimatePresence initial={false}>
             {messages.map((message) => (
               <motion.div key={message.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={cn('flex items-end gap-2', message.sender === 'user' ? 'justify-end' : 'justify-start')}>
                 <div className={cn(
                   'rounded-lg', 
-                  message.component ? 'w-full p-0 overflow-hidden' : 'max-w-[85%] p-3',
-                  message.sender === 'user' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'
+                  message.component ? 'w-full p-0 overflow-hidden bg-background/40' : 'max-w-[85%] p-3',
+                  message.sender === 'user' ? 'bg-primary text-primary-foreground shadow-lg' : 'bg-secondary text-secondary-foreground border'
                 )}>
                   {message.text && <p className={cn(message.component && "p-3 pb-0")}>{message.text}</p>}
                   {message.component}
                   {message.options && (
                     <div className="flex flex-col gap-2 mt-3 p-3 pt-0">
-                      {message.options.map(option => <Button key={option.id} variant="outline" size="sm" onClick={() => handleActionClick(option.id)} className="justify-start"><option.icon className="mr-2 h-4 w-4" />{option.label}</Button>)}
+                      {message.options.map(option => <Button key={option.id} variant="outline" size="sm" onClick={() => handleActionClick(option.id)} className="justify-start bg-background/50 hover:bg-primary/10 border-primary/20 transition-all"><option.icon className="mr-2 h-4 w-4" />{option.label}</Button>)}
                     </div>
                   )}
                 </div>
@@ -255,7 +264,7 @@ export function ChatInterface() {
               variant="secondary" 
               size="icon" 
               onClick={scrollToTop}
-              className="rounded-full shadow-lg h-9 w-9 bg-background/80 backdrop-blur hover:bg-background"
+              className="rounded-full shadow-lg h-9 w-9 bg-background/80 backdrop-blur hover:bg-background border"
               title="To Top"
             >
               <ArrowUp className="h-4 w-4" />
@@ -264,7 +273,7 @@ export function ChatInterface() {
               variant="secondary" 
               size="icon" 
               onClick={scrollToBottom}
-              className="rounded-full shadow-lg h-9 w-9 bg-background/80 backdrop-blur hover:bg-background"
+              className="rounded-full shadow-lg h-9 w-9 bg-background/80 backdrop-blur hover:bg-background border"
               title="To Bottom"
             >
               <ArrowDown className="h-4 w-4" />
