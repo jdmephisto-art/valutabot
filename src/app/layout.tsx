@@ -90,7 +90,7 @@ export default function RootLayout({
         className={cn('font-body antialiased min-h-screen bg-futuristic relative')}
         suppressHydrationWarning
       >
-        <div className="fixed inset-0 bg-grid pointer-events-none z-0 opacity-40" />
+        <div className="fixed inset-0 bg-grid pointer-events-none z-0 opacity-20" />
         <FirebaseClientProvider>
           <LanguageManager />
           <div className="relative z-10">
