@@ -1,10 +1,11 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Briefcase, PlusCircle, Trash2, Wallet, Settings2 } from 'lucide-react';
+import { Briefcase, PlusCircle, Trash2, Wallet, Settings2, Share2 } from 'lucide-react';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useTranslation } from '@/hooks/use-translation';
 import { CurrencyCombobox } from './currency-combobox';
@@ -14,13 +15,14 @@ import type { PortfolioAsset } from '@/lib/types';
 import { Separator } from './ui/separator';
 import { Badge } from './ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { useTelegram } from '@/hooks/use-telegram';
 
 export function PortfolioManager() {
   const { currencies } = useCurrencies();
   const { t, getCurrencyName, lang } = useTranslation();
   const firestore = useFirestore();
+  const { haptic, share } = useTelegram();
 
-  // Initialize state from localStorage directly to prevent empty-overwrite on mount
   const [assets, setAssets] = useState<PortfolioAsset[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('valutabot_portfolio');
@@ -44,12 +46,10 @@ export function PortfolioManager() {
   const [newAssetAmount, setNewAssetAmount] = useState('0');
   const [isBaseCurrencyPickerOpen, setIsBaseCurrencyPickerOpen] = useState(false);
 
-  // Sync with Firestore rates on mount
   useEffect(() => {
     preFetchInitialRates(firestore);
   }, [firestore]);
 
-  // Persist changes to localStorage
   useEffect(() => {
     localStorage.setItem('valutabot_portfolio', JSON.stringify(assets));
   }, [assets]);
@@ -59,6 +59,7 @@ export function PortfolioManager() {
   }, [displayCurrency]);
 
   const handleAddAsset = () => {
+    haptic('medium');
     const amount = parseFloat(newAssetAmount);
     if (isNaN(amount) || amount <= 0) return;
 
@@ -73,6 +74,7 @@ export function PortfolioManager() {
   };
 
   const handleRemoveAsset = (code: string) => {
+    haptic('heavy');
     setAssets(prev => prev.filter(a => a.code !== code));
   };
 
@@ -105,24 +107,44 @@ export function PortfolioManager() {
     return formatValue(asset.amount * rate);
   };
 
+  const handleShare = () => {
+    haptic('medium');
+    const text = t('portfolio.shareText', {
+      balance: formatValue(totalBalance),
+      currency: displayCurrency
+    });
+    share(text);
+  };
+
   return (
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
       <CardHeader className="pb-4">
-        <CardTitle className="text-lg font-semibold flex items-center gap-2">
-          <Briefcase className="text-primary h-5 w-5" />
-          {t('portfolio.title')}
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg font-semibold flex items-center gap-2">
+            <Briefcase className="text-primary h-5 w-5" />
+            {t('portfolio.title')}
+          </CardTitle>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="h-8 px-2 text-primary hover:bg-primary/10" 
+            onClick={handleShare}
+            disabled={assets.length === 0}
+          >
+            <Share2 className="h-4 w-4 mr-1" />
+            {t('portfolio.share')}
+          </Button>
+        </div>
         <CardDescription>{t('portfolio.description')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Total Summary */}
         <div className="bg-primary/10 rounded-xl p-4 border border-primary/20 relative overflow-hidden">
           <div className="flex justify-between items-center mb-1 relative z-10">
             <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">{t('portfolio.totalBalance')}</span>
             
             <Popover open={isBaseCurrencyPickerOpen} onOpenChange={setIsBaseCurrencyPickerOpen}>
               <PopoverTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px] gap-1 hover:bg-primary/20">
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px] gap-1 hover:bg-primary/20" onClick={() => haptic('light')}>
                   <Settings2 className="h-3 w-3" />
                   {t('portfolio.displayCurrency')}: <span className="font-bold text-primary">{displayCurrency}</span>
                 </Button>
@@ -134,6 +156,7 @@ export function PortfolioManager() {
                   onChange={(val) => {
                     setDisplayCurrency(val);
                     setIsBaseCurrencyPickerOpen(false);
+                    haptic('medium');
                   }} 
                 />
               </PopoverContent>
@@ -143,13 +166,11 @@ export function PortfolioManager() {
             {formatValue(totalBalance)}
             <span className="text-sm font-bold opacity-70">{displayCurrency}</span>
           </p>
-          {/* Subtle background decoration */}
           <div className="absolute -right-4 -bottom-4 opacity-5 pointer-events-none">
             <Briefcase className="h-24 w-24" />
           </div>
         </div>
 
-        {/* Add Asset Form */}
         <div className="space-y-3 p-3 bg-background/40 rounded-lg border border-border/50">
           <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
             <div className="space-y-1.5">
@@ -176,7 +197,6 @@ export function PortfolioManager() {
           </Button>
         </div>
 
-        {/* Asset List */}
         <div className="space-y-2">
           {assets.length === 0 ? (
             <div className="text-center py-10 opacity-40 space-y-3">

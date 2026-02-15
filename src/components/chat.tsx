@@ -1,8 +1,9 @@
+
 'use client';
 
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Box, ArrowUp, ArrowDown, Send, CircleHelp, Smartphone, Apple, Monitor, Briefcase } from 'lucide-react';
+import { Bot, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Box, ArrowUp, ArrowDown, Send, CircleHelp, Smartphone, Apple, Monitor, Briefcase, Share2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LatestRates } from '@/components/latest-rates';
@@ -22,6 +23,7 @@ import { useTranslation } from '@/hooks/use-translation';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useFirestore } from '@/firebase';
+import { useTelegram } from '@/hooks/use-telegram';
 
 type Message = {
   id: string;
@@ -52,6 +54,7 @@ export function ChatInterface() {
   const componentId = useId();
   const { t, lang, setLang } = useTranslation();
   const firestore = useFirestore();
+  const { haptic, share } = useTelegram();
 
   const addMessage = useCallback((message: Omit<Message, 'id'>) => {
     setMessages(prev => [...prev, { ...message, id: `${componentId}-${prev.length}` }]);
@@ -155,6 +158,7 @@ export function ChatInterface() {
   };
 
   const handleActionClick = (id: string) => {
+    haptic('medium');
     addMessage({ sender: 'user', text: t(`chat.user.${id}`) });
     
     setTimeout(() => {
@@ -171,7 +175,19 @@ export function ChatInterface() {
         findRateAsync(data.from, data.to, firestore).then(rate => {
           if (rate) {
             setAlerts(prev => [...prev, { ...data, id: Date.now().toString(), baseRate: rate }]);
-            addMessage({ sender: 'bot', text: t('chat.bot.alertSet', { from: data.from, to: data.to, condition: data.condition === 'above' ? t('notifications.above') : t('notifications.below'), threshold: data.threshold }) });
+            const alertText = t('chat.bot.alertSet', { 
+              from: data.from, 
+              to: data.to, 
+              condition: data.condition === 'above' ? t('notifications.above') : t('notifications.below'), 
+              threshold: data.threshold 
+            });
+            addMessage({ 
+              sender: 'bot', 
+              text: alertText,
+              options: [
+                { id: `share_alert_${Date.now()}`, label: t('chat.shareAlert'), icon: Share2 }
+              ]
+            });
           }
         });
       }} />;
@@ -182,6 +198,22 @@ export function ChatInterface() {
         return false;
       }} onRemovePair={(p) => setTrackedPairs(prev => { const n = new Map(prev); n.delete(p); return n; })} onIntervalChange={() => {}} currentInterval={30000} />;
       if (id === 'settings') component = <DataSourceSwitcher currentSource={dataSource} onSourceChange={handleDataSourceChange} />;
+
+      // Special handling for shared actions
+      if (id.startsWith('share_alert')) {
+        // Find the last alert data set (simplified for MVP)
+        const lastAlert = alerts[alerts.length - 1];
+        if (lastAlert) {
+          const shareText = t('notifications.shareText', {
+            from: lastAlert.from,
+            to: lastAlert.to,
+            condition: lastAlert.condition === 'above' ? t('notifications.above') : t('notifications.below'),
+            threshold: lastAlert.threshold
+          });
+          share(shareText);
+        }
+        return;
+      }
 
       addMessage({ sender: 'bot', component });
     }, 400);
@@ -213,13 +245,13 @@ export function ChatInterface() {
             size="icon" 
             className="text-primary hover:bg-primary/10"
             title={t('chat.openInTelegram')}
-            onClick={() => window.open('https://t.me/CurrencyAll_bot', '_blank')}
+            onClick={() => { haptic('light'); window.open('https://t.me/CurrencyAll_bot', '_blank'); }}
           >
             <Send className="h-5 w-5" />
           </Button>
           <Popover open={autoClearPopoverOpen} onOpenChange={setAutoClearPopoverOpen}>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative">
+              <Button variant="ghost" size="icon" className="relative" onClick={() => haptic('light')}>
                 <Timer className="h-5 w-5" />
                 {autoClearMinutes > 0 && <span className="absolute top-2 right-2 h-2 w-2 bg-primary rounded-full" />}
               </Button>
@@ -230,18 +262,18 @@ export function ChatInterface() {
           </Popover>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-xs font-bold">{lang.toUpperCase()}</Button>
+              <Button variant="ghost" size="icon" className="text-xs font-bold" onClick={() => haptic('light')}>{lang.toUpperCase()}</Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setLang('en')}>English</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setLang('ru')}>Русский</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { haptic('medium'); setLang('en'); }}>English</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { haptic('medium'); setLang('ru'); }}>Русский</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="ghost" size="icon" onClick={resetChat}><Eraser className="h-5 w-5" /></Button>
+          <Button variant="ghost" size="icon" onClick={() => { haptic('heavy'); resetChat(); }}><Eraser className="h-5 w-5" /></Button>
           
           <Popover open={pwaPopoverOpen} onOpenChange={setPwaPopoverOpen}>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10">
+              <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10" onClick={() => haptic('light')}>
                 <CircleHelp className="h-5 w-5" />
               </Button>
             </PopoverTrigger>
@@ -309,7 +341,7 @@ export function ChatInterface() {
             <Button 
               variant="secondary" 
               size="icon" 
-              onClick={scrollToTop}
+              onClick={() => { haptic('light'); scrollToTop(); }}
               className="rounded-full shadow-lg h-9 w-9 bg-background/80 backdrop-blur hover:bg-background border"
               title="To Top"
             >
@@ -318,7 +350,7 @@ export function ChatInterface() {
             <Button 
               variant="secondary" 
               size="icon" 
-              onClick={scrollToBottom}
+              onClick={() => { haptic('light'); scrollToBottom(); }}
               className="rounded-full shadow-lg h-9 w-9 bg-background/80 backdrop-blur hover:bg-background border"
               title="To Bottom"
             >

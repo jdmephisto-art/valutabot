@@ -1,3 +1,4 @@
+
 export const translations = {
   en: {
     chat: {
@@ -17,6 +18,7 @@ export const translations = {
       showPortfolio: 'My Portfolio',
       openInTelegram: 'Open in Telegram',
       installGuide: 'Install App',
+      shareAlert: 'Share alert',
       user: {
         rates: 'Show latest rates',
         convert: 'I want to convert currency',
@@ -50,6 +52,8 @@ export const translations = {
       delete: 'Remove',
       displayCurrency: 'View in',
       assetValue: 'Value',
+      share: 'Share Portfolio',
+      shareText: "📈 My investment portfolio: {balance} {currency}. Track your assets in @CurrencyAll_bot!",
     },
     pwa: {
       title: 'Install App',
@@ -103,6 +107,7 @@ export const translations = {
       below: 'Below',
       threshold: 'Threshold',
       button: 'Set Alert',
+      shareText: "🔔 Hey! I'm watching the {from}/{to} rate. Notify me when it's {condition} {threshold}!",
       toast: {
         title: 'Alert set!',
         description: 'We will notify you when {from}/{to} goes {condition} {threshold}.',
@@ -499,6 +504,7 @@ export const translations = {
       showPortfolio: 'Мой Портфель',
       openInTelegram: 'Открыть в Telegram',
       installGuide: 'Установить приложение',
+      shareAlert: 'Поделиться алертом',
       user: {
         rates: 'Показать последние курсы',
         convert: 'Я хочу конвертировать валюту',
@@ -532,6 +538,8 @@ export const translations = {
       delete: 'Удалить',
       displayCurrency: 'Отображать в',
       assetValue: 'Стоимость',
+      share: 'Поделиться портфелем',
+      shareText: "📈 Мой инвестиционный портфель: {balance} {currency}. Следи за активами в @CurrencyAll_bot!",
     },
     pwa: {
       title: 'Установить приложение',
@@ -550,7 +558,7 @@ export const translations = {
       nfts: "NFT Коллекции (Floor)",
       ai: "ИИ-токены",
       defi: "DeFi Протоколы",
-      metaverse: "Метавселенные и GameFi",
+      metaverse: "Metaverse & GameFi",
       memes: "Мем-коины",
       storage: "Хранение данных",
       depin: "Децентрализованная инфраструктура",
@@ -585,6 +593,7 @@ export const translations = {
       below: 'Ниже',
       threshold: 'Порог',
       button: 'Установить оповещение',
+      shareText: "🔔 Привет! Слежу за курсом {from}/{to}. Уведоми меня, когда будет {condition} {threshold}!",
       toast: {
         title: 'Оповещение установлено!',
         description: 'Мы сообщим вам, когда {from}/{to} станет {condition} {threshold}.',
@@ -894,7 +903,7 @@ export const translations = {
       'RENDER': 'Render Токен',
       'PEPE': 'Pepe',
       'ICP': 'Internet Computer',
-      'ETC': 'Эфириум Классик',
+      'ETC': 'Ethereum Classic',
       'XMR': 'Монеро',
       'XLM': 'Стеллар',
       'KAS': 'Kaspa',
