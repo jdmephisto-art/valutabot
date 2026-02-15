@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useForm } from 'react-hook-form';
@@ -26,9 +27,10 @@ type DisplayedPairManagerProps = {
     onAddPair: (from: string, to: string) => boolean;
     onRemovePair: (pair: string) => void;
     pairs: string[];
+    hideHeader?: boolean;
 }
 
-export function DisplayedPairManager({ onAddPair, onRemovePair, pairs: initialPairs }: DisplayedPairManagerProps) {
+export function DisplayedPairManager({ onAddPair, onRemovePair, pairs: initialPairs, hideHeader }: DisplayedPairManagerProps) {
   const { currencies } = useCurrencies();
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -67,14 +69,16 @@ export function DisplayedPairManager({ onAddPair, onRemovePair, pairs: initialPa
 
   return (
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
-      <CardHeader>
-        <CardTitle className="text-lg font-semibold flex items-center gap-2">
-            <List />
-            {t('displayedPairManager.title')}
-        </CardTitle>
-        <CardDescription>{t('displayedPairManager.description')}</CardDescription>
-      </CardHeader>
-      <CardContent>
+      {!hideHeader && (
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold flex items-center gap-2">
+              <List />
+              {t('displayedPairManager.title')}
+          </CardTitle>
+          <CardDescription>{t('displayedPairManager.description')}</CardDescription>
+        </CardHeader>
+      )}
+      <CardContent className={hideHeader ? 'pt-2' : ''}>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
             <div className="flex items-end gap-2">

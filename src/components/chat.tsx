@@ -165,7 +165,7 @@ export function ChatInterface() {
       if (id === 'rates') component = <LatestRates pairs={displayedPairs} onAddPair={(f, t) => { setDisplayedPairs(prev => [...prev, `${f}/${t}`]); return true; }} onRemovePair={(p) => setDisplayedPairs(prev => prev.filter(x => x !== p))} />;
       if (id === 'portfolio') component = <PortfolioManager />;
       if (id === 'other_assets') component = <OtherAssetsView onShowRate={(from) => {
-          addMessage({ sender: 'bot', component: <LatestRates pairs={[`${from}/USD`]} onAddPair={(f, t) => { setDisplayedPairs(prev => [...prev, `${f}/${t}`]); return true; }} onRemovePair={(p) => setDisplayedPairs(prev => prev.filter(x => x !== p))} /> });
+          addMessage({ sender: 'bot', component: <LatestRates mode="single" pairs={[`${from}/USD`]} /> });
           scrollToBottom();
       }} />;
       if (id === 'convert') component = <CurrencyConverter />;
@@ -183,7 +183,7 @@ export function ChatInterface() {
               sender: 'bot', 
               text: alertText,
               options: [
-                { id: `share_alert_${Date.now()}`, label: t('chat.shareAlert'), icon: Share2 }
+                { id: `share_rate_${data.from}_${data.to}_${Date.now()}`, label: t('chat.shareAlert'), icon: Share2 }
               ]
             });
           }
@@ -198,17 +198,20 @@ export function ChatInterface() {
       if (id === 'settings') component = <DataSourceSwitcher currentSource={dataSource} onSourceChange={handleDataSourceChange} />;
 
       // Special handling for shared actions
-      if (id.startsWith('share_alert')) {
-        const lastAlert = alerts[alerts.length - 1];
-        if (lastAlert) {
-          const shareText = t('notifications.shareText', {
-            from: lastAlert.from,
-            to: lastAlert.to,
-            condition: lastAlert.condition === 'above' ? t('notifications.above') : t('notifications.below'),
-            threshold: lastAlert.threshold
-          });
-          share(shareText);
-        }
+      if (id.startsWith('share_rate')) {
+        const parts = id.split('_');
+        const from = parts[2];
+        const to = parts[3];
+        findRateAsync(from, to, firestore).then(rate => {
+          if (rate) {
+            const shareText = t('notifications.shareText', {
+              from,
+              to,
+              rate: rate > 1000 ? rate.toFixed(2) : rate.toFixed(4).replace(/\.?0+$/, '')
+            });
+            share(shareText);
+          }
+        });
         return;
       }
 

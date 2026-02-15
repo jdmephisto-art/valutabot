@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { getDataSource } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
@@ -12,22 +12,30 @@ import { useLatestRatesSWR } from '@/hooks/use-latest-rates-swr';
 import { Button } from '@/components/ui/button';
 import { DisplayedPairManager } from '@/components/displayed-pair-manager';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { CurrencyCombobox } from './currency-combobox';
 
 type LatestRatesProps = {
     pairs: string[];
     onAddPair?: (from: string, to: string) => boolean;
     onRemovePair?: (pair: string) => void;
+    mode?: 'list' | 'single';
 }
 
-export function LatestRates({ pairs, onAddPair, onRemovePair }: LatestRatesProps) {
+export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode = 'list' }: LatestRatesProps) {
   const { t } = useTranslation();
   const dataSource = getDataSource();
   const firestore = useFirestore();
-  const { rates, isLoading } = useLatestRatesSWR(pairs, firestore);
+  
+  const [currentPairs, setCurrentPairs] = useState(initialPairs);
+  const { rates, isLoading } = useLatestRatesSWR(currentPairs, firestore);
   
   const [changedRates, setChangedRates] = useState<Map<string, 'up' | 'down'>>(new Map());
   const [prevRates, setPrevRates] = useState<Map<string, number>>(new Map());
   const [isConfigOpen, setIsConfigOpen] = useState(false);
+
+  useEffect(() => {
+    setCurrentPairs(initialPairs);
+  }, [initialPairs]);
 
   // Detect changes for animation
   useEffect(() => {
@@ -62,41 +70,65 @@ export function LatestRates({ pairs, onAddPair, onRemovePair }: LatestRatesProps
     return rate.toFixed(8).replace(/\.?0+$/, '');
   };
 
+  const handleTargetChange = (newTo: string) => {
+    const updated = currentPairs.map(p => {
+      const from = p.split('/')[0];
+      return `${from}/${newTo}`;
+    });
+    setCurrentPairs(updated);
+  };
+
+  const currentTarget = currentPairs[0]?.split('/')[1] || 'USD';
+
   return (
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <div>
-          <CardTitle className="text-lg font-semibold">{t('latestRates.title')}</CardTitle>
+          <CardTitle className="text-lg font-semibold">
+            {mode === 'single' ? t('latestRates.titleSingle') : t('latestRates.title')}
+          </CardTitle>
           <CardDescription>{t('latestRates.description', { source: dataSource.toUpperCase() })}</CardDescription>
         </div>
-        {onAddPair && onRemovePair && (
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={() => setIsConfigOpen(!isConfigOpen)}
-            className={cn("h-8 w-8 text-primary", isConfigOpen && "bg-primary/10")}
-            title={t('displayedPairManager.title')}
-          >
-            <List className="h-5 w-5" />
-          </Button>
-        )}
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={() => setIsConfigOpen(!isConfigOpen)}
+          className={cn("h-8 w-8 text-primary", isConfigOpen && "bg-primary/10")}
+          title={mode === 'single' ? t('latestRates.configTarget') : t('displayedPairManager.title')}
+        >
+          {mode === 'single' ? <Settings2 className="h-5 w-5" /> : <List className="h-5 w-5" />}
+        </Button>
       </CardHeader>
       <CardContent>
-        {onAddPair && onRemovePair && (
-          <Collapsible open={isConfigOpen} onOpenChange={setIsConfigOpen} className="mb-4">
-            <CollapsibleContent className="space-y-2 border rounded-lg p-2 bg-background/50">
-              <DisplayedPairManager 
-                pairs={pairs} 
-                onAddPair={onAddPair} 
-                onRemovePair={onRemovePair} 
-              />
-            </CollapsibleContent>
-          </Collapsible>
-        )}
+        <Collapsible open={isConfigOpen} onOpenChange={setIsConfigOpen} className="mb-4">
+          <CollapsibleContent className="space-y-4 border rounded-lg p-3 bg-background/50 animate-in slide-in-from-top-2 duration-200">
+            {mode === 'single' ? (
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t('latestRates.targetCurrency')}</p>
+                <CurrencyCombobox 
+                  value={currentTarget}
+                  onChange={(val) => {
+                    handleTargetChange(val);
+                    setIsConfigOpen(false);
+                  }}
+                />
+              </div>
+            ) : (
+              onAddPair && onRemovePair && (
+                <DisplayedPairManager 
+                  hideHeader
+                  pairs={currentPairs} 
+                  onAddPair={onAddPair} 
+                  onRemovePair={onRemovePair} 
+                />
+              )
+            )}
+          </CollapsibleContent>
+        </Collapsible>
 
         {isLoading && rates.length === 0 && (
              <div className="space-y-4">
-                {pairs.map(p => {
+                {currentPairs.map(p => {
                     const [from, to] = p.split('/');
                     return (
                         <div key={p} className="grid grid-cols-[1fr_auto] items-center text-sm gap-x-4">
@@ -111,7 +143,7 @@ export function LatestRates({ pairs, onAddPair, onRemovePair }: LatestRatesProps
                 })}
             </div>
         )}
-        {!isLoading && rates.length === 0 && pairs.length === 0 && <p className="text-sm text-muted-foreground">{t('latestRates.noPairs')}</p>}
+        {!isLoading && rates.length === 0 && currentPairs.length === 0 && <p className="text-sm text-muted-foreground">{t('latestRates.noPairs')}</p>}
         {rates.length > 0 &&
             <div className="space-y-4">
             {rates.map(({ from, to, rate }) => {
