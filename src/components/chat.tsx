@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, User, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Box, ArrowUp, ArrowDown, Send, CircleHelp, Smartphone, Apple, Monitor } from 'lucide-react';
+import { Bot, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Box, ArrowUp, ArrowDown, Send, CircleHelp, Smartphone, Apple, Monitor, Briefcase } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LatestRates } from '@/components/latest-rates';
@@ -15,9 +15,9 @@ import { DataSourceSwitcher } from '@/components/data-source-switcher';
 import { AutoClearManager } from '@/components/auto-clear-manager';
 import { DisplayedPairManager } from '@/components/displayed-pair-manager';
 import { OtherAssetsView } from '@/components/other-assets-view';
-import type { Alert, DataSource, Language } from '@/lib/types';
-import { findRateAsync, getLatestRates, setDataSource, getDataSource, preFetchInitialRates } from '@/lib/currencies';
-import { useToast } from '@/hooks/use-toast';
+import { PortfolioManager } from '@/components/portfolio-manager';
+import type { Alert, DataSource } from '@/lib/types';
+import { findRateAsync, setDataSource, getDataSource, preFetchInitialRates } from '@/lib/currencies';
 import { useTranslation } from '@/hooks/use-translation';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -49,7 +49,6 @@ export function ChatInterface() {
   const [autoClearPopoverOpen, setAutoClearPopoverOpen] = useState(false);
   const [pwaPopoverOpen, setPwaPopoverOpen] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const { toast } = useToast();
   const componentId = useId();
   const { t, lang, setLang } = useTranslation();
   const firestore = useFirestore();
@@ -129,6 +128,7 @@ export function ChatInterface() {
 
   const getActionButtons = useCallback((): ActionButtonProps[] => [
     { id: 'rates', label: t('chat.showRates'), icon: LineChart },
+    { id: 'portfolio', label: t('chat.showPortfolio'), icon: Briefcase },
     { id: 'other_assets', label: t('chat.showOtherAssets'), icon: Box },
     { id: 'configure_pairs', label: t('chat.showDisplayedPairManager'), icon: List },
     { id: 'convert', label: t('chat.showConverter'), icon: CircleDollarSign },
@@ -160,6 +160,7 @@ export function ChatInterface() {
     setTimeout(() => {
       let component: React.ReactNode = null;
       if (id === 'rates') component = <LatestRates pairs={displayedPairs} />;
+      if (id === 'portfolio') component = <PortfolioManager />;
       if (id === 'other_assets') component = <OtherAssetsView onShowRate={(from) => {
           addMessage({ sender: 'bot', component: <LatestRates pairs={[`${from}/USD`]} /> });
           scrollToBottom();
@@ -195,7 +196,12 @@ export function ChatInterface() {
     <div className="w-full max-w-md h-[88vh] max-h-[900px] flex flex-col bg-card/90 backdrop-blur-xl rounded-2xl shadow-2xl overflow-hidden border border-white/20">
       <header className="flex items-center justify-between p-4 border-b bg-background/50">
         <div className="flex items-center gap-3">
-          <Bot className="h-10 w-10 text-primary animate-pulse" />
+          <motion.div 
+            animate={{ scale: [1, 1.1, 1] }} 
+            transition={{ repeat: Infinity, duration: 3 }}
+          >
+            <Bot className="h-10 w-10 text-primary" />
+          </motion.div>
           <div>
             <h1 className="text-lg font-bold">{t('chat.title')}</h1>
             <p className="text-sm text-positive">{t('chat.online')}</p>
@@ -266,7 +272,7 @@ export function ChatInterface() {
                   className="w-full mt-2" 
                   onClick={() => setPwaPopoverOpen(false)}
                 >
-                  {t('chat.bot.pairUntracked').includes('прекратил') ? 'Закрыть' : 'Close'}
+                  {lang === 'ru' ? 'Закрыть' : 'Close'}
                 </Button>
               </div>
             </PopoverContent>

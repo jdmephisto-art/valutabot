@@ -29,3 +29,8 @@ export type HistoricalRateResult = {
   date: Date;
   isFallback?: boolean;
 };
+
+export type PortfolioAsset = {
+  code: string;
+  amount: number;
+};
