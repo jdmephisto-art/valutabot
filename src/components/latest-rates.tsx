@@ -5,16 +5,21 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { getDataSource } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, List, Settings2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useTranslation } from '@/hooks/use-translation';
 import { useFirestore } from '@/firebase';
 import { useLatestRatesSWR } from '@/hooks/use-latest-rates-swr';
+import { Button } from '@/components/ui/button';
+import { DisplayedPairManager } from '@/components/displayed-pair-manager';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 type LatestRatesProps = {
     pairs: string[];
+    onAddPair?: (from: string, to: string) => boolean;
+    onRemovePair?: (pair: string) => void;
 }
 
-export function LatestRates({ pairs }: LatestRatesProps) {
+export function LatestRates({ pairs, onAddPair, onRemovePair }: LatestRatesProps) {
   const { t } = useTranslation();
   const dataSource = getDataSource();
   const firestore = useFirestore();
@@ -22,6 +27,7 @@ export function LatestRates({ pairs }: LatestRatesProps) {
   
   const [changedRates, setChangedRates] = useState<Map<string, 'up' | 'down'>>(new Map());
   const [prevRates, setPrevRates] = useState<Map<string, number>>(new Map());
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
 
   // Detect changes for animation
   useEffect(() => {
@@ -58,11 +64,36 @@ export function LatestRates({ pairs }: LatestRatesProps) {
 
   return (
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
-      <CardHeader>
-        <CardTitle className="text-lg font-semibold">{t('latestRates.title')}</CardTitle>
-        <CardDescription>{t('latestRates.description', { source: dataSource.toUpperCase() })}</CardDescription>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <div>
+          <CardTitle className="text-lg font-semibold">{t('latestRates.title')}</CardTitle>
+          <CardDescription>{t('latestRates.description', { source: dataSource.toUpperCase() })}</CardDescription>
+        </div>
+        {onAddPair && onRemovePair && (
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => setIsConfigOpen(!isConfigOpen)}
+            className={cn("h-8 w-8 text-primary", isConfigOpen && "bg-primary/10")}
+            title={t('displayedPairManager.title')}
+          >
+            <List className="h-5 w-5" />
+          </Button>
+        )}
       </CardHeader>
       <CardContent>
+        {onAddPair && onRemovePair && (
+          <Collapsible open={isConfigOpen} onOpenChange={setIsConfigOpen} className="mb-4">
+            <CollapsibleContent className="space-y-2 border rounded-lg p-2 bg-background/50">
+              <DisplayedPairManager 
+                pairs={pairs} 
+                onAddPair={onAddPair} 
+                onRemovePair={onRemovePair} 
+              />
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+
         {isLoading && rates.length === 0 && (
              <div className="space-y-4">
                 {pairs.map(p => {

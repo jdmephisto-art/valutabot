@@ -131,10 +131,9 @@ export function ChatInterface() {
 
   const getActionButtons = useCallback((): ActionButtonProps[] => [
     { id: 'rates', label: t('chat.showRates'), icon: LineChart },
+    { id: 'convert', label: t('chat.showConverter'), icon: CircleDollarSign },
     { id: 'portfolio', label: t('chat.showPortfolio'), icon: Briefcase },
     { id: 'other_assets', label: t('chat.showOtherAssets'), icon: Box },
-    { id: 'configure_pairs', label: t('chat.showDisplayedPairManager'), icon: List },
-    { id: 'convert', label: t('chat.showConverter'), icon: CircleDollarSign },
     { id: 'alert', label: t('chat.setAlert'), icon: BellRing },
     { id: 'history', label: t('chat.showHistory'), icon: History },
     { id: 'track', label: t('chat.trackPair'), icon: Eye },
@@ -163,13 +162,12 @@ export function ChatInterface() {
     
     setTimeout(() => {
       let component: React.ReactNode = null;
-      if (id === 'rates') component = <LatestRates pairs={displayedPairs} />;
+      if (id === 'rates') component = <LatestRates pairs={displayedPairs} onAddPair={(f, t) => { setDisplayedPairs(prev => [...prev, `${f}/${t}`]); return true; }} onRemovePair={(p) => setDisplayedPairs(prev => prev.filter(x => x !== p))} />;
       if (id === 'portfolio') component = <PortfolioManager />;
       if (id === 'other_assets') component = <OtherAssetsView onShowRate={(from) => {
-          addMessage({ sender: 'bot', component: <LatestRates pairs={[`${from}/USD`]} /> });
+          addMessage({ sender: 'bot', component: <LatestRates pairs={[`${from}/USD`]} onAddPair={(f, t) => { setDisplayedPairs(prev => [...prev, `${f}/${t}`]); return true; }} onRemovePair={(p) => setDisplayedPairs(prev => prev.filter(x => x !== p))} /> });
           scrollToBottom();
       }} />;
-      if (id === 'configure_pairs') component = <DisplayedPairManager pairs={displayedPairs} onAddPair={(f, t) => { setDisplayedPairs(prev => [...prev, `${f}/${t}`]); return true; }} onRemovePair={(p) => setDisplayedPairs(prev => prev.filter(x => x !== p))} />;
       if (id === 'convert') component = <CurrencyConverter />;
       if (id === 'alert') component = <NotificationManager onSetAlert={(data) => {
         findRateAsync(data.from, data.to, firestore).then(rate => {
@@ -201,7 +199,6 @@ export function ChatInterface() {
 
       // Special handling for shared actions
       if (id.startsWith('share_alert')) {
-        // Find the last alert data set (simplified for MVP)
         const lastAlert = alerts[alerts.length - 1];
         if (lastAlert) {
           const shareText = t('notifications.shareText', {

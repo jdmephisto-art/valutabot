@@ -59,7 +59,7 @@ export async function preFetchInitialRates(db: Firestore) {
             unifiedRates = { ...unifiedRates, ...snap.data().rates };
         }
     } catch (e) {
-        console.error('Firestore pre-fetch failed:', e);
+        // Silently fail pre-fetch to avoid spamming console on network blips
     }
 }
 
@@ -67,7 +67,6 @@ export async function updateAllRatesInCloud(db: Firestore) {
     const newRates: Record<string, number> = { 'USD': 1 };
 
     try {
-        // Fetch from all sources
         const sources = [
             { id: 'worldcurrencyapi', fn: fetchWorldCurrency },
             { id: 'fixer', fn: fetchFixer },
@@ -81,19 +80,13 @@ export async function updateAllRatesInCloud(db: Firestore) {
             { id: 'nbk', fn: fetchNbk }
         ];
 
-        // We want to merge official sources last so they take priority
-        // If a source is 'active', we want it to be the absolute last to merge
         const results = await Promise.allSettled(sources.map(s => s.fn()));
 
-        // Sort results so active source is merged last
         const mergedData: Record<string, number> = { 'USD': 1 };
-        
-        // 1. First pass: merge non-active sources in priority order
-        // Order: commercial -> crypto -> official
         const priorityOrder = ['worldcurrencyapi', 'fixer', 'currencyapi', 'coinlayer', 'coingecko', 'cmc', 'nbrb', 'cbr', 'ecb', 'nbk'];
         
         priorityOrder.forEach(sourceId => {
-            if (sourceId === activeDataSource) return; // Skip active for now
+            if (sourceId === activeDataSource) return;
             const idx = sources.findIndex(s => s.id === sourceId);
             const res = results[idx];
             if (res && res.status === 'fulfilled' && res.value) {
@@ -101,7 +94,6 @@ export async function updateAllRatesInCloud(db: Firestore) {
             }
         });
 
-        // 2. Final pass: merge active source to ensure it has highest priority
         const activeIdx = sources.findIndex(s => s.id === activeDataSource);
         if (activeIdx !== -1) {
             const activeRes = results[activeIdx];
@@ -118,7 +110,6 @@ export async function updateAllRatesInCloud(db: Firestore) {
         unifiedRates = { ...unifiedRates, ...mergedData };
         return unifiedRates;
     } catch (e) {
-        console.error('Failed to update cloud rates:', e);
         return unifiedRates;
     }
 }
@@ -129,7 +120,6 @@ async function fetchEcb() {
     if (!res.ok) return null;
     const ecbData = await res.json();
     const rates: Record<string, number> = {};
-    // ECB is base EUR. Convert to base USD.
     const eurInUsd = 1 / (ecbData['USD'] || 1);
     Object.keys(ecbData).forEach(code => {
       rates[code] = (1 / ecbData[code]) / eurInUsd;
@@ -369,7 +359,6 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
             rate: baseRate * (1 + (Math.random() - 0.5) * volatility)
         }));
     } catch (e) {
-        console.error('Error generating dynamics:', e);
         return [];
     }
 }
