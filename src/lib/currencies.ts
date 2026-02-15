@@ -1,3 +1,4 @@
+
 import { Currency, ExchangeRate, DataSource, HistoricalRateResult } from '@/lib/types';
 import { format, isFuture, startOfDay, isAfter, isSameDay, eachDayOfInterval } from 'date-fns';
 import { currencyApiPreloadedCurrencies } from './preloaded-data';
@@ -8,12 +9,10 @@ let activeDataSource: DataSource = 'nbrb';
 export const metalsCodes = ['XAU', 'XAG', 'XPT', 'XPD'];
 export const popularCryptoCodes = ['BTC', 'ETH', 'TON', 'SOL', 'USDT', 'BNB', 'XRP', 'USDC', 'ADA', 'DOGE', 'TRX', 'LINK', 'MATIC', 'AVAX', 'DOT', 'UNI', 'SHIB', 'DAI', 'LTC', 'NEAR'];
 
-// Standard ISO 4217 Fiat Currency Codes (White List)
 export const fiatCodes = [
     'AED', 'AFN', 'ALL', 'AMD', 'ANG', 'AOA', 'ARS', 'AUD', 'AWG', 'AZN', 'BAM', 'BBD', 'BDT', 'BGN', 'BHD', 'BIF', 'BMD', 'BND', 'BOB', 'BRL', 'BSD', 'BTN', 'BWP', 'BYN', 'BZD', 'CAD', 'CDF', 'CHF', 'CLP', 'CNY', 'COP', 'CRC', 'CUC', 'CUP', 'CVE', 'CZK', 'DJF', 'DKK', 'DOP', 'DZD', 'EGP', 'ERN', 'ETB', 'EUR', 'FJD', 'FKP', 'GBP', 'GEL', 'GGP', 'GHS', 'GIP', 'GMD', 'GNF', 'GTQ', 'GYD', 'HKD', 'HNL', 'HRK', 'HTG', 'HUF', 'IDR', 'ILS', 'IMP', 'INR', 'IQD', 'IRR', 'ISK', 'JEP', 'JMD', 'JOD', 'JPY', 'KES', 'KGS', 'KHR', 'KMF', 'KPW', 'KRW', 'KWD', 'KYD', 'KZT', 'LAK', 'LBP', 'LKR', 'LRD', 'LSL', 'LYD', 'MAD', 'MDL', 'MGA', 'MKD', 'MMK', 'MNT', 'MOP', 'MRU', 'MUR', 'MVR', 'MWK', 'MXN', 'MYR', 'MZN', 'NAD', 'NGN', 'NIO', 'NOK', 'NPR', 'NZD', 'OMR', 'PAB', 'PEN', 'PGK', 'PHP', 'PKR', 'PLN', 'PYG', 'QAR', 'RON', 'RSD', 'RUB', 'RWF', 'SAR', 'SBD', 'SCR', 'SDG', 'SEK', 'SGD', 'SHP', 'SLL', 'SOS', 'SRD', 'SSP', 'STN', 'SYP', 'SZL', 'THB', 'TJS', 'TMT', 'TND', 'TOP', 'TRY', 'TTD', 'TWD', 'TZS', 'UAH', 'UGX', 'USD', 'UYU', 'UZS', 'VES', 'VND', 'VUV', 'WST', 'XAF', 'XCD', 'XDR', 'XOF', 'XPF', 'YER', 'ZAR', 'ZMW', 'ZWL'
 ];
 
-// Curated list of high-interest Altcoins (removed "junk" like 611, ABC etc.)
 export const curatedAltcoinCodes = [
     'NOT', 'DOGS', 'FET', 'RNDR', 'AGIX', 'AAVE', 'MKR', 'SAND', 'MANA', 'AXS', 'IMX',
     'PEPE', 'FLOKI', 'BONK', 'FIL', 'AR', 'STORJ', 'HNT', 'THETA', 'ONDO', 'OKB', 'CRO',
@@ -27,7 +26,8 @@ let unifiedRates: Record<string, number> = {
     'BYN': 0.31,
     'RUB': 0.0108,
     'BTC': 95000,
-    'TON': 5.2
+    'TON': 5.2,
+    'KZT': 0.002
 };
 
 const CACHE_TTL = 15 * 60 * 1000;
@@ -67,15 +67,12 @@ export async function updateAllRatesInCloud(db: Firestore) {
     const newRates: Record<string, number> = { 'USD': 1 };
 
     try {
-        const [nbrb, cbr, gecko] = await Promise.allSettled([
+        const results = await Promise.allSettled([
             fetchNbrb(),
             fetchCbr(),
-            fetchCoinGecko()
-        ]);
-
-        const merge = (res: any) => { if (res.status === 'fulfilled' && res.value) Object.assign(newRates, res.value); };
-
-        const [cmc, world, fixer, curApi, clayer] = await Promise.allSettled([
+            fetchCoinGecko(),
+            fetchEcb(),
+            fetchNbk(),
             fetchCoinMarketCap(),
             fetchWorldCurrency(),
             fetchFixer(),
@@ -83,14 +80,11 @@ export async function updateAllRatesInCloud(db: Firestore) {
             fetchCoinlayer()
         ]);
 
-        merge(world);
-        merge(fixer);
-        merge(curApi);
-        merge(clayer);
-        merge(cmc);
-        merge(gecko);
-        merge(cbr);
-        merge(nbrb);
+        results.forEach(res => {
+            if (res.status === 'fulfilled' && res.value) {
+                Object.assign(newRates, res.value);
+            }
+        });
 
         await setDoc(doc(db, 'rates_cache', 'unified'), {
             rates: newRates,
@@ -98,9 +92,43 @@ export async function updateAllRatesInCloud(db: Firestore) {
         }, { merge: true });
 
         unifiedRates = { ...unifiedRates, ...newRates };
+        return unifiedRates;
     } catch (e) {
         console.error('Failed to update cloud rates:', e);
+        return unifiedRates;
     }
+}
+
+async function fetchEcb() {
+  try {
+    const res = await fetch('/api/ecb');
+    if (!res.ok) return null;
+    const ecbData = await res.json();
+    const rates: Record<string, number> = {};
+    // ECB is base EUR. Convert to base USD.
+    const eurInUsd = 1 / (ecbData['USD'] || 1);
+    Object.keys(ecbData).forEach(code => {
+      rates[code] = (1 / ecbData[code]) / eurInUsd;
+    });
+    return rates;
+  } catch { return null; }
+}
+
+async function fetchNbk() {
+  try {
+    const res = await fetch('/api/nbk');
+    if (!res.ok) return null;
+    const nbkData = await res.json();
+    const rates: Record<string, number> = {};
+    const usdInKzt = nbkData['USD'];
+    if (usdInKzt) {
+      rates['KZT'] = 1 / usdInKzt;
+      Object.keys(nbkData).forEach(code => {
+        rates[code] = nbkData[code] / usdInKzt;
+      });
+    }
+    return rates;
+  } catch { return null; }
 }
 
 async function fetchNbrb() {
@@ -258,12 +286,8 @@ export async function getCurrencies(): Promise<Currency[]> {
     const dbCodes = Object.keys(unifiedRates);
     const preloadedMap = new Map(currencyApiPreloadedCurrencies.map(c => [c.code, c]));
     
-    // Approved List = ISO Fiat + Metals + Popular Crypto + Curated Altcoins
     const approvedCodes = new Set([...fiatCodes, ...metalsCodes, ...popularCryptoCodes, ...curatedAltcoinCodes]);
-    
     const allAvailableCodes = Array.from(new Set([...dbCodes, ...preloadedMap.keys()]));
-    
-    // Filter out anything not in the approved list
     const filteredCodes = allAvailableCodes.filter(code => approvedCodes.has(code));
     
     const result = filteredCodes.map(code => {

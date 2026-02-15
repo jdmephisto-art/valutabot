@@ -1,76 +1,53 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { getLatestRates, getDataSource } from '@/lib/currencies';
-import type { ExchangeRate } from '@/lib/types';
+import { getDataSource } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
 import { ArrowRight } from 'lucide-react';
 import { useTranslation } from '@/hooks/use-translation';
 import { useFirestore } from '@/firebase';
+import { useLatestRatesSWR } from '@/hooks/use-latest-rates-swr';
 
 type LatestRatesProps = {
     pairs: string[];
 }
 
 export function LatestRates({ pairs }: LatestRatesProps) {
-  const [rates, setRates] = useState<(Omit<ExchangeRate, 'rate'> & { rate?: number })[]>([]);
-  const [changedRates, setChangedRates] = useState<Map<string, 'up' | 'down'>>(new Map());
   const { t } = useTranslation();
   const dataSource = getDataSource();
   const firestore = useFirestore();
+  const { rates, isLoading } = useLatestRatesSWR(pairs, firestore);
+  
+  const [changedRates, setChangedRates] = useState<Map<string, 'up' | 'down'>>(new Map());
+  const [prevRates, setPrevRates] = useState<Map<string, number>>(new Map());
 
+  // Detect changes for animation
   useEffect(() => {
-    if (pairs.length > 0) {
-      const initialData = pairs.map(p => {
-        const [from, to] = p.split('/');
-        return { from, to, rate: undefined };
-      });
-      setRates(initialData);
+    if (rates.length === 0) return;
 
-      getLatestRates(pairs, firestore).then(fetchedRates => {
-        const fetchedRatesMap = new Map(fetchedRates.map(r => [`${r.from}/${r.to}`, r.rate]));
-        
-        const updatedRates = pairs.map(p => {
-            const [from, to] = p.split('/');
-            return { from, to, rate: fetchedRatesMap.get(p) };
-        });
-        
-        setRates(updatedRates);
-      });
-    } else {
-      setRates([]);
-    }
-  }, [dataSource, pairs, firestore]);
+    const changed = new Map<string, 'up' | 'down'>();
+    const currentRatesMap = new Map<string, number>();
 
-  useEffect(() => {
-    if (pairs.length === 0 || rates.some(r => r.rate === undefined)) return;
-
-    const interval = setInterval(async () => {
-      const oldRatesMap = new Map(rates.filter(r => r.rate !== undefined).map(r => [`${r.from}-${r.to}`, r.rate!]));
-      const newRates = await getLatestRates(pairs, firestore);
-      const changed = new Map<string, 'up' | 'down'>();
-
-      const newRatesMap = new Map<string, number>();
-      for (const newRate of newRates) {
-        const key = `${newRate.from}-${newRate.to}`;
-        newRatesMap.set(key, newRate.rate!);
-        const oldRate = oldRatesMap.get(key);
-        if (oldRate && oldRate !== newRate.rate) {
-          changed.set(key, newRate.rate! > oldRate ? 'up' : 'down');
+    rates.forEach(r => {
+      const key = `${r.from}/${r.to}`;
+      if (r.rate !== undefined) {
+        currentRatesMap.set(key, r.rate);
+        const prevValue = prevRates.get(key);
+        if (prevValue !== undefined && prevValue !== r.rate) {
+          changed.set(key, r.rate > prevValue ? 'up' : 'down');
         }
       }
-      
-      setRates(prevRates => prevRates.map(r => ({ ...r, rate: newRatesMap.get(`${r.from}/${r.to}`) ?? r.rate })));
+    });
+
+    if (changed.size > 0) {
       setChangedRates(changed);
-
-      if (changed.size > 0) {
-        setTimeout(() => setChangedRates(new Map()), 1500);
-      }
-    }, 60000);
-
-    return () => clearInterval(interval);
-  }, [rates, pairs, firestore]);
+      setTimeout(() => setChangedRates(new Map()), 2000);
+    }
+    
+    setPrevRates(currentRatesMap);
+  }, [rates]);
 
   const formatRate = (rate?: number) => {
     if (rate === undefined) return <span className="text-xs animate-pulse">...</span>;
@@ -86,7 +63,7 @@ export function LatestRates({ pairs }: LatestRatesProps) {
         <CardDescription>{t('latestRates.description', { source: dataSource.toUpperCase() })}</CardDescription>
       </CardHeader>
       <CardContent>
-        {rates.length === 0 && pairs.length > 0 && (
+        {isLoading && rates.length === 0 && (
              <div className="space-y-4">
                 {pairs.map(p => {
                     const [from, to] = p.split('/');
@@ -103,16 +80,17 @@ export function LatestRates({ pairs }: LatestRatesProps) {
                 })}
             </div>
         )}
-        {rates.length === 0 && pairs.length === 0 && <p className="text-sm text-muted-foreground">{t('latestRates.noPairs')}</p>}
+        {!isLoading && rates.length === 0 && pairs.length === 0 && <p className="text-sm text-muted-foreground">{t('latestRates.noPairs')}</p>}
         {rates.length > 0 &&
             <div className="space-y-4">
             {rates.map(({ from, to, rate }) => {
-                const changeDirection = rate !== undefined ? changedRates.get(`${from}-${to}`) : undefined;
+                const key = `${from}/${to}`;
+                const changeDirection = changedRates.get(key);
                 const isChanged = !!changeDirection;
                 
                 return (
                 <div
-                    key={`${from}-${to}`}
+                    key={key}
                     className="grid grid-cols-[1fr_auto] items-center text-sm gap-x-4"
                 >
                     <div className="flex items-center gap-2 font-medium">
@@ -121,8 +99,8 @@ export function LatestRates({ pairs }: LatestRatesProps) {
                     <span>{to}</span>
                     </div>
                     <div className={cn(
-                    'font-mono transition-all duration-500 justify-self-end', 
-                    isChanged && (changeDirection === 'up' ? 'text-positive' : 'text-negative'),
+                    'font-mono transition-all duration-700 justify-self-end', 
+                    isChanged && (changeDirection === 'up' ? 'text-positive font-bold' : 'text-negative font-bold'),
                     isChanged && 'scale-110'
                     )}>
                     {formatRate(rate)}
