@@ -4,7 +4,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/hooks/use-translation';
-import { TrendingUp, Coins, Zap, ShieldCheck, Share2, LayoutGrid, Brain, Wallet, Gamepad2, Rocket, Database, Network, Globe, Landmark } from 'lucide-react';
+import { TrendingUp, Coins, Zap, ShieldCheck, LayoutGrid, Brain, Wallet, Gamepad2, Rocket, Database, Network, Globe, Landmark, Anchor, Layers, Cpu } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
@@ -18,49 +18,55 @@ const assetGroups = [
     id: 'popular',
     icon: TrendingUp,
     color: 'text-orange-500',
-    assets: ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOT'],
+    assets: ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOT', 'LTC', 'BCH'],
   },
   {
     id: 'telegram',
     icon: Zap,
     color: 'text-blue-500',
-    assets: ['TON', 'NOT', 'DOGS'],
+    assets: ['TON', 'NOT', 'DOGS', 'USDT'],
+  },
+  {
+    id: 'infrastructure',
+    icon: Layers,
+    color: 'text-purple-500',
+    assets: ['NEAR', 'ATOM', 'ARB', 'OP', 'TRX', 'MATIC', 'AVAX', 'LINK', 'ICP', 'SUI', 'APT', 'HBAR', 'STRK', 'W'],
+  },
+  {
+    id: 'rwa',
+    icon: Anchor,
+    color: 'text-amber-700',
+    assets: ['ONDO', 'PENDLE', 'MKR'],
   },
   {
     id: 'stablecoins',
     icon: ShieldCheck,
     color: 'text-green-500',
-    assets: ['USDT', 'USDC', 'DAI'],
+    assets: ['USDT', 'USDC', 'DAI', 'ENA'],
   },
   {
     id: 'ai',
     icon: Brain,
     color: 'text-blue-400',
-    assets: ['FET', 'RNDR', 'AGIX'],
+    assets: ['FET', 'RENDER', 'AGIX', 'TAO'],
   },
   {
     id: 'defi',
     icon: Wallet,
     color: 'text-indigo-500',
-    assets: ['UNI', 'AAVE', 'MKR'],
+    assets: ['UNI', 'AAVE', 'LDO', 'JUP', 'PYTH'],
   },
   {
     id: 'metaverse',
     icon: Gamepad2,
     color: 'text-pink-500',
-    assets: ['SAND', 'MANA', 'AXS', 'IMX'],
+    assets: ['SAND', 'MANA', 'AXS', 'IMX', 'GALA'],
   },
   {
     id: 'memes',
     icon: Rocket,
     color: 'text-yellow-500',
     assets: ['DOGE', 'SHIB', 'PEPE', 'FLOKI', 'BONK'],
-  },
-  {
-    id: 'infrastructure',
-    icon: Share2,
-    color: 'text-purple-500',
-    assets: ['NEAR', 'ATOM', 'ARB', 'OP', 'TRX', 'MATIC', 'AVAX', 'LINK'],
   },
   {
     id: 'storage',
@@ -72,19 +78,13 @@ const assetGroups = [
     id: 'depin',
     icon: Network,
     color: 'text-emerald-500',
-    assets: ['HNT', 'THETA'],
-  },
-  {
-    id: 'rwa',
-    icon: Globe,
-    color: 'text-amber-700',
-    assets: ['ONDO'],
+    assets: ['HNT', 'THETA', 'AKASH'],
   },
   {
     id: 'exchange',
     icon: Landmark,
     color: 'text-slate-600',
-    assets: ['BNB', 'OKB', 'CRO'],
+    assets: ['BNB', 'OKB', 'CRO', 'KCS'],
   },
   {
     id: 'nfts',
