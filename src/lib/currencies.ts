@@ -67,31 +67,55 @@ export async function updateAllRatesInCloud(db: Firestore) {
     const newRates: Record<string, number> = { 'USD': 1 };
 
     try {
-        const results = await Promise.allSettled([
-            fetchNbrb(),
-            fetchCbr(),
-            fetchCoinGecko(),
-            fetchEcb(),
-            fetchNbk(),
-            fetchCoinMarketCap(),
-            fetchWorldCurrency(),
-            fetchFixer(),
-            fetchCurrencyApi(),
-            fetchCoinlayer()
-        ]);
+        // Fetch from all sources
+        const sources = [
+            { id: 'worldcurrencyapi', fn: fetchWorldCurrency },
+            { id: 'fixer', fn: fetchFixer },
+            { id: 'currencyapi', fn: fetchCurrencyApi },
+            { id: 'coinlayer', fn: fetchCoinlayer },
+            { id: 'coingecko', fn: fetchCoinGecko },
+            { id: 'cmc', fn: fetchCoinMarketCap },
+            { id: 'nbrb', fn: fetchNbrb },
+            { id: 'cbr', fn: fetchCbr },
+            { id: 'ecb', fn: fetchEcb },
+            { id: 'nbk', fn: fetchNbk }
+        ];
 
-        results.forEach(res => {
-            if (res.status === 'fulfilled' && res.value) {
-                Object.assign(newRates, res.value);
+        // We want to merge official sources last so they take priority
+        // If a source is 'active', we want it to be the absolute last to merge
+        const results = await Promise.allSettled(sources.map(s => s.fn()));
+
+        // Sort results so active source is merged last
+        const mergedData: Record<string, number> = { 'USD': 1 };
+        
+        // 1. First pass: merge non-active sources in priority order
+        // Order: commercial -> crypto -> official
+        const priorityOrder = ['worldcurrencyapi', 'fixer', 'currencyapi', 'coinlayer', 'coingecko', 'cmc', 'nbrb', 'cbr', 'ecb', 'nbk'];
+        
+        priorityOrder.forEach(sourceId => {
+            if (sourceId === activeDataSource) return; // Skip active for now
+            const idx = sources.findIndex(s => s.id === sourceId);
+            const res = results[idx];
+            if (res && res.status === 'fulfilled' && res.value) {
+                Object.assign(mergedData, res.value);
             }
         });
 
+        // 2. Final pass: merge active source to ensure it has highest priority
+        const activeIdx = sources.findIndex(s => s.id === activeDataSource);
+        if (activeIdx !== -1) {
+            const activeRes = results[activeIdx];
+            if (activeRes && activeRes.status === 'fulfilled' && activeRes.value) {
+                Object.assign(mergedData, activeRes.value);
+            }
+        }
+
         await setDoc(doc(db, 'rates_cache', 'unified'), {
-            rates: newRates,
+            rates: mergedData,
             updatedAt: Date.now()
         }, { merge: true });
 
-        unifiedRates = { ...unifiedRates, ...newRates };
+        unifiedRates = { ...unifiedRates, ...mergedData };
         return unifiedRates;
     } catch (e) {
         console.error('Failed to update cloud rates:', e);

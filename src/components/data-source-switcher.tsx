@@ -3,7 +3,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Server, Globe, Landmark } from 'lucide-react';
+import { Server, Globe, Landmark, MapPin } from 'lucide-react';
 import type { DataSource } from '@/lib/types';
 import { useTranslation } from '@/hooks/use-translation';
 
@@ -37,10 +37,32 @@ export function DataSourceSwitcher({ currentSource, onSourceChange }: DataSource
                     variant={currentSource === 'cbr' ? 'default' : 'outline'}
                     className="w-full justify-start text-left h-auto py-2"
                 >
-                    < Landmark className="mr-3 h-5 w-5 flex-shrink-0" />
+                    <Landmark className="mr-3 h-5 w-5 flex-shrink-0" />
                     <div className="flex-1">
                         <p className="font-semibold">{t('dataSource.cbr')}</p>
                         <p className="text-xs text-muted-foreground font-normal whitespace-normal">{t('dataSource.cbrDesc')}</p>
+                    </div>
+                </Button>
+                <Button 
+                    onClick={() => onSourceChange('ecb')} 
+                    variant={currentSource === 'ecb' ? 'default' : 'outline'}
+                    className="w-full justify-start text-left h-auto py-2"
+                >
+                    <Globe className="mr-3 h-5 w-5 flex-shrink-0" />
+                    <div className="flex-1">
+                        <p className="font-semibold">{t('dataSource.ecb')}</p>
+                        <p className="text-xs text-muted-foreground font-normal whitespace-normal">{t('dataSource.ecbDesc')}</p>
+                    </div>
+                </Button>
+                <Button 
+                    onClick={() => onSourceChange('nbk')} 
+                    variant={currentSource === 'nbk' ? 'default' : 'outline'}
+                    className="w-full justify-start text-left h-auto py-2"
+                >
+                    <MapPin className="mr-3 h-5 w-5 flex-shrink-0" />
+                    <div className="flex-1">
+                        <p className="font-semibold">{t('dataSource.nbk')}</p>
+                        <p className="text-xs text-muted-foreground font-normal whitespace-normal">{t('dataSource.nbkDesc')}</p>
                     </div>
                 </Button>
                 <Button 
