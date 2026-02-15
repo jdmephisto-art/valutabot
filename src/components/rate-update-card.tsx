@@ -25,7 +25,7 @@ export function RateUpdateCard({ pair, oldRate, newRate }: { pair: string, oldRa
   };
 
   return (
-    <Card className="bg-secondary/70 relative group">
+    <Card className="bg-secondary/70 relative">
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
           <div className={cn("rounded-full p-2 mt-1", isUp ? 'bg-positive/20' : 'bg-negative/20')}>
@@ -43,7 +43,7 @@ export function RateUpdateCard({ pair, oldRate, newRate }: { pair: string, oldRa
           <Button 
             variant="ghost" 
             size="icon" 
-            className="h-8 w-8 text-primary opacity-0 group-hover:opacity-100 transition-opacity"
+            className="h-8 w-8 text-primary"
             onClick={handleShare}
             title={t('rateUpdate.share')}
           >

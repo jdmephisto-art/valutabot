@@ -45,7 +45,13 @@ export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [trackedPairs, setTrackedPairs] = useState<Map<string, number>>(new Map());
-  const [displayedPairs, setDisplayedPairs] = useState<string[]>(defaultDisplayedPairs);
+  const [displayedPairs, setDisplayedPairs] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('valutabot_displayed_pairs');
+      return saved ? JSON.parse(saved) : defaultDisplayedPairs;
+    }
+    return defaultDisplayedPairs;
+  });
   const [dataSource, setDataSourceState] = useState<DataSource>(getDataSource());
   const [autoClearMinutes, setAutoClearMinutes] = useState(0);
   const [autoClearPopoverOpen, setAutoClearPopoverOpen] = useState(false);
@@ -83,6 +89,11 @@ export function ChatInterface() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, scrollToBottom]);
+
+  // Persist displayed pairs
+  useEffect(() => {
+    localStorage.setItem('valutabot_displayed_pairs', JSON.stringify(displayedPairs));
+  }, [displayedPairs]);
 
   // Auto-clear logic
   useEffect(() => {
@@ -181,10 +192,7 @@ export function ChatInterface() {
             });
             addMessage({ 
               sender: 'bot', 
-              text: alertText,
-              options: [
-                { id: `share_rate_${data.from}_${data.to}_${Date.now()}`, label: t('chat.shareAlert'), icon: Share2 }
-              ]
+              text: alertText
             });
           }
         });
@@ -196,24 +204,6 @@ export function ChatInterface() {
         return false;
       }} onRemovePair={(p) => setTrackedPairs(prev => { const n = new Map(prev); n.delete(p); return n; })} onIntervalChange={() => {}} currentInterval={30000} />;
       if (id === 'settings') component = <DataSourceSwitcher currentSource={dataSource} onSourceChange={handleDataSourceChange} />;
-
-      // Special handling for shared actions
-      if (id.startsWith('share_rate')) {
-        const parts = id.split('_');
-        const from = parts[2];
-        const to = parts[3];
-        findRateAsync(from, to, firestore).then(rate => {
-          if (rate) {
-            const shareText = t('notifications.shareText', {
-              from,
-              to,
-              rate: rate > 1000 ? rate.toFixed(2) : rate.toFixed(4).replace(/\.?0+$/, '')
-            });
-            share(shareText);
-          }
-        });
-        return;
-      }
 
       addMessage({ sender: 'bot', component });
     }, 400);

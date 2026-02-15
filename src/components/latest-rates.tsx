@@ -118,8 +118,15 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
                 <DisplayedPairManager 
                   hideHeader
                   pairs={currentPairs} 
-                  onAddPair={onAddPair} 
-                  onRemovePair={onRemovePair} 
+                  onAddPair={(f, t) => {
+                    const success = onAddPair(f, t);
+                    if (success) setCurrentPairs(prev => [...prev, `${f}/${t}`]);
+                    return success;
+                  }} 
+                  onRemovePair={(p) => {
+                    onRemovePair(p);
+                    setCurrentPairs(prev => prev.filter(x => x !== p));
+                  }} 
                 />
               )
             )}
