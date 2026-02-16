@@ -579,6 +579,7 @@ export const translations = {
       share: 'Share Portfolio',
       shareText: "📈 My investment portfolio: {balance} {currency}. Track your assets in @CurrencyAll_bot!",
       growth: "Since your last visit: {diff} ({percent}%) {icon}",
+      stable: "Balance is stable ⚖️",
     },
     pwa: {
       title: 'Install App',
@@ -672,6 +673,10 @@ export const translations = {
       noRate: 'Could not get the rate for the selected date.',
       fallbackHint: "On {requestedDate} the official rate was not set. Showing last available rate from {actualDate}.",
       futureDate: "Historical data for future dates is not available.",
+      share: 'Share Result',
+      shareTextSingle: '📊 {from}/{to} rate on {date}: {rate}. Track history in @CurrencyAll_bot!',
+      shareTextRange: '📈 {from}/{to} trend: {startRate} ➔ {endRate} ({change}%) from {start} to {end}. @CurrencyAll_bot',
+      shareTextDynamics: '📉 {from}/{to} historical dynamics for {start} - {end}. @CurrencyAll_bot',
     },
     tracking: {
       title: 'Track Currency Pairs',
@@ -810,6 +815,7 @@ export const translations = {
       share: 'Поделиться портфелем',
       shareText: "📈 Мой инвестиционный портфель: {balance} {currency}. Следи за активами в @CurrencyAll_bot!",
       growth: "С последнего визита: {diff} ({percent}%) {icon}",
+      stable: "Баланс стабилен ⚖️",
     },
     pwa: {
       title: 'Установить приложение',
@@ -903,6 +909,10 @@ export const translations = {
       noRate: 'Не удалось получить курс для выбранной даты.',
       fallbackHint: "На {requestedDate} официальный курс не установлен. Показан последний доступный курс за {actualDate}.",
       futureDate: "Исторические данные для будущих дат недоступны.",
+      share: 'Поделиться результатом',
+      shareTextSingle: '📊 Курс {from}/{to} на {date}: {rate}. История в @CurrencyAll_bot!',
+      shareTextRange: '📈 Тренд {from}/{to}: {startRate} ➔ {endRate} ({change}%) с {start} по {end}. @CurrencyAll_bot',
+      shareTextDynamics: '📉 Динамика {from}/{to} за период {start} - {end}. @CurrencyAll_bot',
     },
     tracking: {
       title: 'Отслеживание валютных пар',

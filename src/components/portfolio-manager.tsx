@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Briefcase, PlusCircle, Trash2, Wallet, Settings2, Share2, TrendingUp, TrendingDown } from 'lucide-react';
+import { Briefcase, PlusCircle, Trash2, Wallet, Settings2, Share2, TrendingUp, TrendingDown, Scale } from 'lucide-react';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useTranslation } from '@/hooks/use-translation';
 import { CurrencyCombobox } from './currency-combobox';
@@ -75,27 +75,31 @@ export function PortfolioManager() {
     }, 0);
   }, [assets, displayCurrency]);
 
-  // Update last seen total on unmount or after meaningful time
   useEffect(() => {
     if (totalBalance > 0) {
-        return () => {
-            localStorage.setItem('valutabot_portfolio_last_total', totalBalance.toString());
-        }
+        localStorage.setItem('valutabot_portfolio_last_total', totalBalance.toString());
     }
   }, [totalBalance]);
 
   const growthInfo = useMemo(() => {
-    if (lastSeenTotal === null || lastSeenTotal === 0 || totalBalance === 0) return null;
+    if (assets.length === 0) return null;
+    if (lastSeenTotal === null || lastSeenTotal === 0 || totalBalance === 0) {
+        return { isInitial: true };
+    }
+    
     const diff = totalBalance - lastSeenTotal;
     const percent = (diff / lastSeenTotal) * 100;
-    if (Math.abs(percent) < 0.01) return null;
+    
+    if (Math.abs(percent) < 0.01) {
+        return { isStable: true };
+    }
     
     return {
         diff: diff.toFixed(2),
         percent: percent.toFixed(2),
         isUp: diff > 0
     };
-  }, [totalBalance, lastSeenTotal]);
+  }, [totalBalance, lastSeenTotal, assets.length]);
 
   const handleAddAsset = () => {
     haptic('medium');
@@ -199,13 +203,27 @@ export function PortfolioManager() {
           </p>
           
           {growthInfo && (
-            <div className={cn("flex items-center gap-1 text-[11px] font-bold mt-1", growthInfo.isUp ? "text-positive" : "text-negative")}>
-                {growthInfo.isUp ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                {t('portfolio.growth', { 
-                    diff: growthInfo.diff, 
-                    percent: growthInfo.percent, 
-                    icon: growthInfo.isUp ? '🚀' : '📉' 
-                })}
+            <div className="mt-1">
+                {'isStable' in growthInfo ? (
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-muted-foreground">
+                        <Scale size={14} />
+                        {t('portfolio.stable')}
+                    </div>
+                ) : 'isInitial' in growthInfo ? (
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-muted-foreground">
+                        <TrendingUp size={14} className="opacity-50" />
+                        {lang === 'ru' ? 'Первый расчет...' : 'Initial calculation...'}
+                    </div>
+                ) : (
+                    <div className={cn("flex items-center gap-1 text-[11px] font-bold", growthInfo.isUp ? "text-positive" : "text-negative")}>
+                        {growthInfo.isUp ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                        {t('portfolio.growth', { 
+                            diff: growthInfo.diff, 
+                            percent: growthInfo.percent, 
+                            icon: growthInfo.isUp ? '🚀' : '📉' 
+                        })}
+                    </div>
+                )}
             </div>
           )}
 

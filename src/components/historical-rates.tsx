@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -12,7 +13,7 @@ import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { getDynamicsForPeriod, getHistoricalRate, getDataSource } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
 import { format, subDays, isFuture, startOfDay } from 'date-fns';
-import { CalendarIcon, TrendingDown, TrendingUp, ArrowRightLeft, Info, AlertCircle } from 'lucide-react';
+import { CalendarIcon, TrendingDown, TrendingUp, ArrowRightLeft, Info, AlertCircle, Share2 } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useToast } from '@/hooks/use-toast';
@@ -20,6 +21,7 @@ import { useTranslation } from '@/hooks/use-translation';
 import { CurrencyCombobox } from './currency-combobox';
 import type { HistoricalRateResult } from '@/lib/types';
 import { useFirestore } from '@/firebase';
+import { useTelegram } from '@/hooks/use-telegram';
 
 export function HistoricalRates() {
   const dataSource = getDataSource();
@@ -27,6 +29,7 @@ export function HistoricalRates() {
   const { toast } = useToast();
   const { t, dateLocale, lang } = useTranslation();
   const firestore = useFirestore();
+  const { share, haptic } = useTelegram();
   const [fromCurrency, setFromCurrency] = useState('USD');
   const [toCurrency, setToCurrency] = useState('EUR');
   const [activeTab, setActiveTab] = useState('dynamics');
@@ -54,6 +57,48 @@ export function HistoricalRates() {
     if (activeTab === 'range') return (range?.from && isFuture(startOfDay(range.from))) || (range?.to && isFuture(startOfDay(range.to)));
     return false;
   }, [activeTab, date, dynamicsRange, range]);
+
+  const numberFormatter = (val: number) => {
+    if (val === 0) return '0';
+    const options = { minimumFractionDigits: 2, maximumFractionDigits: 4 };
+    return val.toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US', options);
+  };
+
+  const handleShareHistory = () => {
+    haptic('medium');
+    let shareText = '';
+
+    if (activeTab === 'single' && singleRate && date) {
+        shareText = t('history.shareTextSingle', {
+            from: fromCurrency,
+            to: toCurrency,
+            date: format(date, "PPP", { locale: dateLocale }),
+            rate: numberFormatter(singleRate.rate)
+        });
+    } else if (activeTab === 'range' && rangeResult && range?.from && range.to) {
+        const change = (((rangeResult.endRate - rangeResult.startRate) / rangeResult.startRate) * 100).toFixed(2);
+        shareText = t('history.shareTextRange', {
+            from: fromCurrency,
+            to: toCurrency,
+            startRate: numberFormatter(rangeResult.startRate),
+            endRate: numberFormatter(rangeResult.endRate),
+            change,
+            start: format(range.from, "MMM dd", { locale: dateLocale }),
+            end: format(range.to, "MMM dd", { locale: dateLocale })
+        });
+    } else if (activeTab === 'dynamics' && dynamicsData.length > 0 && dynamicsRange?.from && dynamicsRange.to) {
+        shareText = t('history.shareTextDynamics', {
+            from: fromCurrency,
+            to: toCurrency,
+            start: format(dynamicsRange.from, "MMM dd", { locale: dateLocale }),
+            end: format(dynamicsRange.to, "MMM dd", { locale: dateLocale })
+        });
+    }
+
+    if (shareText) {
+        share(shareText);
+    }
+  };
 
   const handleFetchDynamics = async () => {
     if (dynamicsRange?.from && dynamicsRange.to && !hasFutureDate) {
@@ -139,17 +184,28 @@ export function HistoricalRates() {
     } 
   };
 
-  const numberFormatter = (val: number) => {
-    if (val === 0) return '0';
-    const options = { minimumFractionDigits: 2, maximumFractionDigits: 4 };
-    return val.toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US', options);
-  };
+  const canShare = (activeTab === 'single' && singleRate) || 
+                   (activeTab === 'range' && rangeResult) || 
+                   (activeTab === 'dynamics' && dynamicsData.length > 0);
 
   return (
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
-      <CardHeader>
-        <CardTitle className="text-lg font-semibold">{t('history.title')}</CardTitle>
-        <CardDescription>{t('history.description', { source: dataSource.toUpperCase() })}</CardDescription>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <div className="flex-1">
+          <CardTitle className="text-lg font-semibold">{t('history.title')}</CardTitle>
+          <CardDescription>{t('history.description', { source: dataSource.toUpperCase() })}</CardDescription>
+        </div>
+        {canShare && (
+            <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 text-primary"
+                onClick={handleShareHistory}
+                title={t('history.share')}
+            >
+                <Share2 className="h-5 w-5" />
+            </Button>
+        )}
       </CardHeader>
       <CardContent>
         <div className="flex items-center gap-2 mb-4">
