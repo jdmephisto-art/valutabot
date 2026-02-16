@@ -1,18 +1,19 @@
 
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { getDataSource } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
-import { ArrowRight, List, Settings2, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowRight, List, Settings2, Share2 } from 'lucide-react';
 import { useTranslation } from '@/hooks/use-translation';
 import { useFirestore } from '@/firebase';
 import { useLatestRatesSWR } from '@/hooks/use-latest-rates-swr';
 import { Button } from '@/components/ui/button';
 import { DisplayedPairManager } from '@/components/displayed-pair-manager';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 import { CurrencyCombobox } from './currency-combobox';
+import { useTelegram } from '@/hooks/use-telegram';
 
 type LatestRatesProps = {
     pairs: string[];
@@ -25,6 +26,7 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
   const { t } = useTranslation();
   const dataSource = getDataSource();
   const firestore = useFirestore();
+  const { haptic, share } = useTelegram();
   
   const [currentPairs, setCurrentPairs] = useState(initialPairs);
   const { rates, isLoading } = useLatestRatesSWR(currentPairs, firestore);
@@ -64,7 +66,7 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
   }, [rates]);
 
   const formatRate = (rate?: number) => {
-    if (rate === undefined) return <span className="text-xs animate-pulse">...</span>;
+    if (rate === undefined) return '...';
     if (rate > 1000) return rate.toFixed(2);
     if (rate > 10) return rate.toFixed(4);
     return rate.toFixed(8).replace(/\.?0+$/, '');
@@ -78,6 +80,19 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
     setCurrentPairs(updated);
   };
 
+  const handleShare = () => {
+    haptic('medium');
+    const firstRate = rates[0];
+    if (firstRate && firstRate.rate !== undefined) {
+        const shareText = t('otherAssets.shareText', {
+            from: firstRate.from,
+            to: firstRate.to,
+            rate: formatRate(firstRate.rate)
+        });
+        share(shareText);
+    }
+  };
+
   const currentTarget = currentPairs[0]?.split('/')[1] || 'USD';
 
   return (
@@ -89,15 +104,28 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
           </CardTitle>
           <CardDescription>{t('latestRates.description', { source: dataSource.toUpperCase() })}</CardDescription>
         </div>
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          onClick={() => setIsConfigOpen(!isConfigOpen)}
-          className={cn("h-8 w-8 text-primary", isConfigOpen && "bg-primary/10")}
-          title={mode === 'single' ? t('latestRates.configTarget') : t('displayedPairManager.title')}
-        >
-          {mode === 'single' ? <Settings2 className="h-5 w-5" /> : <List className="h-5 w-5" />}
-        </Button>
+        <div className="flex items-center gap-1">
+          {mode === 'single' && rates.length > 0 && rates[0].rate !== undefined && (
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={handleShare}
+              className="h-8 w-8 text-primary"
+              title={t('otherAssets.shareRate')}
+            >
+              <Share2 className="h-5 w-5" />
+            </Button>
+          )}
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => setIsConfigOpen(!isConfigOpen)}
+            className={cn("h-8 w-8 text-primary", isConfigOpen && "bg-primary/10")}
+            title={mode === 'single' ? t('latestRates.configTarget') : t('displayedPairManager.title')}
+          >
+            {mode === 'single' ? <Settings2 className="h-5 w-5" /> : <List className="h-5 w-5" />}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <Collapsible open={isConfigOpen} onOpenChange={setIsConfigOpen} className="mb-4">

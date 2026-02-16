@@ -4,12 +4,10 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/hooks/use-translation';
-import { TrendingUp, Coins, Zap, ShieldCheck, LayoutGrid, Brain, Wallet, Gamepad2, Rocket, Database, Network, Globe, Landmark, Anchor, Layers, Cpu, Share2 } from 'lucide-react';
+import { TrendingUp, Coins, Zap, ShieldCheck, LayoutGrid, Brain, Wallet, Gamepad2, Rocket, Database, Network, Landmark, Anchor, Layers } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { useTelegram } from '@/hooks/use-telegram';
-import { findRate } from '@/lib/currencies';
 
 type OtherAssetsViewProps = {
     onShowRate: (from: string) => void;
@@ -98,20 +96,6 @@ const assetGroups = [
 
 export function OtherAssetsView({ onShowRate }: OtherAssetsViewProps) {
     const { t, getCurrencyName } = useTranslation();
-    const { share, haptic } = useTelegram();
-
-    const handleShareRate = (code: string) => {
-        haptic('medium');
-        const rate = findRate(code, 'USD');
-        if (rate) {
-            const shareText = t('otherAssets.shareText', {
-                from: code,
-                to: 'USD',
-                rate: rate > 1000 ? rate.toFixed(2) : rate.toFixed(4).replace(/\.?0+$/, '')
-            });
-            share(shareText);
-        }
-    };
 
     return (
         <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
@@ -140,15 +124,6 @@ export function OtherAssetsView({ onShowRate }: OtherAssetsViewProps) {
                                             <div className="flex items-center justify-between mb-1">
                                                 <Badge variant="outline" className="font-mono text-[10px]">{code}</Badge>
                                                 <div className="flex gap-1">
-                                                    <Button 
-                                                        variant="ghost" 
-                                                        size="icon" 
-                                                        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                        onClick={() => handleShareRate(code)}
-                                                        title={t('otherAssets.shareRate')}
-                                                    >
-                                                        <Share2 className="h-3 w-3 text-primary" />
-                                                    </Button>
                                                     <Button 
                                                         variant="ghost" 
                                                         size="sm" 
