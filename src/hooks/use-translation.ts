@@ -11,7 +11,6 @@ export function useTranslation() {
     const [lang, setLangState] = useState(getLang());
 
     useEffect(() => {
-        // Auto-detect language on first mount
         const savedLang = localStorage.getItem('valutabot_lang');
         if (!savedLang) {
             const tgLang = (window as any).Telegram?.WebApp?.initDataUnsafe?.user?.language_code;
@@ -36,7 +35,7 @@ export function useTranslation() {
 
     const t = useCallback((key: string, params?: Record<string, string | number>) => {
         const keys = key.split('.');
-        let result: any = translations[lang];
+        let result: any = (translations as any)[lang];
         for (const k of keys) {
             result = result?.[k];
             if (result === undefined) return keys[keys.length - 1];

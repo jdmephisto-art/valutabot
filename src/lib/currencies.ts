@@ -1,6 +1,6 @@
 
 import { Currency, ExchangeRate, DataSource, HistoricalRateResult } from '@/lib/types';
-import { format, isFuture, startOfDay, isAfter, isSameDay, eachDayOfInterval } from 'date-fns';
+import { format, isAfter, isSameDay, eachDayOfInterval, startOfDay } from 'date-fns';
 import { currencyApiPreloadedCurrencies } from './preloaded-data';
 import { doc, getDoc, setDoc, Firestore, onSnapshot } from 'firebase/firestore';
 
@@ -57,7 +57,6 @@ export async function preFetchInitialRates(db: Firestore) {
         const now = Date.now();
         const data = snap.data();
         
-        // Split check for fiat and crypto updates
         const needsCryptoUpdate = !snap.exists() || (now - (data?.updatedAtCrypto || 0) > CRYPTO_TTL);
         const needsFiatUpdate = !snap.exists() || (now - (data?.updatedAtFiat || 0) > FIAT_TTL);
 
@@ -66,20 +65,16 @@ export async function preFetchInitialRates(db: Firestore) {
         } else if (snap.exists()) {
             unifiedRates = { ...unifiedRates, ...data.rates };
         }
-    } catch (e) {
-        // Silently fail
-    }
+    } catch (e) {}
 }
 
 export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean = true) {
     const now = Date.now();
     try {
         const sources = [
-            // Crypto/High frequency
             { id: 'coingecko', fn: fetchCoinGecko, type: 'crypto' },
             { id: 'cmc', fn: fetchCoinMarketCap, type: 'crypto' },
             { id: 'coinlayer', fn: fetchCoinlayer, type: 'crypto' },
-            // Fiat/Low frequency
             { id: 'worldcurrencyapi', fn: fetchWorldCurrency, type: 'fiat' },
             { id: 'fixer', fn: fetchFixer, type: 'fiat' },
             { id: 'currencyapi', fn: fetchCurrencyApi, type: 'fiat' },
@@ -89,7 +84,6 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
             { id: 'nbk', fn: fetchNbk, type: 'fiat' }
         ];
 
-        // Only call fiat APIs if updateFiat is true
         const activeSources = sources.filter(s => s.type === 'crypto' || updateFiat);
         const results = await Promise.allSettled(activeSources.map(s => s.fn()));
 
@@ -102,6 +96,10 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
             }
         });
 
+        // Ensure user-selected source takes priority if its data is in mergedData
+        // (Logic already handles this by putting selected source at the end of sources list if needed, 
+        // but for now simple merging is effective)
+
         const updatePayload: any = {
             rates: mergedData,
             updatedAtCrypto: now
@@ -111,7 +109,6 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
         }
 
         await setDoc(doc(db, 'rates_cache', 'unified'), updatePayload, { merge: true });
-
         unifiedRates = { ...mergedData };
         return unifiedRates;
     } catch (e) {
@@ -307,7 +304,6 @@ export function findRate(from: string, to: string): number | undefined {
 export async function getCurrencies(): Promise<Currency[]> {
     const dbCodes = Object.keys(unifiedRates);
     const preloadedMap = new Map(currencyApiPreloadedCurrencies.map(c => [c.code, c]));
-    
     const approvedCodes = new Set([...fiatCodes, ...metalsCodes, ...popularCryptoCodes, ...curatedAltcoinCodes]);
     const allAvailableCodes = Array.from(new Set([...dbCodes, ...preloadedMap.keys()]));
     const filteredCodes = allAvailableCodes.filter(code => approvedCodes.has(code));

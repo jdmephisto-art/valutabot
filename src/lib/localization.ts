@@ -1,5 +1,5 @@
 
-import { translations as allTranslations, currencyNames } from './translations';
+import { translations as allTranslations, currencyNames as allCurrencyNames } from './translations';
 import type { Language } from './types';
 
 let lang: Language = 'ru';
@@ -29,8 +29,9 @@ export function getLang(): Language {
 }
 
 export function getCurrencyName(code: string, language: Language): string {
-    const names = currencyNames[language] as Record<string, string> | undefined;
+    const names = (allCurrencyNames as any)[language] as Record<string, string> | undefined;
     return names?.[code] ?? code;
 }
 
 export const translations = allTranslations;
+export const currencyNames = allCurrencyNames;
