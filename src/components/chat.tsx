@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, List, Box, ArrowUp, ArrowDown, Send, CircleHelp, Smartphone, Apple, Monitor, Briefcase, Share2 } from 'lucide-react';
+import { Bot, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, Box, ArrowUp, ArrowDown, Send, CircleHelp, Smartphone, Apple, Monitor, Briefcase } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LatestRates } from '@/components/latest-rates';
@@ -14,7 +14,6 @@ import { TrackingManager } from '@/components/tracking-manager';
 import { RateUpdateCard } from '@/components/rate-update-card';
 import { DataSourceSwitcher } from '@/components/data-source-switcher';
 import { AutoClearManager } from '@/components/auto-clear-manager';
-import { DisplayedPairManager } from '@/components/displayed-pair-manager';
 import { OtherAssetsView } from '@/components/other-assets-view';
 import { PortfolioManager } from '@/components/portfolio-manager';
 import type { Alert, DataSource } from '@/lib/types';
@@ -22,8 +21,11 @@ import { findRateAsync, setDataSource, getDataSource, preFetchInitialRates } fro
 import { useTranslation } from '@/hooks/use-translation';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { useFirestore } from '@/firebase';
+import { useFirestore, useUser, useMemoFirebase, useCollection } from '@/firebase';
 import { useTelegram } from '@/hooks/use-telegram';
+import { signInAnonymously } from 'firebase/auth';
+import { useAuth } from '@/firebase';
+import { collection, doc, setDoc, deleteDoc, query, where } from 'firebase/firestore';
 
 type Message = {
   id: string;
@@ -43,7 +45,12 @@ const defaultDisplayedPairs = ['USD/EUR', 'EUR/USD', 'USD/BYN', 'EUR/BYN', 'USD/
 
 export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const { user } = useUser();
+  const auth = useAuth();
+  const firestore = useFirestore();
+  const { haptic, webApp } = useTelegram();
+  const { t, lang, setLang } = useTranslation();
+  
   const [trackedPairs, setTrackedPairs] = useState<Map<string, number>>(new Map());
   const [displayedPairs, setDisplayedPairs] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
@@ -58,9 +65,14 @@ export function ChatInterface() {
   const [pwaPopoverOpen, setPwaPopoverOpen] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const componentId = useId();
-  const { t, lang, setLang } = useTranslation();
-  const firestore = useFirestore();
-  const { haptic, share } = useTelegram();
+
+  // Firestore Alerts logic
+  const alertsQuery = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return collection(firestore, 'users', user.uid, 'notifications');
+  }, [firestore, user]);
+  
+  const { data: cloudAlerts } = useCollection<Omit<Alert, 'id'>>(alertsQuery);
 
   const addMessage = useCallback((message: Omit<Message, 'id'>) => {
     setMessages(prev => [...prev, { ...message, id: `${componentId}-${prev.length}` }]);
@@ -90,6 +102,26 @@ export function ChatInterface() {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
+  // Auth & Init
+  useEffect(() => {
+    if (!user && auth) {
+      signInAnonymously(auth);
+    }
+  }, [user, auth]);
+
+  // Sync user profile with Telegram ID for background notifications
+  useEffect(() => {
+    if (user && webApp?.initDataUnsafe?.user?.id) {
+      const userRef = doc(firestore, 'users', user.uid);
+      setDoc(userRef, {
+        id: user.uid,
+        telegramId: String(webApp.initDataUnsafe.user.id),
+        username: webApp.initDataUnsafe.user.username || 'Anonymous',
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    }
+  }, [user, webApp, firestore]);
+
   // Persist displayed pairs
   useEffect(() => {
     localStorage.setItem('valutabot_displayed_pairs', JSON.stringify(displayedPairs));
@@ -105,15 +137,14 @@ export function ChatInterface() {
     }
   }, [autoClearMinutes, messages.length]);
 
-  // Alert check loop
+  // Alert check loop (Real-time monitor)
   useEffect(() => {
-    if (alerts.length === 0) return;
+    if (!cloudAlerts || cloudAlerts.length === 0) return;
 
     const checkInterval = setInterval(async () => {
-      const triggeredIndices: number[] = [];
+      const tgId = webApp?.initDataUnsafe?.user?.id;
       
-      for (let i = 0; i < alerts.length; i++) {
-        const alert = alerts[i];
+      for (const alert of cloudAlerts) {
         const currentRate = await findRateAsync(alert.from, alert.to, firestore);
         
         if (currentRate) {
@@ -122,23 +153,35 @@ export function ChatInterface() {
             : currentRate <= alert.threshold;
           
           if (isTriggered) {
-            triggeredIndices.push(i);
+            // 1. Show in Mini App
             addMessage({
               sender: 'bot',
               text: t('alertCard.title'),
               component: <RateUpdateCard pair={`${alert.from}/${alert.to}`} oldRate={alert.baseRate} newRate={currentRate} />
             });
+
+            // 2. Send Telegram Notification via API
+            if (tgId) {
+              fetch('/api/telegram/notify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  chatId: tgId,
+                  text: `🔔 <b>Оповещение о курсе!</b>\n\nПара <b>${alert.from}/${alert.to}</b> достигла отметки <b>${currentRate.toFixed(4)}</b>.\n\nВаш порог: ${alert.condition === 'above' ? '≥' : '≤'} ${alert.threshold}`
+                })
+              });
+            }
+
+            // 3. Delete from Firestore after trigger
+            const alertRef = doc(firestore, 'users', user!.uid, 'notifications', alert.id);
+            deleteDoc(alertRef);
           }
         }
-      }
-
-      if (triggeredIndices.length > 0) {
-        setAlerts(prev => prev.filter((_, idx) => !triggeredIndices.includes(idx)));
       }
     }, 60000);
 
     return () => clearInterval(checkInterval);
-  }, [alerts, firestore, addMessage, t]);
+  }, [cloudAlerts, firestore, addMessage, t, webApp, user]);
 
   const getActionButtons = useCallback((): ActionButtonProps[] => [
     { id: 'rates', label: t('chat.showRates'), icon: LineChart },
@@ -180,22 +223,27 @@ export function ChatInterface() {
           scrollToBottom();
       }} />;
       if (id === 'convert') component = <CurrencyConverter />;
-      if (id === 'alert') component = <NotificationManager onSetAlert={(data) => {
-        findRateAsync(data.from, data.to, firestore).then(rate => {
-          if (rate) {
-            setAlerts(prev => [...prev, { ...data, id: Date.now().toString(), baseRate: rate }]);
-            const alertText = t('chat.bot.alertSet', { 
-              from: data.from, 
-              to: data.to, 
-              condition: data.condition === 'above' ? t('notifications.above') : t('notifications.below'), 
-              threshold: data.threshold 
-            });
-            addMessage({ 
-              sender: 'bot', 
-              text: alertText
-            });
-          }
-        });
+      if (id === 'alert') component = <NotificationManager onSetAlert={async (data) => {
+        const rate = await findRateAsync(data.from, data.to, firestore);
+        if (rate && user) {
+          const alertId = Date.now().toString();
+          const alertRef = doc(firestore, 'users', user.uid, 'notifications', alertId);
+          await setDoc(alertRef, {
+            ...data,
+            id: alertId,
+            userId: user.uid,
+            baseRate: rate,
+            createdAt: new Date().toISOString()
+          });
+
+          const alertText = t('chat.bot.alertSet', { 
+            from: data.from, 
+            to: data.to, 
+            condition: data.condition === 'above' ? t('notifications.above') : t('notifications.below'), 
+            threshold: data.threshold 
+          });
+          addMessage({ sender: 'bot', text: alertText });
+        }
       }} />;
       if (id === 'history') component = <HistoricalRates />;
       if (id === 'track') component = <TrackingManager trackedPairs={Array.from(trackedPairs.keys())} onAddPair={async (f, t) => {
