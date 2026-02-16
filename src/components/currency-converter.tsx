@@ -1,20 +1,23 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { findRate, preFetchInitialRates } from '@/lib/currencies';
-import { ArrowRightLeft } from 'lucide-react';
+import { ArrowRightLeft, Share2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useTranslation } from '@/hooks/use-translation';
 import { CurrencyCombobox } from './currency-combobox';
 import { useFirestore } from '@/firebase';
+import { useTelegram } from '@/hooks/use-telegram';
 
 export function CurrencyConverter() {
   const { currencies } = useCurrencies();
   const { t } = useTranslation();
   const firestore = useFirestore();
+  const { haptic, share } = useTelegram();
   const [fromCurrency, setFromCurrency] = useState('USD');
   const [toCurrency, setToCurrency] = useState('EUR');
   const [amount, setAmount] = useState('1');
@@ -30,13 +33,11 @@ export function CurrencyConverter() {
     const convert = () => {
         if (!fromCurrency || !toCurrency) return;
         setIsConverting(true);
-        // Запрос курса из нашей библиотеки, которая теперь синхронизирована с Firestore
         const rate = findRate(fromCurrency, toCurrency);
         setDisplayRate(rate);
 
         if (rate && amount && !isNaN(parseFloat(amount))) {
           const result = parseFloat(amount) * rate;
-          // Логика форматирования для очень дешевых валют или крипто
           const isAsset = rate < 0.001 || ['BTC', 'ETH', 'TON', 'XAU', 'XAG', 'NOT', 'DOGS', 'ARS', 'AFN'].includes(toCurrency);
           setConvertedAmount(result > 1000 ? result.toFixed(2) : result.toFixed(isAsset ? 8 : 4).replace(/\.?0+$/, ''));
         } else {
@@ -59,10 +60,32 @@ export function CurrencyConverter() {
     setToCurrency(fromCurrency);
   }
 
+  const handleShare = () => {
+    haptic('medium');
+    const shareText = t('converter.shareText', {
+        amount,
+        from: fromCurrency,
+        result: convertedAmount,
+        to: toCurrency
+    });
+    share(shareText);
+  };
+
   return (
     <Card className="bg-transparent border-0 shadow-none w-full px-[6px] py-2 overflow-hidden">
-      <CardHeader className="px-1 pb-3">
+      <CardHeader className="px-1 pb-3 flex flex-row items-center justify-between space-y-0">
         <CardTitle className="text-base font-bold text-primary">{t('converter.title')}</CardTitle>
+        {amount && convertedAmount && (
+            <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-7 px-2 text-[10px] text-primary gap-1"
+                onClick={handleShare}
+            >
+                <Share2 className="h-3 w-3" />
+                {t('converter.share')}
+            </Button>
+        )}
       </CardHeader>
       <CardContent className="px-1 pb-2">
         <div className="space-y-5">

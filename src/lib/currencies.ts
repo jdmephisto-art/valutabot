@@ -31,7 +31,8 @@ let unifiedRates: Record<string, number> = {
     'KZT': 0.002
 };
 
-const CACHE_TTL = 15 * 60 * 1000;
+const CRYPTO_TTL = 15 * 60 * 1000; // 15 mins
+const FIAT_TTL = 3 * 60 * 60 * 1000; // 3 hours
 
 export function setDataSource(source: DataSource) {
     activeDataSource = source;
@@ -54,61 +55,64 @@ export async function preFetchInitialRates(db: Firestore) {
     try {
         const snap = await getDoc(docRef);
         const now = Date.now();
-        if (!snap.exists() || (now - (snap.data()?.updatedAt || 0) > CACHE_TTL)) {
-            updateAllRatesInCloud(db);
+        const data = snap.data();
+        
+        // Split check for fiat and crypto updates
+        const needsCryptoUpdate = !snap.exists() || (now - (data?.updatedAtCrypto || 0) > CRYPTO_TTL);
+        const needsFiatUpdate = !snap.exists() || (now - (data?.updatedAtFiat || 0) > FIAT_TTL);
+
+        if (needsCryptoUpdate || needsFiatUpdate) {
+            updateAllRatesInCloud(db, needsFiatUpdate);
         } else if (snap.exists()) {
-            unifiedRates = { ...unifiedRates, ...snap.data().rates };
+            unifiedRates = { ...unifiedRates, ...data.rates };
         }
     } catch (e) {
         // Silently fail
     }
 }
 
-export async function updateAllRatesInCloud(db: Firestore) {
-    const newRates: Record<string, number> = { 'USD': 1 };
-
+export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean = true) {
+    const now = Date.now();
     try {
         const sources = [
-            { id: 'worldcurrencyapi', fn: fetchWorldCurrency },
-            { id: 'fixer', fn: fetchFixer },
-            { id: 'currencyapi', fn: fetchCurrencyApi },
-            { id: 'coinlayer', fn: fetchCoinlayer },
-            { id: 'coingecko', fn: fetchCoinGecko },
-            { id: 'cmc', fn: fetchCoinMarketCap },
-            { id: 'nbrb', fn: fetchNbrb },
-            { id: 'cbr', fn: fetchCbr },
-            { id: 'ecb', fn: fetchEcb },
-            { id: 'nbk', fn: fetchNbk }
+            // Crypto/High frequency
+            { id: 'coingecko', fn: fetchCoinGecko, type: 'crypto' },
+            { id: 'cmc', fn: fetchCoinMarketCap, type: 'crypto' },
+            { id: 'coinlayer', fn: fetchCoinlayer, type: 'crypto' },
+            // Fiat/Low frequency
+            { id: 'worldcurrencyapi', fn: fetchWorldCurrency, type: 'fiat' },
+            { id: 'fixer', fn: fetchFixer, type: 'fiat' },
+            { id: 'currencyapi', fn: fetchCurrencyApi, type: 'fiat' },
+            { id: 'nbrb', fn: fetchNbrb, type: 'fiat' },
+            { id: 'cbr', fn: fetchCbr, type: 'fiat' },
+            { id: 'ecb', fn: fetchEcb, type: 'fiat' },
+            { id: 'nbk', fn: fetchNbk, type: 'fiat' }
         ];
 
-        const results = await Promise.allSettled(sources.map(s => s.fn()));
+        // Only call fiat APIs if updateFiat is true
+        const activeSources = sources.filter(s => s.type === 'crypto' || updateFiat);
+        const results = await Promise.allSettled(activeSources.map(s => s.fn()));
 
-        const mergedData: Record<string, number> = { 'USD': 1 };
-        const priorityOrder = ['worldcurrencyapi', 'fixer', 'currencyapi', 'coinlayer', 'coingecko', 'cmc', 'nbrb', 'cbr', 'ecb', 'nbk'];
+        const mergedData: Record<string, number> = { ...unifiedRates };
         
-        priorityOrder.forEach(sourceId => {
-            if (sourceId === activeDataSource) return;
-            const idx = sources.findIndex(s => s.id === sourceId);
+        activeSources.forEach((source, idx) => {
             const res = results[idx];
             if (res && res.status === 'fulfilled' && res.value) {
                 Object.assign(mergedData, res.value);
             }
         });
 
-        const activeIdx = sources.findIndex(s => s.id === activeDataSource);
-        if (activeIdx !== -1) {
-            const activeRes = results[activeIdx];
-            if (activeRes && activeRes.status === 'fulfilled' && activeRes.value) {
-                Object.assign(mergedData, activeRes.value);
-            }
+        const updatePayload: any = {
+            rates: mergedData,
+            updatedAtCrypto: now
+        };
+        if (updateFiat) {
+            updatePayload.updatedAtFiat = now;
         }
 
-        await setDoc(doc(db, 'rates_cache', 'unified'), {
-            rates: mergedData,
-            updatedAt: Date.now()
-        }, { merge: true });
+        await setDoc(doc(db, 'rates_cache', 'unified'), updatePayload, { merge: true });
 
-        unifiedRates = { ...unifiedRates, ...mergedData };
+        unifiedRates = { ...mergedData };
         return unifiedRates;
     } catch (e) {
         return unifiedRates;

@@ -1,3 +1,4 @@
+
 import { translations as allTranslations, currencyNames } from './translations';
 import type { Language } from './types';
 

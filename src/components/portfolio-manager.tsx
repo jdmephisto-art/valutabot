@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Briefcase, PlusCircle, Trash2, Wallet, Settings2, Share2 } from 'lucide-react';
+import { Briefcase, PlusCircle, Trash2, Wallet, Settings2, Share2, TrendingUp, TrendingDown } from 'lucide-react';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useTranslation } from '@/hooks/use-translation';
 import { CurrencyCombobox } from './currency-combobox';
@@ -16,6 +16,7 @@ import { Separator } from './ui/separator';
 import { Badge } from './ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useTelegram } from '@/hooks/use-telegram';
+import { cn } from '@/lib/utils';
 
 export function PortfolioManager() {
   const { currencies } = useCurrencies();
@@ -42,6 +43,14 @@ export function PortfolioManager() {
     return 'USD';
   });
 
+  const [lastSeenTotal, setLastSeenTotal] = useState<number | null>(() => {
+    if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('valutabot_portfolio_last_total');
+        return saved ? parseFloat(saved) : null;
+    }
+    return null;
+  });
+
   const [newAssetCode, setNewAssetCode] = useState('BTC');
   const [newAssetAmount, setNewAssetAmount] = useState('0');
   const [isBaseCurrencyPickerOpen, setIsBaseCurrencyPickerOpen] = useState(false);
@@ -57,6 +66,36 @@ export function PortfolioManager() {
   useEffect(() => {
     localStorage.setItem('valutabot_portfolio_base', displayCurrency);
   }, [displayCurrency]);
+
+  const totalBalance = useMemo(() => {
+    return assets.reduce((sum, asset) => {
+      const rate = findRate(asset.code, displayCurrency);
+      if (rate) return sum + (asset.amount * rate);
+      return sum;
+    }, 0);
+  }, [assets, displayCurrency]);
+
+  // Update last seen total on unmount or after meaningful time
+  useEffect(() => {
+    if (totalBalance > 0) {
+        return () => {
+            localStorage.setItem('valutabot_portfolio_last_total', totalBalance.toString());
+        }
+    }
+  }, [totalBalance]);
+
+  const growthInfo = useMemo(() => {
+    if (lastSeenTotal === null || lastSeenTotal === 0 || totalBalance === 0) return null;
+    const diff = totalBalance - lastSeenTotal;
+    const percent = (diff / lastSeenTotal) * 100;
+    if (Math.abs(percent) < 0.01) return null;
+    
+    return {
+        diff: diff.toFixed(2),
+        percent: percent.toFixed(2),
+        isUp: diff > 0
+    };
+  }, [totalBalance, lastSeenTotal]);
 
   const handleAddAsset = () => {
     haptic('medium');
@@ -83,14 +122,6 @@ export function PortfolioManager() {
     if (isNaN(val)) return;
     setAssets(prev => prev.map(a => a.code === code ? { ...a, amount: Math.max(0, val) } : a));
   };
-
-  const totalBalance = useMemo(() => {
-    return assets.reduce((sum, asset) => {
-      const rate = findRate(asset.code, displayCurrency);
-      if (rate) return sum + (asset.amount * rate);
-      return sum;
-    }, 0);
-  }, [assets, displayCurrency]);
 
   const formatValue = (val: number) => {
     if (val === 0) return '0';
@@ -166,6 +197,18 @@ export function PortfolioManager() {
             {formatValue(totalBalance)}
             <span className="text-sm font-bold opacity-70">{displayCurrency}</span>
           </p>
+          
+          {growthInfo && (
+            <div className={cn("flex items-center gap-1 text-[11px] font-bold mt-1", growthInfo.isUp ? "text-positive" : "text-negative")}>
+                {growthInfo.isUp ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                {t('portfolio.growth', { 
+                    diff: growthInfo.diff, 
+                    percent: growthInfo.percent, 
+                    icon: growthInfo.isUp ? '🚀' : '📉' 
+                })}
+            </div>
+          )}
+
           <div className="absolute -right-4 -bottom-4 opacity-5 pointer-events-none">
             <Briefcase className="h-24 w-24" />
           </div>
