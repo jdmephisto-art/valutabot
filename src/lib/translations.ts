@@ -1,4 +1,3 @@
-
 export const currencyNames = {
   en: {
     'AED': 'United Arab Emirates Dirham',
@@ -621,6 +620,7 @@ export const translations = {
       noPairs: 'No pairs selected for display. Please configure the list from the main menu.',
       configTarget: 'Configure currency',
       targetCurrency: 'Show in',
+      tomorrow: 'Tomorrow',
     },
     converter: {
       title: 'Currency Converter',
@@ -630,6 +630,7 @@ export const translations = {
       converted: 'Converted',
       share: 'Share Result',
       shareText: "💱 {amount} {from} = {result} {to}. Calculated in @CurrencyAll_bot!",
+      tomorrowWarning: "⚠️ Tomorrow the rate will change to {rate}. Planning an exchange?",
     },
     notifications: {
       title: 'Set Rate Alert',
@@ -692,6 +693,9 @@ export const translations = {
       intervalSetDesc: 'Tracking interval is now {seconds} seconds.',
       alreadyExistsTitle: "Pair Already Tracked",
       alreadyExistsDesc: "The pair {pair} is already being tracked.",
+      activeAlerts: "Active Cloud Notifications",
+      stop: "Stop",
+      alertStopped: "Notification has been stopped.",
       toast: {
         errorTitle: 'Error tracking pair',
         errorDescription: 'Could not find the exchange rate for the selected pair. Rates might still be loading.',
@@ -857,6 +861,7 @@ export const translations = {
       noPairs: 'Нет выбранных пар для отображения. Пожалуйста, настройте список в главном меню.',
       configTarget: 'Настройка валюты',
       targetCurrency: 'Отображать в',
+      tomorrow: 'Завтра',
     },
     converter: {
       title: 'Конвертер валют',
@@ -866,6 +871,7 @@ export const translations = {
       converted: 'Конвертировано',
       share: 'Поделиться результатом',
       shareText: "💱 {amount} {from} = {result} {to}. Посчитано в @CurrencyAll_bot!",
+      tomorrowWarning: "⚠️ Завтра курс изменится на {rate}. Планируете обмен?",
     },
     notifications: {
       title: 'Установить оповещение о курсе',
@@ -925,9 +931,12 @@ export const translations = {
       intervalWarning: 'Минимальный интервал - 10 секунд.',
       setInterval: 'Установить интервал',
       intervalSet: 'Интервал обновлен!',
-      intervalSetDesc: 'Интервал отслеживания теперь {seconds} секунд.',
+      intervalSetDesc: 'Изменения теперь будут видны быстрее.',
       alreadyExistsTitle: "Пара уже отслеживается",
       alreadyExistsDesc: "Пара {pair} уже отслеживается.",
+      activeAlerts: "Активные оповещения в чат",
+      stop: "Остановить",
+      alertStopped: "Оповещение остановлено.",
       toast: {
         errorTitle: 'Ошибка отслеживания пары',
         errorDescription: 'Не удалось найти обменный курс для выбранной пары. Возможно, курсы еще загружаются.',

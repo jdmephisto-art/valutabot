@@ -1,11 +1,10 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { getDataSource } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
-import { ArrowRight, List, Settings2, Share2 } from 'lucide-react';
+import { ArrowRight, List, Settings2, Share2, Info } from 'lucide-react';
 import { useTranslation } from '@/hooks/use-translation';
 import { useFirestore } from '@/firebase';
 import { useLatestRatesSWR } from '@/hooks/use-latest-rates-swr';
@@ -39,13 +38,10 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
     setCurrentPairs(initialPairs);
   }, [initialPairs]);
 
-  // Detect changes for animation
   useEffect(() => {
     if (rates.length === 0) return;
-
     const changed = new Map<string, 'up' | 'down'>();
     const currentRatesMap = new Map<string, number>();
-
     rates.forEach(r => {
       const key = `${r.from}/${r.to}`;
       if (r.rate !== undefined) {
@@ -56,12 +52,10 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
         }
       }
     });
-
     if (changed.size > 0) {
       setChangedRates(changed);
       setTimeout(() => setChangedRates(new Map()), 2000);
     }
-    
     setPrevRates(currentRatesMap);
   }, [rates]);
 
@@ -73,10 +67,7 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
   };
 
   const handleTargetChange = (newTo: string) => {
-    const updated = currentPairs.map(p => {
-      const from = p.split('/')[0];
-      return `${from}/${newTo}`;
-    });
+    const updated = currentPairs.map(p => `${p.split('/')[0]}/${newTo}`);
     setCurrentPairs(updated);
   };
 
@@ -106,23 +97,11 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
         </div>
         <div className="flex items-center gap-1">
           {mode === 'single' && rates.length > 0 && rates[0].rate !== undefined && (
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={handleShare}
-              className="h-8 w-8 text-primary"
-              title={t('otherAssets.shareRate')}
-            >
+            <Button variant="ghost" size="icon" onClick={handleShare} className="h-8 w-8 text-primary">
               <Share2 className="h-5 w-5" />
             </Button>
           )}
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={() => setIsConfigOpen(!isConfigOpen)}
-            className={cn("h-8 w-8 text-primary", isConfigOpen && "bg-primary/10")}
-            title={mode === 'single' ? t('latestRates.configTarget') : t('displayedPairManager.title')}
-          >
+          <Button variant="ghost" size="icon" onClick={() => setIsConfigOpen(!isConfigOpen)} className={cn("h-8 w-8 text-primary", isConfigOpen && "bg-primary/10")}>
             {mode === 'single' ? <Settings2 className="h-5 w-5" /> : <List className="h-5 w-5" />}
           </Button>
         </div>
@@ -133,81 +112,47 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
             {mode === 'single' ? (
               <div className="space-y-2">
                 <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t('latestRates.targetCurrency')}</p>
-                <CurrencyCombobox 
-                  value={currentTarget}
-                  onChange={(val) => {
-                    handleTargetChange(val);
-                    setIsConfigOpen(false);
-                  }}
-                />
+                <CurrencyCombobox value={currentTarget} onChange={(val) => { handleTargetChange(val); setIsConfigOpen(false); }} />
               </div>
             ) : (
-              onAddPair && onRemovePair && (
-                <DisplayedPairManager 
-                  hideHeader
-                  pairs={currentPairs} 
-                  onAddPair={(f, t) => {
-                    const success = onAddPair(f, t);
-                    if (success) setCurrentPairs(prev => [...prev, `${f}/${t}`]);
-                    return success;
-                  }} 
-                  onRemovePair={(p) => {
-                    onRemovePair(p);
-                    setCurrentPairs(prev => prev.filter(x => x !== p));
-                  }} 
-                />
-              )
+              onAddPair && onRemovePair && <DisplayedPairManager hideHeader pairs={currentPairs} onAddPair={onAddPair} onRemovePair={onRemovePair} />
             )}
           </CollapsibleContent>
         </Collapsible>
 
-        {isLoading && rates.length === 0 && (
-             <div className="space-y-4">
-                {currentPairs.map(p => {
-                    const [from, to] = p.split('/');
-                    return (
-                        <div key={p} className="grid grid-cols-[1fr_auto] items-center text-sm gap-x-4">
-                            <div className="flex items-center gap-2 font-medium">
-                                <span>{from}</span>
-                                <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                                <span>{to}</span>
-                            </div>
-                            <div className="font-mono animate-pulse justify-self-end">...</div>
-                        </div>
-                    );
-                })}
-            </div>
-        )}
-        {!isLoading && rates.length === 0 && currentPairs.length === 0 && <p className="text-sm text-muted-foreground">{t('latestRates.noPairs')}</p>}
-        {rates.length > 0 &&
-            <div className="space-y-4">
-            {rates.map(({ from, to, rate }) => {
-                const key = `${from}/${to}`;
-                const changeDirection = changedRates.get(key);
-                const isChanged = !!changeDirection;
-                
-                return (
-                <div
-                    key={key}
-                    className="grid grid-cols-[1fr_auto] items-center text-sm gap-x-4"
-                >
-                    <div className="flex items-center gap-2 font-medium">
+        <div className="space-y-4">
+          {rates.map(({ from, to, rate, tomorrowRate }) => {
+            const key = `${from}/${to}`;
+            const isChanged = changedRates.has(key);
+            const direction = changedRates.get(key);
+            const showTomorrow = tomorrowRate && tomorrowRate !== rate;
+
+            return (
+              <div key={key} className="space-y-1">
+                <div className="grid grid-cols-[1fr_auto] items-center text-sm gap-x-4">
+                  <div className="flex items-center gap-2 font-medium">
                     <span>{from}</span>
                     <ArrowRight className="h-4 w-4 text-muted-foreground" />
                     <span>{to}</span>
-                    </div>
-                    <div className={cn(
-                    'font-mono transition-all duration-700 justify-self-end', 
-                    isChanged && (changeDirection === 'up' ? 'text-positive font-bold' : 'text-negative font-bold'),
+                  </div>
+                  <div className={cn(
+                    'font-mono transition-all duration-700 justify-self-end',
+                    isChanged && (direction === 'up' ? 'text-positive font-bold' : 'text-negative font-bold'),
                     isChanged && 'scale-110'
-                    )}>
+                  )}>
                     {formatRate(rate)}
-                    </div>
+                  </div>
                 </div>
-                );
-            })}
-            </div>
-        }
+                {showTomorrow && (
+                  <div className="flex justify-end items-center gap-1 opacity-60 text-[10px]">
+                    <Info size={10} />
+                    <span>{t('latestRates.tomorrow')}: {formatRate(tomorrowRate)}</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </CardContent>
     </Card>
   );

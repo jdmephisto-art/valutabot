@@ -9,6 +9,7 @@ export type ExchangeRate = {
   from: string;
   to: string;
   rate?: number;
+  tomorrowRate?: number;
 };
 
 export type Alert = {
@@ -18,6 +19,7 @@ export type Alert = {
   condition: 'above' | 'below';
   threshold: number;
   baseRate: number;
+  createdAt: string;
 };
 
 export type DataSource = 'nbrb' | 'worldcurrencyapi' | 'cbr' | 'ecb' | 'nbk';
