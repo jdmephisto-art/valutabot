@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 import { initializeFirebase } from '@/firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -10,7 +9,8 @@ import { doc, getDoc } from 'firebase/firestore';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const token = process.env.TELEGRAM_BOT_TOKEN;
+    // Use new token from request or fallback to process.env
+    const token = process.env.TELEGRAM_BOT_TOKEN || '8586154483:AAE9H5rBSHs3Z0qIfZtNOW6Vi5QcfaXnTSI';
     const { firestore } = initializeFirebase();
 
     // 1. Handle Inline Query (@CurrencyAll_bot USD BYN)
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
       const text = body.message.text;
 
       if (text === '/start') {
-        // Here you could send a welcome message if you had the token and fetch
+        // Handle start message
       }
     }
 

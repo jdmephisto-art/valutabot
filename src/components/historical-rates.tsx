@@ -51,6 +51,7 @@ export function HistoricalRates() {
   const [dynamicsEndPopoverOpen, setDynamicsEndPopoverOpen] = useState(false);
 
   const hasFutureDate = useMemo(() => {
+    // Limit is tomorrow (current day + 1) because banks set tomorrow's rate today
     const limit = addDays(startOfDay(new Date()), 1);
     const isInvalid = (d: Date | undefined) => d ? isAfter(startOfDay(d), limit) : false;
 
@@ -239,7 +240,13 @@ export function HistoricalRates() {
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={dynamicsRange?.from} onSelect={(d) => { setDynamicsRange({ ...dynamicsRange, from: d }); setDynamicsStartPopoverOpen(false); }} locale={dateLocale} />
+                        <Calendar 
+                          mode="single" 
+                          selected={dynamicsRange?.from} 
+                          onSelect={(d) => { setDynamicsRange({ ...dynamicsRange, from: d }); setDynamicsStartPopoverOpen(false); }} 
+                          locale={dateLocale}
+                          disabled={(date) => isAfter(startOfDay(date), addDays(startOfDay(new Date()), 1))}
+                        />
                     </PopoverContent>
                 </Popover>
                 <Popover open={dynamicsEndPopoverOpen} onOpenChange={setDynamicsEndPopoverOpen}>
@@ -250,7 +257,13 @@ export function HistoricalRates() {
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={dynamicsRange?.to} onSelect={(d) => { setDynamicsRange({ ...dynamicsRange, to: d }); setDynamicsEndPopoverOpen(false); }} locale={dateLocale} />
+                        <Calendar 
+                          mode="single" 
+                          selected={dynamicsRange?.to} 
+                          onSelect={(d) => { setDynamicsRange({ ...dynamicsRange, to: d }); setDynamicsEndPopoverOpen(false); }} 
+                          locale={dateLocale}
+                          disabled={(date) => isAfter(startOfDay(date), addDays(startOfDay(new Date()), 1))}
+                        />
                     </PopoverContent>
                 </Popover>
             </div>
@@ -296,7 +309,13 @@ export function HistoricalRates() {
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0">
-                  <Calendar mode="single" selected={date} onSelect={(d) => { setDate(d); setSingleDatePopoverOpen(false); }} locale={dateLocale} />
+                  <Calendar 
+                    mode="single" 
+                    selected={date} 
+                    onSelect={(d) => { setDate(d); setSingleDatePopoverOpen(false); }} 
+                    locale={dateLocale}
+                    disabled={(date) => isAfter(startOfDay(date), addDays(startOfDay(new Date()), 1))}
+                  />
               </PopoverContent>
             </Popover>
 
@@ -339,7 +358,13 @@ export function HistoricalRates() {
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={range?.from} onSelect={(d) => { setRange({ ...range, from: d }); setRangeStartPopoverOpen(false); }} locale={dateLocale} />
+                        <Calendar 
+                          mode="single" 
+                          selected={range?.from} 
+                          onSelect={(d) => { setRange({ ...range, from: d }); setRangeStartPopoverOpen(false); }} 
+                          locale={dateLocale}
+                          disabled={(date) => isAfter(startOfDay(date), addDays(startOfDay(new Date()), 1))}
+                        />
                     </PopoverContent>
                 </Popover>
                 <Popover open={rangeEndPopoverOpen} onOpenChange={setRangeEndPopoverOpen}>
@@ -350,7 +375,13 @@ export function HistoricalRates() {
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={range?.to} onSelect={(d) => { setRange({ ...range, to: d }); setRangeEndPopoverOpen(false); }} locale={dateLocale} />
+                        <Calendar 
+                          mode="single" 
+                          selected={range?.to} 
+                          onSelect={(d) => { setRange({ ...range, to: d }); setRangeEndPopoverOpen(false); }} 
+                          locale={dateLocale}
+                          disabled={(date) => isAfter(startOfDay(date), addDays(startOfDay(new Date()), 1))}
+                        />
                     </PopoverContent>
                 </Popover>
              </div>

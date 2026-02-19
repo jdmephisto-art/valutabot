@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 
 /**
@@ -8,7 +7,8 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const { chatId, text } = await request.json();
-    const token = '8586154483:AAFf-uO8tfOthVkA5IlxCd64jGuwba6TFr4';
+    // Use new token from request or fallback to process.env
+    const token = process.env.TELEGRAM_BOT_TOKEN || '8586154483:AAE9H5rBSHs3Z0qIfZtNOW6Vi5QcfaXnTSI';
 
     if (!chatId || !text) {
       return NextResponse.json({ error: 'chatId and text are required' }, { status: 400 });

@@ -630,7 +630,7 @@ export const translations = {
       converted: 'Converted',
       share: 'Share Result',
       shareText: "💱 {amount} {from} = {result} {to}. Calculated in @CurrencyAll_bot!",
-      tomorrowWarning: "⚠️ Tomorrow the rate will change to {rate}. The rate will change by {diff}.",
+      tomorrowWarning: "⚠️ Tomorrow the rate will change to {rate}. The rate will change by {diff}",
     },
     notifications: {
       title: 'Set Rate Alert',
@@ -826,7 +826,7 @@ export const translations = {
       description: 'Добавьте ВалютаБот на главный экран для быстрого доступа.',
       ios: 'iOS: Нажмите кнопку "Поделиться", затем "На экран "Домой"".',
       android: 'Android: Нажмите на 3 точки и выберите "Установить приложение".',
-      pc: 'ПК: Нажмите на иконку установки в адресной строраку браузера.',
+      pc: 'ПК: Нажмите на иконку установки в адресной строке браузера.',
     },
     otherAssets: {
       title: "Каталог активов",
