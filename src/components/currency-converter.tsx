@@ -63,6 +63,8 @@ export function CurrencyConverter() {
   };
 
   const hasRateChange = tomorrowRate && displayRate && Math.abs(tomorrowRate - displayRate) > 0.0001;
+  const rateDiff = (tomorrowRate && displayRate) ? (tomorrowRate - displayRate) : 0;
+  const diffStr = (rateDiff >= 0 ? '+' : '') + rateDiff.toFixed(4);
 
   return (
     <Card className="bg-transparent border-0 shadow-none w-full px-[6px] py-2 overflow-hidden">
@@ -98,7 +100,7 @@ export function CurrencyConverter() {
             <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 flex gap-3 items-start animate-in fade-in slide-in-from-bottom-2">
               <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
               <p className="text-[10px] text-amber-700 leading-tight">
-                {t('converter.tomorrowWarning', { rate: tomorrowRate.toFixed(4) })}
+                {t('converter.tomorrowWarning', { rate: tomorrowRate.toFixed(4), diff: diffStr })}
               </p>
             </div>
           )}

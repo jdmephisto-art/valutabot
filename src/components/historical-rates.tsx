@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -12,7 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { getDynamicsForPeriod, getHistoricalRate, getDataSource } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
-import { format, subDays, isFuture, startOfDay } from 'date-fns';
+import { format, subDays, isAfter, startOfDay, addDays } from 'date-fns';
 import { CalendarIcon, TrendingDown, TrendingUp, ArrowRightLeft, Info, AlertCircle, Share2 } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import { useCurrencies } from '@/hooks/use-currencies';
@@ -52,9 +51,12 @@ export function HistoricalRates() {
   const [dynamicsEndPopoverOpen, setDynamicsEndPopoverOpen] = useState(false);
 
   const hasFutureDate = useMemo(() => {
-    if (activeTab === 'single') return date && isFuture(startOfDay(date));
-    if (activeTab === 'dynamics') return (dynamicsRange?.from && isFuture(startOfDay(dynamicsRange.from))) || (dynamicsRange?.to && isFuture(startOfDay(dynamicsRange.to)));
-    if (activeTab === 'range') return (range?.from && isFuture(startOfDay(range.from))) || (range?.to && isFuture(startOfDay(range.to)));
+    const limit = addDays(startOfDay(new Date()), 1);
+    const isInvalid = (d: Date | undefined) => d ? isAfter(startOfDay(d), limit) : false;
+
+    if (activeTab === 'single') return isInvalid(date);
+    if (activeTab === 'dynamics') return isInvalid(dynamicsRange?.from) || isInvalid(dynamicsRange?.to);
+    if (activeTab === 'range') return isInvalid(range?.from) || isInvalid(range?.to);
     return false;
   }, [activeTab, date, dynamicsRange, range]);
 
