@@ -7,8 +7,8 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const { chatId, text } = await request.json();
-    // CRITICAL: Token is now loaded purely from environment variables.
-    // Ensure TELEGRAM_BOT_TOKEN is set in your hosting provider's settings.
+    // CRITICAL: Token is loaded purely from environment variables.
+    // The string literal has been completely removed to prevent leaks.
     const token = process.env.TELEGRAM_BOT_TOKEN;
 
     if (!token) {
