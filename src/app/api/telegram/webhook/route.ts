@@ -9,16 +9,20 @@ import { doc, getDoc } from 'firebase/firestore';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    // Use new token from request or fallback to process.env
-    const token = process.env.TELEGRAM_BOT_TOKEN || '8586154483:AAE9H5rBSHs3Z0qIfZtNOW6Vi5QcfaXnTSI';
+    // CRITICAL: Token is now loaded purely from environment variables.
+    const token = process.env.TELEGRAM_BOT_TOKEN;
     const { firestore } = initializeFirebase();
+
+    if (!token) {
+        return NextResponse.json({ ok: false, error: 'Token not configured' }, { status: 200 });
+    }
 
     // 1. Handle Inline Query (@CurrencyAll_bot USD BYN)
     if (body.inline_query) {
       const queryId = body.inline_query.id;
       const queryText = body.inline_query.query.trim().toUpperCase();
       
-      if (queryText.length >= 3) {
+      if (queryText.length >= 2) {
         // Expected format: "USD BYN" or "100 USD BYN"
         const parts = queryText.split(/\s+/);
         let amount = 1;
@@ -44,7 +48,7 @@ export async function POST(request: Request) {
         const fromPrice = rates[from];
         const toPrice = rates[to];
 
-        if (fromPrice && toPrice && token) {
+        if (fromPrice && toPrice) {
           const rate = fromPrice / toPrice;
           const resultValue = amount * rate;
           const resultText = `${amount} ${from} = ${resultValue > 1000 ? resultValue.toFixed(2) : resultValue.toFixed(4).replace(/\.?0+$/, '')} ${to}`;
@@ -74,7 +78,7 @@ export async function POST(request: Request) {
             body: JSON.stringify({
               inline_query_id: queryId,
               results,
-              cache_time: 60 // Кэшируем на 1 минуту в самом Телеграме
+              cache_time: 60 
             })
           });
         }
@@ -88,7 +92,7 @@ export async function POST(request: Request) {
       const text = body.message.text;
 
       if (text === '/start') {
-        // Handle start message
+        // Handle start message logic if needed
       }
     }
 

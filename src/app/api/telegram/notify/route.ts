@@ -2,13 +2,19 @@ import { NextResponse } from 'next/server';
 
 /**
  * API route to send messages via Telegram Bot API.
- * Uses the token provided by the user.
+ * Uses the token provided in environment variables for security.
  */
 export async function POST(request: Request) {
   try {
     const { chatId, text } = await request.json();
-    // Use new token from request or fallback to process.env
-    const token = process.env.TELEGRAM_BOT_TOKEN || '8586154483:AAE9H5rBSHs3Z0qIfZtNOW6Vi5QcfaXnTSI';
+    // CRITICAL: Token is now loaded purely from environment variables.
+    // Ensure TELEGRAM_BOT_TOKEN is set in your hosting provider's settings.
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+
+    if (!token) {
+      console.error('TELEGRAM_BOT_TOKEN is not configured in environment variables');
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    }
 
     if (!chatId || !text) {
       return NextResponse.json({ error: 'chatId and text are required' }, { status: 400 });

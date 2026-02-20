@@ -50,16 +50,17 @@ export function HistoricalRates() {
   const [dynamicsStartPopoverOpen, setDynamicsStartPopoverOpen] = useState(false);
   const [dynamicsEndPopoverOpen, setDynamicsEndPopoverOpen] = useState(false);
 
+  // Tomorrow is available for some sources
+  const limit = addDays(startOfDay(new Date()), 1);
+
   const hasFutureDate = useMemo(() => {
-    // Limit is tomorrow (current day + 1) because banks set tomorrow's rate today
-    const limit = addDays(startOfDay(new Date()), 1);
     const isInvalid = (d: Date | undefined) => d ? isAfter(startOfDay(d), limit) : false;
 
     if (activeTab === 'single') return isInvalid(date);
     if (activeTab === 'dynamics') return isInvalid(dynamicsRange?.from) || isInvalid(dynamicsRange?.to);
     if (activeTab === 'range') return isInvalid(range?.from) || isInvalid(range?.to);
     return false;
-  }, [activeTab, date, dynamicsRange, range]);
+  }, [activeTab, date, dynamicsRange, range, limit]);
 
   const numberFormatter = (val: number) => {
     if (val === 0) return '0';
@@ -245,7 +246,7 @@ export function HistoricalRates() {
                           selected={dynamicsRange?.from} 
                           onSelect={(d) => { setDynamicsRange({ ...dynamicsRange, from: d }); setDynamicsStartPopoverOpen(false); }} 
                           locale={dateLocale}
-                          disabled={(date) => isAfter(startOfDay(date), addDays(startOfDay(new Date()), 1))}
+                          disabled={(date) => isAfter(startOfDay(date), limit)}
                         />
                     </PopoverContent>
                 </Popover>
@@ -262,7 +263,7 @@ export function HistoricalRates() {
                           selected={dynamicsRange?.to} 
                           onSelect={(d) => { setDynamicsRange({ ...dynamicsRange, to: d }); setDynamicsEndPopoverOpen(false); }} 
                           locale={dateLocale}
-                          disabled={(date) => isAfter(startOfDay(date), addDays(startOfDay(new Date()), 1))}
+                          disabled={(date) => isAfter(startOfDay(date), limit)}
                         />
                     </PopoverContent>
                 </Popover>
@@ -314,7 +315,7 @@ export function HistoricalRates() {
                     selected={date} 
                     onSelect={(d) => { setDate(d); setSingleDatePopoverOpen(false); }} 
                     locale={dateLocale}
-                    disabled={(date) => isAfter(startOfDay(date), addDays(startOfDay(new Date()), 1))}
+                    disabled={(date) => isAfter(startOfDay(date), limit)}
                   />
               </PopoverContent>
             </Popover>
@@ -363,7 +364,7 @@ export function HistoricalRates() {
                           selected={range?.from} 
                           onSelect={(d) => { setRange({ ...range, from: d }); setRangeStartPopoverOpen(false); }} 
                           locale={dateLocale}
-                          disabled={(date) => isAfter(startOfDay(date), addDays(startOfDay(new Date()), 1))}
+                          disabled={(date) => isAfter(startOfDay(date), limit)}
                         />
                     </PopoverContent>
                 </Popover>
@@ -380,7 +381,7 @@ export function HistoricalRates() {
                           selected={range?.to} 
                           onSelect={(d) => { setRange({ ...range, to: d }); setRangeEndPopoverOpen(false); }} 
                           locale={dateLocale}
-                          disabled={(date) => isAfter(startOfDay(date), addDays(startOfDay(new Date()), 1))}
+                          disabled={(date) => isAfter(startOfDay(date), limit)}
                         />
                     </PopoverContent>
                 </Popover>
