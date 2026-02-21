@@ -1,0 +1,24 @@
+# ValutaBot (CurrencyBot)
+
+Intelligent web interface in Telegram-bot style for monitoring exchange rates, cryptocurrencies, metals, and NFT assets.
+
+## Key Features
+- **Real-time Monitoring**: Update rates for popular pairs every minute.
+- **Smart Converter**: Instant calculation between any types of assets (e.g., BTC -> BYN).
+- **Alert System**: Set notifications for reaching a specific rate (Above/Below) with Telegram delivery.
+- **Portfolio Tracking**: Manage savings in fiat, crypto, and metals in one place.
+- **Historical Data**: View rate dynamics over a period and check rates for specific dates.
+- **Multi-source Logic**: Uses NBRB, CBRF, ECB, NBK, CoinGecko, and CoinMarketCap with automatic fallbacks.
+
+## Technical Stack
+- Next.js 15 (App Router)
+- ShadCN UI + Tailwind CSS
+- Firebase Genkit & Firestore
+- Telegram Bot API integration
+
+## Data Pipeline
+1. Fiat: NBRB (Belarus), CBRF (Russia), NBK (Kazakhstan), ECB (Europe), WorldCurrencyAPI.
+2. Crypto: CoinGecko (primary), CoinMarketCap (backup).
+3. Metals: Gold, Silver, Platinum from Central Banks.
+
+Official Website: https://valutabot.vercel.app

@@ -1,4 +1,3 @@
-
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
@@ -8,8 +7,8 @@ import { FirebaseClientProvider } from '@/firebase';
 import images from '@/app/lib/placeholder-images.json';
 
 export const metadata: Metadata = {
-  title: 'ВалютаБот | Мониторинг курсов валют, крипты и металлов',
-  description: 'Умный финансовый помощник: актуальные курсы валют (USD, EUR, BYN, RUB, KZT), криптовалют и драгоценных металлов. Конвертер, уведомления в Telegram и отслеживание портфеля.',
+  title: 'ВалютаБот: Курсы валют, Криптовалют и Металлов Онлайн',
+  description: 'Умный трекер курсов валют и крипты. Актуальные курсы USD, EUR, BTC, TON. Конвертер, уведомления в Telegram и мониторинг портфеля активов по всему миру.',
   manifest: '/manifest.json',
   metadataBase: new URL('https://valutabot.vercel.app'),
   keywords: [
@@ -36,8 +35,8 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: 'ВалютаБот - Ваш личный финансовый трекер',
-    description: 'Конвертер, графики, уведомления о курсах и отслеживание активов в стиле Telegram.',
+    title: 'ВалютаБот — Ваш Личный Финансовый Помощник',
+    description: 'Конвертер, графики, уведомления о курсах и трекер активов в режиме реального времени.',
     url: 'https://valutabot.vercel.app',
     siteName: 'ВалютаБот',
     images: [
@@ -45,7 +44,7 @@ export const metadata: Metadata = {
         url: images.og.main,
         width: 1200,
         height: 630,
-        alt: 'ВалютаБот Интерфейс',
+        alt: 'ВалютаБот Интерфейс - Мониторинг рынков',
       },
     ],
     locale: 'ru_RU',
@@ -53,8 +52,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'ВалютаБот | Курсы валют онлайн',
-    description: 'Умный конвертер и трекер активов в вашем Telegram.',
+    title: 'ВалютаБот | Мониторинг курсов валют и крипты',
+    description: 'Умный конвертер и трекер активов в вашем кармане.',
     images: [images.og.main],
   },
   appleWebApp: {
@@ -79,17 +78,27 @@ export default function RootLayout({
 }>) {
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "WebApplication",
-    "name": "ВалютаБот",
-    "description": "Мониторинг курсов валют и криптовалют в реальном времени с уведомлениями.",
-    "applicationCategory": "FinanceApplication",
-    "operatingSystem": "All",
-    "url": "https://valutabot.vercel.app",
-    "offers": {
-      "@type": "Offer",
-      "price": "0",
-      "priceCurrency": "USD"
-    }
+    "@graph": [
+      {
+        "@type": "WebApplication",
+        "name": "ВалютаБот",
+        "url": "https://valutabot.vercel.app",
+        "description": "Мониторинг курсов валют, криптовалют и металлов в реальном времени с уведомлениями в Telegram.",
+        "applicationCategory": "FinanceApplication",
+        "operatingSystem": "All",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      },
+      {
+        "@type": "Organization",
+        "name": "ValutaBot Team",
+        "url": "https://valutabot.vercel.app",
+        "logo": "https://valutabot.vercel.app/icons/icon-512x512.png"
+      }
+    ]
   };
 
   return (
