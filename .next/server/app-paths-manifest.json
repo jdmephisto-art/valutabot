@@ -1,0 +1,5 @@
+{
+  "/api/cmc/route": "app/api/cmc/route.js",
+  "/api/coingecko/route": "app/api/coingecko/route.js",
+  "/page": "app/page.js"
+}

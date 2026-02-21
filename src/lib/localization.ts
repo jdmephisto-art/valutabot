@@ -1,0 +1,37 @@
+
+import { translations as allTranslations, currencyNames as allCurrencyNames } from './translations';
+import type { Language } from './types';
+
+let lang: Language = 'ru';
+
+type Listener = (lang: Language) => void;
+const listeners = new Set<Listener>();
+
+export function subscribe(listener: Listener): () => void {
+    listeners.add(listener);
+    listener(lang);
+    return () => listeners.delete(listener);
+}
+
+function notify() {
+    listeners.forEach(l => l(lang));
+}
+
+export function setLang(newLang: Language) {
+    if (lang !== newLang) {
+        lang = newLang;
+        notify();
+    }
+}
+
+export function getLang(): Language {
+    return lang;
+}
+
+export function getCurrencyName(code: string, language: Language): string {
+    const names = (allCurrencyNames as any)[language] as Record<string, string> | undefined;
+    return names?.[code] ?? code;
+}
+
+export const translations = allTranslations;
+export const currencyNames = allCurrencyNames;

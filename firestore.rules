@@ -1,0 +1,46 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * ValutaBot Security Rules
+     */
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId} {
+      allow get, list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isOwner(userId);
+
+      match /notifications/{notificationId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    match /currencies/{currencyId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; 
+    }
+
+    match /exchange_rates/{exchangeRateId} {
+      allow get, list: if true;
+      allow create, update, delete: if false;
+    }
+
+    // Правила для кэша курсов (публичное чтение и запись для прототипа)
+    match /rates_cache/{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
