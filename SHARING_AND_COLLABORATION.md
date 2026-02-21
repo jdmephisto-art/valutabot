@@ -29,7 +29,7 @@ git commit -m "Fix: ignore node_modules and cleanup index"
 ```
 
 ## Шаг 4: Привязка и Пуш с Токеном
-Замените `<TOKEN>` на ваш GitHub Personal Access Token:
+Замените `<TOKEN>` на ваш GitHub Personal Access Token (PAT):
 
 ```powershell
 # 1. Удаляем старый origin
