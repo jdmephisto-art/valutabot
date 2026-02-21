@@ -29,7 +29,7 @@ const FIAT_TTL = 3 * 60 * 60 * 1000;
 export function setDataSource(source: DataSource) { activeDataSource = source; }
 export function getDataSource(): DataSource { return activeDataSource; }
 
-export async function preFetchInitialRates(db: Firestore) {
+export async function preFetchInitialRates(db: Firestore, onApiError?: (source: string) => void) {
     const docRef = doc(db, 'rates_cache', 'unified');
     onSnapshot(docRef, (snap) => {
         if (snap.exists()) {
@@ -47,7 +47,7 @@ export async function preFetchInitialRates(db: Firestore) {
         const needsFiatUpdate = !snap.exists() || (now - (data?.updatedAtFiat || 0) > FIAT_TTL);
 
         if (needsCryptoUpdate || needsFiatUpdate) {
-            updateAllRatesInCloud(db, needsFiatUpdate);
+            await updateAllRatesInCloud(db, needsFiatUpdate, onApiError);
         } else if (snap.exists()) {
             unifiedRates = { ...unifiedRates, ...data.rates };
             unifiedRatesTomorrow = data.ratesTomorrow || {};
@@ -55,17 +55,17 @@ export async function preFetchInitialRates(db: Firestore) {
     } catch (e) {}
 }
 
-export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean = true) {
+export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean = true, onApiError?: (source: string) => void) {
     const now = Date.now();
     try {
         const sources = [
-            { id: 'coingecko', fn: fetchCoinGecko, type: 'crypto' },
-            { id: 'cmc', fn: fetchCoinMarketCap, type: 'crypto' },
-            { id: 'nbrb', fn: fetchNbrb, type: 'fiat' },
-            { id: 'cbr', fn: fetchCbr, type: 'fiat' },
-            { id: 'worldcurrencyapi', fn: fetchWorldCurrency, type: 'fiat' },
-            { id: 'ecb', fn: fetchEcb, type: 'fiat' },
-            { id: 'nbk', fn: fetchNbk, type: 'fiat' }
+            { id: 'CoinGecko', fn: fetchCoinGecko, type: 'crypto' },
+            { id: 'CoinMarketCap', fn: fetchCoinMarketCap, type: 'crypto' },
+            { id: 'NBRB', fn: fetchNbrb, type: 'fiat' },
+            { id: 'CBRF', fn: fetchCbr, type: 'fiat' },
+            { id: 'WorldCurrencyAPI', fn: fetchWorldCurrency, type: 'fiat' },
+            { id: 'ECB', fn: fetchEcb, type: 'fiat' },
+            { id: 'NBK', fn: fetchNbk, type: 'fiat' }
         ];
 
         const activeSources = sources.filter(s => s.type === 'crypto' || updateFiat);
@@ -76,13 +76,16 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
         
         activeSources.forEach((source, idx) => {
             const res = results[idx];
-            if (res && res.status === 'fulfilled' && res.value) {
+            if (res.status === 'fulfilled' && res.value) {
                 if ('tomorrow' in res.value) {
                     Object.assign(mergedData, (res.value as any).today);
                     Object.assign(tomorrowMerged, (res.value as any).tomorrow);
                 } else {
                     Object.assign(mergedData, res.value);
                 }
+            } else if (res.status === 'rejected' || (res.status === 'fulfilled' && !res.value)) {
+                // Если критический источник упал - вызываем уведомление
+                if (onApiError) onApiError(source.id);
             }
         });
 
@@ -120,7 +123,7 @@ async function fetchNbrb() {
         };
         const today = await fetchByDate(new Date());
         const tomorrow = await fetchByDate(addDays(new Date(), 1));
-        return { today, tomorrow };
+        return today ? { today, tomorrow: tomorrow || {} } : null;
     } catch { return null; }
 }
 
@@ -130,7 +133,6 @@ async function fetchCbr() {
         if (!res.ok) return null;
         const data = await res.json();
         const rates: Record<string, number> = {};
-        const tomorrowRates: Record<string, number> = {};
         
         const rubPerUsd = data?.Valute?.USD?.Value;
         if (rubPerUsd) {
@@ -235,7 +237,7 @@ async function fetchNbk() {
 export function findRate(from: string, to: string, isTomorrow: boolean = false): number | undefined {
     if (from === to) return 1;
     const source = isTomorrow ? unifiedRatesTomorrow : unifiedRates;
-    const fromPrice = source[from] || unifiedRates[from]; // Fallback to today if tomorrow unknown
+    const fromPrice = source[from] || unifiedRates[from];
     const toPrice = source[to] || unifiedRates[to];
     if (fromPrice !== undefined && toPrice !== undefined && toPrice !== 0) {
         return fromPrice / toPrice;

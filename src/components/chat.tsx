@@ -1,9 +1,8 @@
-
 'use client';
 
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, Box, ArrowUp, ArrowDown, Send, CircleHelp, Smartphone, Apple, Monitor, Briefcase } from 'lucide-react';
+import { Bot, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, Box, ArrowUp, ArrowDown, Send, CircleHelp, Smartphone, Apple, Monitor, Briefcase, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LatestRates } from '@/components/latest-rates';
@@ -137,6 +136,27 @@ export function ChatInterface() {
     }
   }, [autoClearMinutes, messages.length]);
 
+  // Handle API failure notifications
+  const handleApiError = useCallback((source: string) => {
+    const tgId = webApp?.initDataUnsafe?.user?.id;
+    if (tgId) {
+      fetch('/api/telegram/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatId: tgId,
+          text: `⚠️ <b>Ошибка источника данных!</b>\n\nИсточник <b>${source}</b> в данный момент недоступен. Приложение автоматически переключилось на резервные данные.`
+        })
+      });
+    }
+    
+    // Также покажем в интерфейсе чата
+    addMessage({
+      sender: 'bot',
+      text: `Внимание: Источник ${source} временно недоступен. Используются кэшированные данные.`
+    });
+  }, [webApp, addMessage]);
+
   // Alert check loop (Real-time monitor)
   useEffect(() => {
     if (!cloudAlerts || cloudAlerts.length === 0) return;
@@ -173,8 +193,10 @@ export function ChatInterface() {
             }
 
             // 3. Delete from Firestore after trigger
-            const alertRef = doc(firestore, 'users', user!.uid, 'notifications', alert.id);
-            deleteDoc(alertRef);
+            if (user) {
+              const alertRef = doc(firestore, 'users', user.uid, 'notifications', alert.id);
+              deleteDoc(alertRef);
+            }
           }
         }
       }
@@ -207,7 +229,7 @@ export function ChatInterface() {
     setDataSource(source);
     setDataSourceState(source);
     resetChat();
-    preFetchInitialRates(firestore);
+    preFetchInitialRates(firestore, handleApiError);
   };
 
   const handleActionClick = (id: string) => {
@@ -259,8 +281,8 @@ export function ChatInterface() {
 
   useEffect(() => {
     resetChat();
-    preFetchInitialRates(firestore);
-  }, [lang, resetChat, firestore]);
+    preFetchInitialRates(firestore, handleApiError);
+  }, [lang, resetChat, firestore, handleApiError]);
 
   return (
     <div className="w-full max-w-md h-[88vh] max-h-[900px] flex flex-col bg-card/90 backdrop-blur-xl rounded-2xl shadow-2xl overflow-hidden border border-white/20">
