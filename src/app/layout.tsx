@@ -19,8 +19,14 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: 'ValutaBot Team' }],
   icons: {
-    icon: images.icons.favicon,
-    apple: images.icons.apple,
+    icon: [
+      { url: images.icons.favicon, sizes: '32x32', type: 'image/png' },
+      { url: images.icons.android192, sizes: '192x192', type: 'image/png' },
+    ],
+    shortcut: { url: images.icons.favicon, type: 'image/png' },
+    apple: [
+      { url: images.icons.apple, sizes: '180x180', type: 'image/png' },
+    ],
   },
   alternates: {
     canonical: '/',
