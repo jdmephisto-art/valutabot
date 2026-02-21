@@ -1,8 +1,9 @@
+
 'use client';
 
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, Box, ArrowUp, ArrowDown, Send, CircleHelp, Smartphone, Apple, Monitor, Briefcase, ShieldAlert } from 'lucide-react';
+import { Bot, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, Box, ArrowUp, ArrowDown, Send, CircleHelp, Smartphone, Apple, Monitor, Briefcase } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LatestRates } from '@/components/latest-rates';
@@ -24,7 +25,7 @@ import { useFirestore, useUser, useMemoFirebase, useCollection } from '@/firebas
 import { useTelegram } from '@/hooks/use-telegram';
 import { signInAnonymously } from 'firebase/auth';
 import { useAuth } from '@/firebase';
-import { collection, doc, setDoc, deleteDoc, query, where } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 type Message = {
   id: string;
@@ -71,7 +72,7 @@ export function ChatInterface() {
     return collection(firestore, 'users', user.uid, 'notifications');
   }, [firestore, user]);
   
-  const { data: cloudAlerts } = useCollection<Omit<Alert, 'id'>>(alertsQuery);
+  const { data: cloudAlerts } = useCollection<Alert>(alertsQuery);
 
   const addMessage = useCallback((message: Omit<Message, 'id'>) => {
     setMessages(prev => [...prev, { ...message, id: `${componentId}-${prev.length}` }]);
@@ -108,7 +109,7 @@ export function ChatInterface() {
     }
   }, [user, auth]);
 
-  // Sync user profile with Telegram ID for background notifications
+  // Sync user profile with Telegram ID
   useEffect(() => {
     if (user && webApp?.initDataUnsafe?.user?.id) {
       const userRef = doc(firestore, 'users', user.uid);
@@ -139,21 +140,21 @@ export function ChatInterface() {
   // Handle API failure notifications
   const handleApiError = useCallback((source: string) => {
     const tgId = webApp?.initDataUnsafe?.user?.id;
-    if (tgId) {
-      fetch('/api/telegram/notify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chatId: tgId,
-          text: `⚠️ <b>Ошибка источника данных!</b>\n\nИсточник <b>${source}</b> в данный момент недоступен. Приложение автоматически переключилось на резервные данные.`
-        })
-      });
-    }
     
-    // Также покажем в интерфейсе чата
+    // Notify Admin and User
+    fetch('/api/telegram/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chatId: tgId,
+        isAdminAlert: true,
+        text: `⚠️ <b>Ошибка источника данных!</b>\n\nИсточник <b>${source}</b> недоступен. Используются кэшированные данные.`
+      })
+    });
+    
     addMessage({
       sender: 'bot',
-      text: `Внимание: Источник ${source} временно недоступен. Используются кэшированные данные.`
+      text: `Внимание: Источник ${source} временно недоступен.`
     });
   }, [webApp, addMessage]);
 
@@ -180,14 +181,16 @@ export function ChatInterface() {
               component: <RateUpdateCard pair={`${alert.from}/${alert.to}`} oldRate={alert.baseRate} newRate={currentRate} />
             });
 
-            // 2. Send Telegram Notification via API
-            if (tgId) {
+            // 2. Send Telegram Notification with STOP button
+            if (tgId && user) {
               fetch('/api/telegram/notify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   chatId: tgId,
-                  text: `🔔 <b>Оповещение о курсе!</b>\n\nПара <b>${alert.from}/${alert.to}</b> достигла отметки <b>${currentRate.toFixed(4)}</b>.\n\nВаш порог: ${alert.condition === 'above' ? '≥' : '≤'} ${alert.threshold}`
+                  userId: user.uid,
+                  alertId: alert.id,
+                  text: `🔔 <b>Оповещение о курсе!</b>\n\nПара <b>${alert.from}/${alert.to}</b> достигла <b>${currentRate.toFixed(4)}</b>.\n\nПорог: ${alert.condition === 'above' ? '≥' : '≤'} ${alert.threshold}`
                 })
               });
             }
@@ -288,10 +291,7 @@ export function ChatInterface() {
     <div className="w-full max-w-md h-[88vh] max-h-[900px] flex flex-col bg-card/90 backdrop-blur-xl rounded-2xl shadow-2xl overflow-hidden border border-white/20">
       <header className="flex items-center justify-between p-4 border-b bg-background/50">
         <div className="flex items-center gap-3">
-          <motion.div 
-            animate={{ scale: [1, 1.1, 1] }} 
-            transition={{ repeat: Infinity, duration: 3 }}
-          >
+          <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 3 }}>
             <Bot className="h-10 w-10 text-primary" />
           </motion.div>
           <div>
@@ -300,13 +300,7 @@ export function ChatInterface() {
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="text-primary hover:bg-primary/10"
-            title={t('chat.openInTelegram')}
-            onClick={() => { haptic('light'); window.open('https://t.me/CurrencyAll_bot', '_blank'); }}
-          >
+          <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10" onClick={() => { haptic('light'); window.open('https://t.me/CurrencyAll_bot', '_blank'); }}>
             <Send className="h-5 w-5" />
           </Button>
           <Popover open={autoClearPopoverOpen} onOpenChange={setAutoClearPopoverOpen}>
@@ -339,33 +333,14 @@ export function ChatInterface() {
             </PopoverTrigger>
             <PopoverContent className="w-80 p-0 overflow-hidden border-primary/20 shadow-2xl" align="end">
               <div className="p-4 bg-primary text-primary-foreground">
-                <h3 className="font-bold flex items-center gap-2">
-                  <Smartphone className="h-4 w-4" />
-                  {t('pwa.title')}
-                </h3>
+                <h3 className="font-bold flex items-center gap-2"><Smartphone className="h-4 w-4" />{t('pwa.title')}</h3>
                 <p className="text-xs opacity-90 mt-1">{t('pwa.description')}</p>
               </div>
               <div className="p-4 space-y-4 bg-card">
-                <div className="flex gap-3">
-                  <Apple className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
-                  <p className="text-sm">{t('pwa.ios')}</p>
-                </div>
-                <div className="flex gap-3">
-                  <Smartphone className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
-                  <p className="text-sm">{t('pwa.android')}</p>
-                </div>
-                <div className="flex gap-3">
-                  <Monitor className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
-                  <p className="text-sm">{t('pwa.pc')}</p>
-                </div>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="w-full mt-2" 
-                  onClick={() => setPwaPopoverOpen(false)}
-                >
-                  {lang === 'ru' ? 'Закрыть' : 'Close'}
-                </Button>
+                <div className="flex gap-3"><Apple className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" /><p className="text-sm">{t('pwa.ios')}</p></div>
+                <div className="flex gap-3"><Smartphone className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" /><p className="text-sm">{t('pwa.android')}</p></div>
+                <div className="flex gap-3"><Monitor className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" /><p className="text-sm">{t('pwa.pc')}</p></div>
+                <Button variant="outline" size="sm" className="w-full mt-2" onClick={() => setPwaPopoverOpen(false)}>{lang === 'ru' ? 'Закрыть' : 'Close'}</Button>
               </div>
             </PopoverContent>
           </Popover>
@@ -377,11 +352,7 @@ export function ChatInterface() {
           <AnimatePresence initial={false}>
             {messages.map((message) => (
               <motion.div key={message.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={cn('flex items-end gap-2', message.sender === 'user' ? 'justify-end' : 'justify-start')}>
-                <div className={cn(
-                  'rounded-lg', 
-                  message.component ? 'w-full p-0 overflow-hidden bg-background/40' : 'max-w-[85%] p-3',
-                  message.sender === 'user' ? 'bg-primary text-primary-foreground shadow-lg' : 'bg-secondary text-secondary-foreground border'
-                )}>
+                <div className={cn('rounded-lg', message.component ? 'w-full p-0 overflow-hidden bg-background/40' : 'max-w-[85%] p-3', message.sender === 'user' ? 'bg-primary text-primary-foreground shadow-lg' : 'bg-secondary text-secondary-foreground border')}>
                   {message.text && <p className={cn(message.component && "p-3 pb-0")}>{message.text}</p>}
                   {message.component}
                   {message.options && (
@@ -395,27 +366,10 @@ export function ChatInterface() {
           </AnimatePresence>
         </div>
 
-        {/* Floating Scroll Buttons */}
         {messages.length > 3 && (
           <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-10">
-            <Button 
-              variant="secondary" 
-              size="icon" 
-              onClick={() => { haptic('light'); scrollToTop(); }}
-              className="rounded-full shadow-lg h-9 w-9 bg-background/80 backdrop-blur hover:bg-background border"
-              title="To Top"
-            >
-              <ArrowUp className="h-4 w-4" />
-            </Button>
-            <Button 
-              variant="secondary" 
-              size="icon" 
-              onClick={() => { haptic('light'); scrollToBottom(); }}
-              className="rounded-full shadow-lg h-9 w-9 bg-background/80 backdrop-blur hover:bg-background border"
-              title="To Bottom"
-            >
-              <ArrowDown className="h-4 w-4" />
-            </Button>
+            <Button variant="secondary" size="icon" onClick={() => { haptic('light'); scrollToTop(); }} className="rounded-full shadow-lg h-9 w-9 bg-background/80 backdrop-blur hover:bg-background border"><ArrowUp className="h-4 w-4" /></Button>
+            <Button variant="secondary" size="icon" onClick={() => { haptic('light'); scrollToBottom(); }} className="rounded-full shadow-lg h-9 w-9 bg-background/80 backdrop-blur hover:bg-background border"><ArrowDown className="h-4 w-4" /></Button>
           </div>
         )}
       </div>

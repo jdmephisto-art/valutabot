@@ -1,50 +1,82 @@
 
 import { NextResponse } from 'next/server';
 import { initializeFirebase } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, deleteDoc } from 'firebase/firestore';
 
 /**
  * Telegram Webhook Route
- * Handles bot commands and Inline Queries for instant rate checks.
+ * Handles bot commands, Inline Queries, and Callback Queries (Unsubscribe).
  */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    // CRITICAL: Token is loaded purely from environment variables.
-    // All hardcoded strings have been removed to ensure security.
     const token = process.env.TELEGRAM_BOT_TOKEN;
     const { firestore } = initializeFirebase();
 
     if (!token) {
-        console.error('TELEGRAM_BOT_TOKEN is missing in environment variables');
-        return NextResponse.json({ ok: false, error: 'Token not configured' }, { status: 200 });
+        console.error('TELEGRAM_BOT_TOKEN is missing');
+        return NextResponse.json({ ok: false }, { status: 200 });
     }
 
-    // 1. Handle Inline Query (@CurrencyAll_bot USD BYN)
+    // 1. Handle Callback Query (Unsubscribe button click)
+    if (body.callback_query) {
+      const callbackData = body.callback_query.data; // Expected format: stop_userId_alertId
+      const callbackId = body.callback_query.id;
+      const chatId = body.callback_query.message.chat.id;
+      const messageId = body.callback_query.message.message_id;
+
+      if (callbackData.startsWith('stop_')) {
+        const [, userId, alertId] = callbackData.split('_');
+        
+        try {
+          const alertRef = doc(firestore, 'users', userId, 'notifications', alertId);
+          await deleteDoc(alertRef);
+
+          // Confirm to Telegram
+          await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              callback_query_id: callbackId,
+              text: '✅ Уведомление успешно отключено',
+              show_alert: false
+            })
+          });
+
+          // Update message text to show success
+          await fetch(`https://api.telegram.org/bot${token}/editMessageText`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              message_id: messageId,
+              text: `<b>Уведомление остановлено.</b>\nВы больше не будете получать оповещения по этой паре.\n\n<a href="https://t.me/CurrencyAll_bot/app">Открыть ВалютаБот 🤖</a>`,
+              parse_mode: 'HTML'
+            })
+          });
+        } catch (e) {
+          console.error('Firestore delete error:', e);
+        }
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    // 2. Handle Inline Query
     if (body.inline_query) {
       const queryId = body.inline_query.id;
       const queryText = body.inline_query.query.trim().toUpperCase();
       
       if (queryText.length >= 2) {
-        // Expected format: "USD BYN" or "100 USD BYN"
         const parts = queryText.split(/\s+/);
-        let amount = 1;
-        let from = 'USD';
-        let to = 'BYN';
+        let amount = 1, from = 'USD', to = 'BYN';
 
-        if (parts.length === 2) {
-          from = parts[0];
-          to = parts[1];
-        } else if (parts.length === 3) {
-          amount = parseFloat(parts[0].replace(',', '.')) || 1;
-          from = parts[1];
-          to = parts[2];
-        } else if (parts.length === 1) {
-          from = parts[0];
-          to = 'USD';
+        if (parts.length === 2) { from = parts[0]; to = parts[1]; }
+        else if (parts.length === 3) { 
+          amount = parseFloat(parts[0].replace(',', '.')) || 1; 
+          from = parts[1]; to = parts[2]; 
         }
+        else if (parts.length === 1) { from = parts[0]; to = 'USD'; }
 
-        // Fetch current rates from cloud cache
         const snap = await getDoc(doc(firestore, 'rates_cache', 'unified'));
         const rates = snap.exists() ? snap.data().rates : {};
 
@@ -56,47 +88,25 @@ export async function POST(request: Request) {
           const resultValue = amount * rate;
           const resultText = `${amount} ${from} = ${resultValue > 1000 ? resultValue.toFixed(2) : resultValue.toFixed(4).replace(/\.?0+$/, '')} ${to}`;
           
-          const results = [
-            {
-              type: 'article',
-              id: `rate_${from}_${to}_${Date.now()}`,
-              title: resultText,
-              description: `📊 Актуальный курс из ВалютаБот`,
-              thumb_url: `https://picsum.photos/seed/${from}${to}/100/100`,
-              input_message_content: {
-                message_text: `<b>Курс валют:</b>\n${resultText}\n\n<a href="https://t.me/CurrencyAll_bot/app">Открыть ВалютаБот 🤖</a>`,
-                parse_mode: 'HTML'
-              },
-              reply_markup: {
-                inline_keyboard: [[
-                  { text: 'Открыть ВалютаБот 🤖', url: 'https://t.me/CurrencyAll_bot/app' }
-                ]]
-              }
+          const results = [{
+            type: 'article',
+            id: `rate_${from}_${to}_${Date.now()}`,
+            title: resultText,
+            description: `📊 Актуальный курс из ВалютаБот`,
+            input_message_content: {
+              message_text: `<b>Курс валют:</b>\n${resultText}\n\n<a href="https://t.me/CurrencyAll_bot/app">Открыть ВалютаБот 🤖</a>`,
+              parse_mode: 'HTML'
             }
-          ];
+          }];
 
           await fetch(`https://api.telegram.org/bot${token}/answerInlineQuery`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              inline_query_id: queryId,
-              results,
-              cache_time: 60 
-            })
+            body: JSON.stringify({ inline_query_id: queryId, results, cache_time: 60 })
           });
         }
       }
       return NextResponse.json({ ok: true });
-    }
-
-    // 2. Handle simple messages
-    if (body.message) {
-      const chatId = body.message.chat.id;
-      const text = body.message.text;
-
-      if (text === '/start') {
-        // Handle start message logic if needed
-      }
     }
 
     return NextResponse.json({ ok: true });
@@ -105,9 +115,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false }, { status: 200 });
   }
 }
-
-export async function GET() {
-  return NextResponse.json({ message: 'Telegram Webhook is active' });
-}
-
-    

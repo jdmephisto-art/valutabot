@@ -3,37 +3,49 @@ import { NextResponse } from 'next/server';
 
 /**
  * API route to send messages via Telegram Bot API.
- * Uses the token provided in environment variables for security.
+ * Enhanced to support Admin notifications and Unsubscribe buttons.
  */
 export async function POST(request: Request) {
   try {
-    const { chatId, text } = await request.json();
-    // CRITICAL: Token is loaded purely from environment variables.
-    // The string literal has been completely removed to prevent leaks.
+    const { chatId, text, userId, alertId, isAdminAlert } = await request.json();
     const token = process.env.TELEGRAM_BOT_TOKEN;
+    const adminId = process.env.ADMIN_TELEGRAM_ID;
 
     if (!token) {
-      console.error('TELEGRAM_BOT_TOKEN is not configured in environment variables');
+      console.error('TELEGRAM_BOT_TOKEN is not configured');
       return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
     }
 
-    if (!chatId || !text) {
-      return NextResponse.json({ error: 'chatId and text are required' }, { status: 400 });
+    const url = `https://api.telegram.org/bot${token}/sendMessage`;
+    
+    // Determine the recipient (standard user or admin)
+    const finalChatId = isAdminAlert && adminId ? adminId : chatId;
+
+    if (!finalChatId) {
+      return NextResponse.json({ error: 'chatId is required' }, { status: 400 });
     }
 
-    const url = `https://api.telegram.org/bot${token}/sendMessage`;
+    // Build the keyboard
+    const inline_keyboard: any[][] = [[
+      { text: 'Открыть ВалютаБот 🤖', url: 'https://t.me/CurrencyAll_bot/app' }
+    ]];
+
+    // Add "Unsubscribe" button if it's a price alert
+    if (userId && alertId) {
+      inline_keyboard.push([{
+        text: '❌ Остановить это уведомление',
+        callback_data: `stop_${userId}_${alertId}`
+      }]);
+    }
+
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chat_id: chatId,
+        chat_id: finalChatId,
         text: text,
         parse_mode: 'HTML',
-        reply_markup: {
-          inline_keyboard: [[
-            { text: 'Открыть ВалютаБот 🤖', url: 'https://t.me/CurrencyAll_bot/app' }
-          ]]
-        }
+        reply_markup: { inline_keyboard }
       }),
     });
 
@@ -44,5 +56,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-
-    
