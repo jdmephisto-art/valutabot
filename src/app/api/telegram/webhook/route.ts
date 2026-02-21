@@ -10,12 +10,12 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     // CRITICAL: Token is loaded purely from environment variables.
-    // Any hardcoded strings have been removed to ensure security.
+    // All hardcoded strings have been removed to ensure security.
     const token = process.env.TELEGRAM_BOT_TOKEN;
     const { firestore } = initializeFirebase();
 
     if (!token) {
-        console.error('TELEGRAM_BOT_TOKEN is missing');
+        console.error('TELEGRAM_BOT_TOKEN is missing in environment variables');
         return NextResponse.json({ ok: false, error: 'Token not configured' }, { status: 200 });
     }
 

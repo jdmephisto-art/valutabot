@@ -1,7 +1,7 @@
 
-# 🚀 Исправление ошибок Git и Push (PowerShell / Bash)
+# 🚀 Исправление ошибок Git и Push (PowerShell)
 
-Если вы видите ошибки `Segmentation fault`, `fork: Resource temporarily unavailable` или `remote helper 'https' aborted session`, это означает, что Git перегружен лишними файлами (node_modules).
+Если вы видите ошибки `Segmentation fault`, `remote helper 'https' aborted session` или `nothing to commit`, это означает, что Git перегружен лишними файлами (node_modules) или связь с сервером прервана.
 
 ## Шаг 1: Полная очистка терминала
 1. **Закройте все окна терминала.**
@@ -37,7 +37,7 @@ git remote remove origin
 
 # 2. Привязываем заново с вшитым токеном для обхода ошибки 403
 # Формат: https://<TOKEN>@github.com/jdmephisto-art/valutabot.git
-git remote add origin https://<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>@github.com/jdmephisto-art/valutabot.git
+git remote add origin https://<TOKEN>@github.com/jdmephisto-art/valutabot.git
 
 # 3. Отправляем код (Force push)
 git push -u origin main -f
