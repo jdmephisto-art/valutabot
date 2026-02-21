@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import { initializeFirebase } from '@/firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -108,3 +109,5 @@ export async function POST(request: Request) {
 export async function GET() {
   return NextResponse.json({ message: 'Telegram Webhook is active' });
 }
+
+    
