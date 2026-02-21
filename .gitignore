@@ -1,18 +1,41 @@
 
-node_modules
-.next
-out
-build
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# Dependencies
+node_modules/
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# Next.js
+/.next/
+/out/
+
+# Production
+/build
+
+# Debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.vercel
-.firebase
-dist
 
-    
+# Local env files
+.env*.local
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Large files & Archives
+*.zip
+*.tar.gz
+*.rar
+*.7z
+download.zip
+
+# System files
+.DS_Store
+Thumbs.db
