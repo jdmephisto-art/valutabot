@@ -1,24 +1,26 @@
-# ValutaBot (CurrencyBot)
+# ВалютаБот (CurrencyBot)
 
-Intelligent web interface in Telegram-bot style for monitoring exchange rates, cryptocurrencies, metals, and NFT assets.
+Интеллектуальный веб-интерфейс для мониторинга финансовых рынков в реальном времени.
 
-## Key Features
-- **Real-time Monitoring**: Update rates for popular pairs every minute.
-- **Smart Converter**: Instant calculation between any types of assets (e.g., BTC -> BYN).
-- **Alert System**: Set notifications for reaching a specific rate (Above/Below) with Telegram delivery.
-- **Portfolio Tracking**: Manage savings in fiat, crypto, and metals in one place.
-- **Historical Data**: View rate dynamics over a period and check rates for specific dates.
-- **Multi-source Logic**: Uses NBRB, CBRF, ECB, NBK, CoinGecko, and CoinMarketCap with automatic fallbacks.
+## Основные возможности
+- Мониторинг курсов 150+ фиатных валют (USD, EUR, BYN, RUB, KZT, и др.).
+- Трекинг 14,000+ криптовалют и токенов (BTC, ETH, TON, SOL).
+- Котировки драгоценных металлов (Золото, Серебро, Платина).
+- Умный конвертер любых пар активов.
+- Облачные уведомления в Telegram при достижении целевого курса.
+- Личный инвестиционный портфель с расчетом прибыли.
+- Исторические графики и аналитика.
 
-## Technical Stack
-- Next.js 15 (App Router)
-- ShadCN UI + Tailwind CSS
-- Firebase Genkit & Firestore
-- Telegram Bot API integration
+## Технологический стек
+- Framework: Next.js 15
+- UI: ShadCN + Tailwind CSS
+- Backend: Firebase (Firestore, Auth)
+- AI: Firebase Genkit ready
 
-## Data Pipeline
-1. Fiat: NBRB (Belarus), CBRF (Russia), NBK (Kazakhstan), ECB (Europe), WorldCurrencyAPI.
-2. Crypto: CoinGecko (primary), CoinMarketCap (backup).
-3. Metals: Gold, Silver, Platinum from Central Banks.
+## Источники данных
+- Фиат: НБРБ, ЦБ РФ, ЕЦБ, NBK, WorldCurrencyAPI.
+- Крипто: CoinGecko, CoinMarketCap.
 
-Official Website: https://valutabot.vercel.app
+## Ссылки
+- Web: https://valutabot.vercel.app
+- Telegram Bot: https://t.me/CurrencyAll_bot

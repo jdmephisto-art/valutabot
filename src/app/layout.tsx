@@ -7,8 +7,8 @@ import { FirebaseClientProvider } from '@/firebase';
 import images from '@/app/lib/placeholder-images.json';
 
 export const metadata: Metadata = {
-  title: 'ВалютаБот: Курсы валют, Криптовалют и Металлов Онлайн',
-  description: 'Умный трекер курсов валют и крипты. Актуальные курсы USD, EUR, BTC, TON. Конвертер, уведомления в Telegram и мониторинг портфеля активов по всему миру.',
+  title: 'ВалютаБот | Мониторинг курсов валют, крипты и металлов',
+  description: 'Умный финансовый помощник: актуальные курсы валют (USD, EUR, BYN, RUB, KZT), криптовалют и драгоценных металлов. Конвертер и уведомления в Telegram.',
   manifest: '/manifest.json',
   metadataBase: new URL('https://valutabot.vercel.app'),
   keywords: [
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
       { url: images.icons.favicon, sizes: '32x32', type: 'image/png' },
       { url: images.icons.android192, sizes: '192x192', type: 'image/png' },
     ],
-    shortcut: { url: images.icons.favicon, type: 'image/png' },
+    shortcut: images.icons.favicon,
     apple: [
       { url: images.icons.apple, sizes: '180x180', type: 'image/png' },
     ],
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'ВалютаБот — Ваш Личный Финансовый Помощник',
-    description: 'Конвертер, графики, уведомления о курсах и трекер активов в режиме реального времени.',
+    description: 'Интеллектуальный конвертер, графики и уведомления о курсах в реальном времени. Управляйте своими активами эффективно.',
     url: 'https://valutabot.vercel.app',
     siteName: 'ВалютаБот',
     images: [
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
         url: images.og.main,
         width: 1200,
         height: 630,
-        alt: 'ВалютаБот Интерфейс - Мониторинг рынков',
+        alt: 'ВалютаБот: Аналитика рынков и мониторинг курсов в реальном времени',
       },
     ],
     locale: 'ru_RU',
@@ -53,7 +53,9 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'ВалютаБот | Мониторинг курсов валют и крипты',
-    description: 'Умный конвертер и трекер активов в вашем кармане.',
+    description: 'Умный конвертер и трекер активов в вашем кармане. Установите сейчас!',
+    site: '@valutabot_news',
+    creator: '@valutabot_team',
     images: [images.og.main],
   },
   appleWebApp: {
@@ -96,7 +98,11 @@ export default function RootLayout({
         "@type": "Organization",
         "name": "ValutaBot Team",
         "url": "https://valutabot.vercel.app",
-        "logo": "https://valutabot.vercel.app/icons/icon-512x512.png"
+        "logo": "https://valutabot.vercel.app/icons/icon-512x512.png",
+        "sameAs": [
+          "https://t.me/CurrencyAll_bot",
+          "https://x.com/valutabot_team"
+        ]
       }
     ]
   };
@@ -104,8 +110,13 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <head>
+        {/* Performance Optimization: Preconnect to data sources */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://api.coingecko.com" />
+        <link rel="preconnect" href="https://api.nbrb.by" />
+        <link rel="preconnect" href="https://www.cbr-xml-daily.ru" />
+        
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       </head>
