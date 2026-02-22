@@ -7,8 +7,8 @@ import { FirebaseClientProvider } from '@/firebase';
 import images from '@/app/lib/placeholder-images.json';
 
 export const metadata: Metadata = {
-  title: 'ВалютаБот | Мониторинг курсов валют, крипты и металлов',
-  description: 'Умный финансовый помощник: актуальные курсы валют (USD, EUR, BYN, RUB, KZT), криптовалют и драгоценных металлов. Конвертер и уведомления в Telegram.',
+  title: 'ВалютаБот | Курсы валют, крипты и металлов онлайн',
+  description: 'Умный финансовый помощник: актуальные курсы валют (USD, EUR, BYN, RUB, KZT), криптовалют и металлов. Конвертер и уведомления в Telegram. Мониторинг в реальном времени.',
   manifest: '/manifest.json',
   metadataBase: new URL('https://valutabot.vercel.app'),
   keywords: [
@@ -103,7 +103,8 @@ export default function RootLayout({
           "https://t.me/CurrencyAll_bot",
           "https://x.com/valutabot_news",
           "https://facebook.com/valutabot",
-          "https://instagram.com/valutabot_app"
+          "https://instagram.com/valutabot_app",
+          "https://x.com/valutabot_team"
         ],
         "contactPoint": {
           "@type": "ContactPoint",
@@ -117,12 +118,12 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <head>
-        {/* Performance Optimization: Preconnect to data sources */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://api.coingecko.com" />
         <link rel="preconnect" href="https://api.nbrb.by" />
         <link rel="preconnect" href="https://www.cbr-xml-daily.ru" />
+        <link rel="preconnect" href="https://pro-api.coinmarketcap.com" />
         
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
