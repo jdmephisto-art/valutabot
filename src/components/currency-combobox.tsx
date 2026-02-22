@@ -103,19 +103,19 @@ export function CurrencyCombobox({
           role="combobox"
           aria-expanded={open}
           disabled={disabled || loading}
-          className="w-full h-10 justify-between"
+          className="w-full h-10 justify-between px-2"
         >
-          <div className="flex items-baseline flex-1 text-left mr-2 overflow-hidden">
+          <div className="flex items-baseline flex-1 text-left mr-1 overflow-hidden min-w-0">
             {selectedCurrency
               ? <>
-                  <span className="font-medium text-sm">{selectedCurrency.code}</span>
-                  <span className="text-muted-foreground text-xs ml-2 truncate">
+                  <span className="font-medium text-sm shrink-0">{selectedCurrency.code}</span>
+                  <span className="text-muted-foreground text-[10px] ml-1.5 truncate">
                     {getCurrencyName(selectedCurrency.code)}
                   </span>
                 </>
-              : <span className="text-sm">{placeholder ?? t('combobox.placeholder')}</span>}
+              : <span className="text-sm truncate">{placeholder ?? t('combobox.placeholder')}</span>}
           </div>
-          <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+          <ChevronsUpDown className="h-3 w-3 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-0 shadow-xl border-border/60">
