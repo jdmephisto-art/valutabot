@@ -101,8 +101,15 @@ export default function RootLayout({
         "logo": "https://valutabot.vercel.app/icons/icon-512x512.png",
         "sameAs": [
           "https://t.me/CurrencyAll_bot",
-          "https://x.com/valutabot_team"
-        ]
+          "https://x.com/valutabot_news",
+          "https://facebook.com/valutabot",
+          "https://instagram.com/valutabot_app"
+        ],
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "contactType": "customer support",
+          "url": "https://t.me/CurrencyAll_bot"
+        }
       }
     ]
   };

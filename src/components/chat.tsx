@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
@@ -33,6 +32,7 @@ type Message = {
   component?: React.ReactNode;
   text?: string;
   options?: ActionButtonProps[];
+  isTechnical?: boolean;
 };
 
 type ActionButtonProps = {
@@ -154,7 +154,8 @@ export function ChatInterface() {
     
     addMessage({
       sender: 'bot',
-      text: `Внимание: Источник ${source} временно недоступен.`
+      text: `Внимание: Источник ${source} временно недоступен.`,
+      isTechnical: true
     });
   }, [webApp, addMessage]);
 
@@ -295,7 +296,7 @@ export function ChatInterface() {
             <Bot className="h-10 w-10 text-primary" />
           </motion.div>
           <div>
-            <h1 className="text-lg font-bold">{t('chat.title')}</h1>
+            <span className="text-lg font-bold block leading-tight">{t('chat.title')}</span>
             <p className="text-sm text-positive">{t('chat.online')}</p>
           </div>
         </div>
@@ -352,7 +353,10 @@ export function ChatInterface() {
           <AnimatePresence initial={false}>
             {messages.map((message) => (
               <motion.div key={message.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={cn('flex items-end gap-2', message.sender === 'user' ? 'justify-end' : 'justify-start')}>
-                <div className={cn('rounded-lg', message.component ? 'w-full p-0 overflow-hidden bg-background/40' : 'max-w-[85%] p-3', message.sender === 'user' ? 'bg-primary text-primary-foreground shadow-lg' : 'bg-secondary text-secondary-foreground border')}>
+                <div 
+                  className={cn('rounded-lg', message.component ? 'w-full p-0 overflow-hidden bg-background/40' : 'max-w-[85%] p-3', message.sender === 'user' ? 'bg-primary text-primary-foreground shadow-lg' : 'bg-secondary text-secondary-foreground border')}
+                  data-nosnippet={message.isTechnical ? "true" : undefined}
+                >
                   {message.text && <p className={cn(message.component && "p-3 pb-0")}>{message.text}</p>}
                   {message.component}
                   {message.options && (
