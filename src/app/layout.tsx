@@ -7,14 +7,13 @@ import { FirebaseClientProvider } from '@/firebase';
 import images from '@/app/lib/placeholder-images.json';
 
 export const metadata: Metadata = {
-  title: 'ВалютаБот | Курсы валют, крипты и металлов онлайн',
-  description: 'Умный финансовый помощник: актуальные курсы валют (USD, EUR, BYN, RUB, KZT), криптовалют и металлов. Конвертер и уведомления в Telegram. Мониторинг в реальном времени.',
+  title: 'ВалютаБот | Мониторинг курсов валют, крипты и металлов',
+  description: 'Умный финансовый помощник: актуальные курсы валют (USD, EUR, BYN, RUB, KZT), криптовалют и драгоценных металлов. Конвертер и уведомления в Telegram.',
   manifest: '/manifest.json',
   metadataBase: new URL('https://valutabot.vercel.app'),
   keywords: [
     'курс валют', 'криптовалюта', 'конвертер', 'биткоин', 'телеграм бот', 'финансы', 'мониторинг', 
-    'NBRB', 'ЦБ РФ', 'NBK', 'ECB', 'BYN', 'RUB', 'KZT', 'USD', 'EUR', 'TON', 'портфель активов',
-    'currency rates', 'exchange rate', 'crypto tracker', 'forex prices', 'gold price'
+    'NBRB', 'ЦБ РФ', 'NBK', 'ECB', 'BYN', 'RUB', 'KZT', 'USD', 'EUR', 'TON', 'золото', 'серебро'
   ],
   authors: [{ name: 'ValutaBot Team' }],
   icons: {
@@ -35,7 +34,7 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: 'ВалютаБот — Ваш Личный Финансовый Помощник',
+    title: 'ВалютаБот — Мониторинг курсов и цен на активы онлайн',
     description: 'Интеллектуальный конвертер, графики и уведомления о курсах в реальном времени. Управляйте своими активами эффективно.',
     url: 'https://valutabot.vercel.app',
     siteName: 'ВалютаБот',
@@ -52,7 +51,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'ВалютаБот | Мониторинг курсов валют и крипты',
+    title: 'ВалютаБот | Курсы валют, крипты и металлов',
     description: 'Умный конвертер и трекер активов в вашем кармане. Установите сейчас!',
     site: '@valutabot_news',
     creator: '@valutabot_team',

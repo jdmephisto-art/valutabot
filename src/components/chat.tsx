@@ -66,7 +66,6 @@ export function ChatInterface() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const componentId = useId();
 
-  // Firestore Alerts logic
   const alertsQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
     return collection(firestore, 'users', user.uid, 'notifications');
@@ -102,14 +101,12 @@ export function ChatInterface() {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // Auth & Init
   useEffect(() => {
     if (!user && auth) {
       signInAnonymously(auth);
     }
   }, [user, auth]);
 
-  // Sync user profile with Telegram ID
   useEffect(() => {
     if (user && webApp?.initDataUnsafe?.user?.id) {
       const userRef = doc(firestore, 'users', user.uid);
@@ -122,12 +119,10 @@ export function ChatInterface() {
     }
   }, [user, webApp, firestore]);
 
-  // Persist displayed pairs
   useEffect(() => {
     localStorage.setItem('valutabot_displayed_pairs', JSON.stringify(displayedPairs));
   }, [displayedPairs]);
 
-  // Auto-clear logic
   useEffect(() => {
     if (autoClearMinutes > 0) {
         const timer = setTimeout(() => {
@@ -137,11 +132,8 @@ export function ChatInterface() {
     }
   }, [autoClearMinutes, messages.length]);
 
-  // Handle API failure notifications
   const handleApiError = useCallback((source: string) => {
     const tgId = webApp?.initDataUnsafe?.user?.id;
-    
-    // Notify Admin and User
     fetch('/api/telegram/notify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -159,7 +151,6 @@ export function ChatInterface() {
     });
   }, [webApp, addMessage]);
 
-  // Alert check loop (Real-time monitor)
   useEffect(() => {
     if (!cloudAlerts || cloudAlerts.length === 0) return;
 
@@ -175,14 +166,12 @@ export function ChatInterface() {
             : currentRate <= alert.threshold;
           
           if (isTriggered) {
-            // 1. Show in Mini App
             addMessage({
               sender: 'bot',
               text: t('alertCard.title'),
               component: <RateUpdateCard pair={`${alert.from}/${alert.to}`} oldRate={alert.baseRate} newRate={currentRate} />
             });
 
-            // 2. Send Telegram Notification with STOP button
             if (tgId && user) {
               fetch('/api/telegram/notify', {
                 method: 'POST',
@@ -196,7 +185,6 @@ export function ChatInterface() {
               });
             }
 
-            // 3. Delete from Firestore after trigger
             if (user) {
               const alertRef = doc(firestore, 'users', user.uid, 'notifications', alert.id);
               deleteDoc(alertRef);

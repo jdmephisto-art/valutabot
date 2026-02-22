@@ -37,7 +37,6 @@ export function CurrencyCombobox({
     [currencies, value]
   );
   
-  // High performance filtering: done once when searchTerm or currencies change
   const filteredData = React.useMemo(() => {
     const term = searchTerm.toLowerCase();
     const filterFn = (c: Currency) => {
@@ -86,9 +85,9 @@ export function CurrencyCombobox({
                 value.toLowerCase() === currency.code.toLowerCase() ? 'opacity-100' : 'opacity-0'
                 )}
             />
-            <div className="flex-1 whitespace-normal text-left">
+            <div className="flex-1 whitespace-normal text-left min-w-0">
                <span className="font-semibold">{currency.code}</span>
-               {hasProperName && <span className="text-xs ml-1 text-muted-foreground">{name}</span>}
+               {hasProperName && <span className="text-[10px] ml-1 text-muted-foreground line-clamp-1">{name}</span>}
             </div>
         </button>
     );
@@ -103,13 +102,13 @@ export function CurrencyCombobox({
           role="combobox"
           aria-expanded={open}
           disabled={disabled || loading}
-          className="w-full h-10 justify-between px-2"
+          className="w-full h-10 justify-between px-2 overflow-hidden"
         >
           <div className="flex items-baseline flex-1 text-left mr-1 overflow-hidden min-w-0">
             {selectedCurrency
               ? <>
                   <span className="font-medium text-sm shrink-0">{selectedCurrency.code}</span>
-                  <span className="text-muted-foreground text-[10px] ml-1.5 truncate">
+                  <span className="text-muted-foreground text-[9px] ml-1.5 truncate">
                     {getCurrencyName(selectedCurrency.code)}
                   </span>
                 </>

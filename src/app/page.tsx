@@ -5,6 +5,7 @@ export default function Home() {
     <main className="flex min-h-screen flex-col items-center justify-center p-4 lg:p-8">
       <ChatInterface />
       
+      {/* SEO Content Section - Optimized for Global Search & LLM Agents */}
       <section className="sr-only">
         <h1>ВалютаБот — Интеллектуальный мониторинг курсов валют, криптовалют и металлов</h1>
         <p>

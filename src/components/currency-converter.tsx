@@ -79,9 +79,9 @@ export function CurrencyConverter() {
       </CardHeader>
       <CardContent className="px-1 pb-2">
         <div className="space-y-5">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1">
             <CurrencyCombobox value={fromCurrency} onChange={setFromCurrency} disabled={currencies.length === 0} />
-            <Button variant="ghost" size="icon" onClick={handleSwapCurrencies} className="h-8 w-8 text-primary shrink-0"><ArrowRightLeft size={14} /></Button>
+            <Button variant="ghost" size="icon" onClick={handleSwapCurrencies} className="h-7 w-7 text-primary shrink-0 mx-0.5"><ArrowRightLeft size={12} /></Button>
             <CurrencyCombobox value={toCurrency} onChange={setToCurrency} disabled={currencies.length === 0} />
           </div>
 
