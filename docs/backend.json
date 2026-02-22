@@ -1,0 +1,208 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the ValutaBot application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the User entity."
+        },
+        "telegramId": {
+          "type": "string",
+          "description": "The user's Telegram ID for sending notifications."
+        },
+        "username": {
+          "type": "string",
+          "description": "The username of the user."
+        }
+      },
+      "required": [
+        "id",
+        "telegramId"
+      ]
+    },
+    "Currency": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Currency",
+      "type": "object",
+      "description": "Represents a currency supported by the ValutaBot application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Currency entity."
+        },
+        "code": {
+          "type": "string",
+          "description": "The currency code (e.g., USD, EUR)."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the currency (e.g., US Dollar, Euro)."
+        }
+      },
+      "required": [
+        "id",
+        "code",
+        "name"
+      ]
+    },
+    "ExchangeRate": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ExchangeRate",
+      "type": "object",
+      "description": "Represents the exchange rate between two currencies at a specific time.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the ExchangeRate entity."
+        },
+        "baseCurrencyId": {
+          "type": "string",
+          "description": "Reference to the base Currency. (Relationship: Currency 1:N ExchangeRate)"
+        },
+        "targetCurrencyId": {
+          "type": "string",
+          "description": "Reference to the target Currency. (Relationship: Currency 1:N ExchangeRate)"
+        },
+        "rate": {
+          "type": "number",
+          "description": "The exchange rate between the two currencies."
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "The timestamp of when the exchange rate was recorded.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "baseCurrencyId",
+        "targetCurrencyId",
+        "rate",
+        "timestamp"
+      ]
+    },
+    "Notification": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Notification",
+      "type": "object",
+      "description": "Represents a user-defined notification for a specific currency pair and threshold.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Notification entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User. (Relationship: User 1:N Notification)"
+        },
+        "baseCurrencyId": {
+          "type": "string",
+          "description": "Reference to the base Currency. (Relationship: Currency 1:N Notification)"
+        },
+        "targetCurrencyId": {
+          "type": "string",
+          "description": "Reference to the target Currency. (Relationship: Currency 1:N Notification)"
+        },
+        "threshold": {
+          "type": "number",
+          "description": "The threshold value for the exchange rate."
+        },
+        "triggerAbove": {
+          "type": "boolean",
+          "description": "If true, the notification triggers when the rate is above the threshold. If false, when below."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "baseCurrencyId",
+        "targetCurrencyId",
+        "threshold",
+        "triggerAbove"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profiles. Uses path-based ownership for straightforward security.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/currencies/{currencyId}",
+        "definition": {
+          "entityName": "Currency",
+          "schema": {
+            "$ref": "#/backend/entities/Currency"
+          },
+          "description": "Stores the list of supported currencies. Publicly readable.",
+          "params": [
+            {
+              "name": "currencyId",
+              "description": "The unique identifier of the currency."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/exchange_rates/{exchangeRateId}",
+        "definition": {
+          "entityName": "ExchangeRate",
+          "schema": {
+            "$ref": "#/backend/entities/ExchangeRate"
+          },
+          "description": "Stores exchange rates between currencies. Flat collection for optimized reads.",
+          "params": [
+            {
+              "name": "exchangeRateId",
+              "description": "The unique identifier of the exchange rate record."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/notifications/{notificationId}",
+        "definition": {
+          "entityName": "Notification",
+          "schema": {
+            "$ref": "#/backend/entities/Notification"
+          },
+          "description": "Stores user-specific notifications.  Path-based ownership ensures straightforward security. Includes denormalized 'userId' for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            },
+            {
+              "name": "notificationId",
+              "description": "The unique identifier of the notification."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore data structure is designed to support the ValutaBot application, focusing on real-time currency exchange rates, currency conversions, and personalized notifications via Telegram. The structure prioritizes authorization independence to ensure secure and scalable operations.  \n\n*   `/users/{userId}`: Stores user profiles.  This path-based ownership ensures easy management and clear authorization. Each user document contains basic user information.\n*   `/currencies/{currencyId}`: Stores the list of supported currencies. This collection is globally accessible for reading, as the currency data is considered public.\n*   `/exchange_rates/{exchangeRateId}`: Stores the exchange rates between currencies.  The structure uses a flat collection to optimize reads for real-time updates. `baseCurrencyId` and `targetCurrencyId` facilitate querying for specific currency pairs.\n*   `/users/{userId}/notifications/{notificationId}`: Stores user-specific notifications. The path-based structure makes security rules straightforward.\n\n**Authorization Independence:**\nThe structure avoids using `get()` calls in security rules by directly associating notifications with user IDs within the path `/users/{userId}/notifications/{notificationId}`.  Exchange rates are considered public and are stored in a flat collection without user-specific authorization requirements.\n\n**QAPs (Rules are not Filters):**\n\n*   The segregation of user-specific data into collections like `/users/{userId}/notifications/{notificationId}` allows secure list operations. Security rules can easily enforce that only the user with the matching `userId` can access their notifications.\n*   Public data, such as currencies, is stored in a separate collection (`/currencies`) with open read permissions, further simplifying security rules and QAPs.\n\nThis design ensures that authorization checks are simple, efficient, and do not require complex data lookups."
+  }
+}
