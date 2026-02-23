@@ -1,7 +1,7 @@
-import { Currency, ExchangeRate, DataSource, HistoricalRateResult } from '@/lib/types';
+import { Currency, ExchangeRate, DataSource, HistoricalRateResult, MultiSourceData } from '@/lib/types';
 import { format, isAfter, isSameDay, eachDayOfInterval, startOfDay, addDays } from 'date-fns';
 import { currencyApiPreloadedCurrencies } from './preloaded-data';
-import { doc, getDoc, setDoc, Firestore, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc, Firestore, onSnapshot, serverTimestamp } from 'firebase/firestore';
 
 let activeDataSource: DataSource = 'nbrb';
 
@@ -20,8 +20,9 @@ export const curatedAltcoinCodes = [
     'ENA', 'JUP', 'PYTH', 'STRK', 'W', 'DYM', 'SAGA', 'TNSR', 'RENDER', 'PENDLE'
 ];
 
-let unifiedRates: Record<string, number> = { 'USD': 1 };
-let unifiedRatesTomorrow: Record<string, number> = {};
+// Memory cache for nested structure
+let unifiedData: MultiSourceData = { 'USD': { 'base': 1 } };
+let unifiedDataTomorrow: MultiSourceData = {};
 
 const CRYPTO_TTL = 15 * 60 * 1000;
 const FIAT_TTL = 3 * 60 * 60 * 1000;
@@ -29,13 +30,64 @@ const FIAT_TTL = 3 * 60 * 60 * 1000;
 export function setDataSource(source: DataSource) { activeDataSource = source; }
 export function getDataSource(): DataSource { return activeDataSource; }
 
+/**
+ * Smart Rate Selector with Fallbacks
+ * Prioritizes official national sources for specific currencies.
+ */
+export function findRate(from: string, to: string, isTomorrow: boolean = false): number | undefined {
+    if (from === to) return 1;
+
+    const getBestPrice = (currency: string, sourceMap: MultiSourceData): number | undefined => {
+        const sources = sourceMap[currency];
+        if (!sources) return undefined;
+
+        // 1. Check user selected source
+        if (sources[activeDataSource]) return sources[activeDataSource];
+
+        // 2. Hardcoded priority fallbacks
+        if (currency === 'BYN' && sources['nbrb']) return sources['nbrb'];
+        if (currency === 'RUB' && sources['cbr']) return sources['cbr'];
+        if (currency === 'KZT' && sources['nbk']) return sources['nbk'];
+        if (currency === 'EUR' && sources['ecb']) return sources['ecb'];
+        
+        // 3. Category fallbacks
+        if (popularCryptoCodes.includes(currency) || curatedAltcoinCodes.includes(currency)) {
+            return sources['coingecko'] || sources['cmc'];
+        }
+
+        // 4. Global fallback
+        return sources['worldcurrencyapi'] || Object.values(sources)[0];
+    };
+
+    const currentMap = isTomorrow ? unifiedDataTomorrow : unifiedData;
+    
+    // Attempt tomorrow first, fallback to today's general unified if tomorrow source is missing
+    const fromPrice = getBestPrice(from, currentMap) || getBestPrice(from, unifiedData);
+    const toPrice = getBestPrice(to, currentMap) || getBestPrice(to, unifiedData);
+
+    if (fromPrice !== undefined && toPrice !== undefined && toPrice !== 0) {
+        return fromPrice / toPrice;
+    }
+    return undefined;
+}
+
 export async function preFetchInitialRates(db: Firestore, onApiError?: (source: string) => void) {
     const docRef = doc(db, 'rates_cache', 'unified');
+    
+    // Subscribe to changes
     onSnapshot(docRef, (snap) => {
         if (snap.exists()) {
             const data = snap.data();
-            unifiedRates = { ...unifiedRates, ...data.rates };
-            unifiedRatesTomorrow = data.ratesTomorrow || {};
+            // Handle both old flat and new nested structure for transition period
+            if (data.data) {
+                unifiedData = data.data;
+                unifiedDataTomorrow = data.dataTomorrow || {};
+            } else if (data.rates) {
+                // Migration shim: wrap old flat rates into a 'legacy' source
+                Object.keys(data.rates).forEach(code => {
+                    unifiedData[code] = { ...unifiedData[code], legacy: data.rates[code] };
+                });
+            }
         }
     });
 
@@ -48,9 +100,6 @@ export async function preFetchInitialRates(db: Firestore, onApiError?: (source: 
 
         if (needsCryptoUpdate || needsFiatUpdate) {
             await updateAllRatesInCloud(db, needsFiatUpdate, onApiError);
-        } else if (snap.exists()) {
-            unifiedRates = { ...unifiedRates, ...data.rates };
-            unifiedRatesTomorrow = data.ratesTomorrow || {};
         }
     } catch (e) {}
 }
@@ -59,51 +108,74 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
     const now = Date.now();
     try {
         const sources = [
-            { id: 'CoinGecko', fn: fetchCoinGecko, type: 'crypto' },
-            { id: 'CoinMarketCap', fn: fetchCoinMarketCap, type: 'crypto' },
-            { id: 'NBRB', fn: fetchNbrb, type: 'fiat' },
-            { id: 'CBRF', fn: fetchCbr, type: 'fiat' },
-            { id: 'WorldCurrencyAPI', fn: fetchWorldCurrency, type: 'fiat' },
-            { id: 'ECB', fn: fetchEcb, type: 'fiat' },
-            { id: 'NBK', fn: fetchNbk, type: 'fiat' }
+            { id: 'coingecko', fn: fetchCoinGecko, type: 'crypto' },
+            { id: 'cmc', fn: fetchCoinMarketCap, type: 'crypto' },
+            { id: 'nbrb', fn: fetchNbrb, type: 'fiat' },
+            { id: 'cbr', fn: fetchCbr, type: 'fiat' },
+            { id: 'worldcurrencyapi', fn: fetchWorldCurrency, type: 'fiat' },
+            { id: 'ecb', fn: fetchEcb, type: 'fiat' },
+            { id: 'nbk', fn: fetchNbk, type: 'fiat' }
         ];
 
         const activeSources = sources.filter(s => s.type === 'crypto' || updateFiat);
         const results = await Promise.allSettled(activeSources.map(s => s.fn()));
 
-        const mergedData: Record<string, number> = { ...unifiedRates };
-        const tomorrowMerged: Record<string, number> = { ...unifiedRatesTomorrow };
-        
-        activeSources.forEach((source, idx) => {
-            const res = results[idx];
+        const updatedSources: string[] = [];
+        const nextData = { ...unifiedData };
+        const nextDataTomorrow = { ...unifiedDataTomorrow };
+
+        results.forEach((res, idx) => {
+            const sourceInfo = activeSources[idx];
             if (res.status === 'fulfilled' && res.value) {
+                updatedSources.push(sourceInfo.id);
+                
+                const processRates = (rates: Record<string, number>, isTomorrow = false) => {
+                    const targetMap = isTomorrow ? nextDataTomorrow : nextData;
+                    Object.keys(rates).forEach(currency => {
+                        if (!targetMap[currency]) targetMap[currency] = {};
+                        targetMap[currency][sourceInfo.id] = rates[currency];
+                    });
+                };
+
                 if ('tomorrow' in res.value) {
-                    Object.assign(mergedData, (res.value as any).today);
-                    Object.assign(tomorrowMerged, (res.value as any).tomorrow);
+                    processRates((res.value as any).today);
+                    processRates((res.value as any).tomorrow, true);
                 } else {
-                    Object.assign(mergedData, res.value);
+                    processRates(res.value as Record<string, number>);
                 }
-            } else if (res.status === 'rejected' || (res.status === 'fulfilled' && !res.value)) {
-                // Если критический источник упал - вызываем уведомление
-                if (onApiError) onApiError(source.id);
+            } else if (onApiError) {
+                onApiError(sourceInfo.id);
             }
         });
 
         const updatePayload: any = {
-            rates: mergedData,
-            ratesTomorrow: tomorrowMerged,
-            updatedAtCrypto: now
+            data: nextData,
+            dataTomorrow: nextDataTomorrow,
+            updatedAtCrypto: now,
+            sources_updated: updatedSources
         };
         if (updateFiat) updatePayload.updatedAtFiat = now;
 
+        // 1. Update Main Cache (Single document for fast access)
         await setDoc(doc(db, 'rates_cache', 'unified'), updatePayload, { merge: true });
-        unifiedRates = mergedData;
-        unifiedRatesTomorrow = tomorrowMerged;
-        return unifiedRates;
+        
+        // 2. Save to History (Time-series for analytics)
+        await addDoc(collection(db, 'rates_history'), {
+            timestamp: serverTimestamp(),
+            base: 'USD',
+            data: nextData,
+            sources_updated: updatedSources
+        });
+
+        unifiedData = nextData;
+        unifiedDataTomorrow = nextDataTomorrow;
+        return unifiedData;
     } catch (e) {
-        return unifiedRates;
+        return unifiedData;
     }
 }
+
+// --- Fetchers (IDs must match analytics plan names) ---
 
 async function fetchNbrb() {
     try {
@@ -133,7 +205,6 @@ async function fetchCbr() {
         if (!res.ok) return null;
         const data = await res.json();
         const rates: Record<string, number> = {};
-        
         const rubPerUsd = data?.Valute?.USD?.Value;
         if (rubPerUsd) {
             rates['RUB'] = 1 / rubPerUsd;
@@ -234,17 +305,6 @@ async function fetchNbk() {
   } catch { return null; }
 }
 
-export function findRate(from: string, to: string, isTomorrow: boolean = false): number | undefined {
-    if (from === to) return 1;
-    const source = isTomorrow ? unifiedRatesTomorrow : unifiedRates;
-    const fromPrice = source[from] || unifiedRates[from];
-    const toPrice = source[to] || unifiedRates[to];
-    if (fromPrice !== undefined && toPrice !== undefined && toPrice !== 0) {
-        return fromPrice / toPrice;
-    }
-    return undefined;
-}
-
 export async function getCurrencies(): Promise<Currency[]> {
     const approvedCodes = new Set([...fiatCodes, ...metalsCodes, ...popularCryptoCodes, ...curatedAltcoinCodes]);
     const preloadedMap = new Map(currencyApiPreloadedCurrencies.map(c => [c.code, c]));
@@ -286,6 +346,9 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
         const rate = findRate(from, to);
         if (rate !== undefined) return { rate, date, isFallback: false };
     }
+    
+    // For real history, we could query 'rates_history' collection here.
+    // For now, keeping the simulated fallback but using new findRate.
     const current = findRate(from, to);
     if (current !== undefined) return { rate: current * (0.98 + Math.random() * 0.04), date, isFallback: true };
     return undefined;

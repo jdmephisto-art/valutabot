@@ -10,6 +10,7 @@ export type ExchangeRate = {
   to: string;
   rate?: number;
   tomorrowRate?: number;
+  source?: string; // Information about which source provided the rate
 };
 
 export type Alert = {
@@ -30,9 +31,24 @@ export type HistoricalRateResult = {
   rate: number;
   date: Date;
   isFallback?: boolean;
+  source?: string;
 };
 
 export type PortfolioAsset = {
   code: string;
   amount: number;
+};
+
+/**
+ * New structure for multi-source data storage
+ * data: { "BYN": { "nbrb": 3.25, "worldcurrency": 3.26 } }
+ */
+export type MultiSourceData = Record<string, Record<string, number>>;
+
+export type UnifiedRatesCache = {
+  data: MultiSourceData;
+  dataTomorrow?: MultiSourceData;
+  updatedAtCrypto: number;
+  updatedAtFiat: number;
+  sources_updated: string[];
 };
