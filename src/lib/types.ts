@@ -43,8 +43,8 @@ export type PortfolioAsset = {
 
 /**
  * Enhanced structure for multi-source data storage with date anchoring
- * v: value
- * d: effective date (YYYY-MM-DD)
+ * v: value (relative to USD)
+ * d: effective date from API (YYYY-MM-DD)
  * off: is official source
  */
 export type MultiSourceData = Record<string, Record<string, { 
@@ -56,7 +56,6 @@ export type MultiSourceData = Record<string, Record<string, {
 export type UnifiedRatesCache = {
   data: MultiSourceData;
   dataTomorrow?: MultiSourceData;
-  updatedAtCrypto: number;
   updatedAtFiat: number;
   sources_updated: string[];
 };

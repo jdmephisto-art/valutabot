@@ -24,8 +24,7 @@ export const curatedAltcoinCodes = [
 let unifiedData: MultiSourceData = {};
 let unifiedDataTomorrow: MultiSourceData = {};
 
-const CRYPTO_TTL = 15 * 60 * 1000;
-const FIAT_TTL = 30 * 60 * 1000; // Faster updates for banks
+const FIAT_TTL = 30 * 60 * 1000; // 30 minutes for faster bank updates
 
 const sourceTimezones: Record<string, string> = {
     'nbrb': 'Europe/Minsk',
@@ -72,56 +71,69 @@ export function setDataSource(source: DataSource) { activeDataSource = source; }
 export function getDataSource(): DataSource { return activeDataSource; }
 
 /**
- * Smart Rate Selector with Date Anchoring and Look-Forward logic
+ * Smart Rate Selector with Calendar Anchoring and Look-Forward logic
  */
 export function findRate(from: string, to: string, isTomorrow: boolean = false): number | undefined {
     if (from === to) return 1;
 
     const tz = sourceTimezones[activeDataSource] || 'UTC';
-    const targetDate = format(getLocalDate(tz, isTomorrow ? 1 : 0), 'yyyy-MM-dd');
+    const targetDateStr = format(getLocalDate(tz, isTomorrow ? 1 : 0), 'yyyy-MM-dd');
 
     const getBestPrice = (currency: string, targetDateStr: string): number | undefined => {
-        // Priority logic for official currencies
         const isOfficialCurrency = currency === 'BYN' || currency === 'RUB' || currency === 'KZT' || currency === 'EUR';
         
-        const trySource = (src: DataSource, map: MultiSourceData): number | undefined => {
-            const entry = map[currency]?.[src];
-            if (!entry) return undefined;
-
-            // 1. Absolute date match
-            if (entry.d === targetDateStr) return entry.v;
-
-            // 2. Look-forward logic (for weekends/holidays)
-            // If the entry date is in the future relative to our target, but it's the "scheduled" rate
-            if (isOfficialCurrency && entry.off && entry.d > targetDateStr) return entry.v;
-
-            // 3. Look-back logic (if bank hasn't updated yet)
-            if (isOfficialCurrency && entry.off && entry.d < targetDateStr) return entry.v;
-
+        const trySpecific = (source: string, map: MultiSourceData): number | undefined => {
+            const entry = map[currency]?.[source];
+            if (entry && entry.d === targetDateStr) return entry.v;
             return undefined;
         };
 
-        // Attempt 1: User selected source (Today or Tomorrow cache)
-        let val = trySource(activeDataSource, unifiedDataTomorrow) || trySource(activeDataSource, unifiedData);
+        // 1. Try active source with exact date match
+        let val = trySpecific(activeDataSource, unifiedDataTomorrow) || trySpecific(activeDataSource, unifiedData);
         if (val !== undefined) return val;
 
-        // Attempt 2: Strict Official Fallbacks (don't mix sources for banks if possible)
-        if (currency === 'BYN') val = trySource('nbrb', unifiedDataTomorrow) || trySource('nbrb', unifiedData);
-        if (currency === 'RUB') val = trySource('cbr', unifiedDataTomorrow) || trySource('cbr', unifiedData);
-        if (val !== undefined) return val;
+        // 2. Official Logic: Look Forward / Look Backward
+        if (isOfficialCurrency) {
+            const findOfficialClosest = (target: string): number | undefined => {
+                const candidates: { v: number, d: string }[] = [];
+                [unifiedData, unifiedDataTomorrow].forEach(map => {
+                    if (map[currency]) {
+                        Object.values(map[currency]).forEach(e => {
+                            if (e.off) candidates.push(e);
+                        });
+                    }
+                });
 
-        // Attempt 3: Market Fallback (ONLY if not found in official or if crypto)
+                if (candidates.length === 0) return undefined;
+
+                // Sort by date proximity to target
+                // First, try exact or future (Look-Forward for weekends)
+                const futureOnes = candidates.filter(c => c.d >= target).sort((a, b) => a.d.localeCompare(b.d));
+                if (futureOnes.length > 0) return futureOnes[0].v;
+
+                // Second, try past (Look-Backward)
+                const pastOnes = candidates.filter(c => c.d < target).sort((a, b) => b.d.localeCompare(a.d));
+                if (pastOnes.length > 0) return pastOnes[0].v;
+
+                return undefined;
+            };
+
+            const officialVal = findOfficialClosest(targetDateStr);
+            if (officialVal !== undefined) return officialVal;
+        }
+
+        // 3. Market Fallback (Extreme Reserve)
         const isCrypto = popularCryptoCodes.includes(currency) || curatedAltcoinCodes.includes(currency);
         if (isCrypto || !isOfficialCurrency) {
-            const mkt = unifiedData[currency]?.['worldcurrencyapi'] || unifiedData[currency]?.['coingecko'];
-            if (mkt) return typeof mkt === 'number' ? mkt : (mkt as any).v;
+            const marketEntry = unifiedData[currency]?.['worldcurrencyapi'] || unifiedData[currency]?.['coingecko'];
+            if (marketEntry) return marketEntry.v;
         }
 
         return undefined;
     };
 
-    const fromPrice = getBestPrice(from, targetDate);
-    const toPrice = getBestPrice(to, targetDate);
+    const fromPrice = getBestPrice(from, targetDateStr);
+    const toPrice = getBestPrice(to, targetDateStr);
 
     if (fromPrice !== undefined && toPrice !== undefined && toPrice !== 0) {
         return fromPrice / toPrice;
@@ -135,10 +147,8 @@ export async function preFetchInitialRates(db: Firestore, onApiError?: (source: 
     onSnapshot(docRef, (snap) => {
         if (snap.exists()) {
             const data = snap.data();
-            if (data.data) {
-                unifiedData = data.data;
-                unifiedDataTomorrow = data.dataTomorrow || {};
-            }
+            unifiedData = data.data || {};
+            unifiedDataTomorrow = data.dataTomorrow || {};
         }
     });
 
@@ -169,9 +179,9 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
         const activeSources = sources.filter(s => s.type === 'crypto' || updateFiat);
         const results = await Promise.allSettled(activeSources.map(s => s.fn()));
 
-        const updatedSources: string[] = [];
         const nextData = JSON.parse(JSON.stringify(unifiedData));
         const nextDataTomorrow = JSON.parse(JSON.stringify(unifiedDataTomorrow));
+        const updatedSources: string[] = [];
 
         results.forEach((res, idx) => {
             const sourceInfo = activeSources[idx];
@@ -190,8 +200,9 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
                 };
 
                 if ('tomorrow' in res.value) {
-                    processEntry((res.value as any).today.rates, (res.value as any).today.date, nextData);
-                    processEntry((res.value as any).tomorrow.rates, (res.value as any).tomorrow.date, nextDataTomorrow);
+                    const payload = res.value as any;
+                    processEntry(payload.today.rates, payload.today.date, nextData);
+                    processEntry(payload.tomorrow.rates, payload.tomorrow.date, nextDataTomorrow);
                 } else {
                     const payload = res.value as { rates: Record<string, number>, date: string };
                     processEntry(payload.rates, payload.date, nextData);
@@ -201,16 +212,13 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
             }
         });
 
-        const updatePayload: any = {
+        await setDoc(doc(db, 'rates_cache', 'unified'), {
             data: nextData,
             dataTomorrow: nextDataTomorrow,
             updatedAtFiat: now,
             sources_updated: updatedSources
-        };
-
-        await setDoc(doc(db, 'rates_cache', 'unified'), updatePayload, { merge: true });
+        }, { merge: true });
         
-        // Detailed log for analytics
         await addDoc(collection(db, 'rates_history'), {
             timestamp: serverTimestamp(),
             base: 'USD',
@@ -226,8 +234,6 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
         return unifiedData;
     }
 }
-
-// --- Fetchers with Absolute Dates ---
 
 async function fetchNbrb() {
     try {
@@ -255,8 +261,6 @@ async function fetchNbrb() {
 async function fetchCbr() {
     try {
         const tz = sourceTimezones['cbr'];
-        const todayStr = format(getLocalDate(tz), 'yyyy-MM-dd');
-        // We use the JSON proxy for speed, it contains the date in the response
         const res = await fetch('https://www.cbr-xml-daily.ru/daily_json.js', { cache: 'no-store' });
         if (!res.ok) return null;
         const data = await res.json();
@@ -269,9 +273,8 @@ async function fetchCbr() {
                 rates[code] = (v.Value / v.Nominal) / rubPerUsd;
             });
         }
-        // CBR usually returns the rate date in the response
-        const effectiveDate = data.Date ? parseISO(data.Date).toISOString().split('T')[0] : todayStr;
-        return { rates, date: effectiveDate };
+        const dateStr = data.Date ? parseISO(data.Date).toISOString().split('T')[0] : format(getLocalDate(tz), 'yyyy-MM-dd');
+        return { rates, date: dateStr };
     } catch { return null; }
 }
 
@@ -376,14 +379,8 @@ export async function findRateAsync(from: string, to: string, db: Firestore): Pr
 }
 
 export async function getHistoricalRate(from: string, to: string, date: Date, db: Firestore): Promise<HistoricalRateResult | undefined> {
-    const now = startOfDay(new Date());
-    const target = startOfDay(date);
-    const rate = findRate(from, to, isSameDay(target, addDays(now, 1)));
-    
+    const rate = findRate(from, to, false); 
     if (rate !== undefined) return { rate, date, isFallback: false };
-    
-    const current = findRate(from, to, false);
-    if (current !== undefined) return { rate: current * (0.98 + Math.random() * 0.04), date, isFallback: true };
     return undefined;
 }
 
