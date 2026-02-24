@@ -10,7 +10,9 @@ export type ExchangeRate = {
   to: string;
   rate?: number;
   tomorrowRate?: number;
-  source?: string; // Information about which source provided the rate
+  source?: string;
+  isOfficial?: boolean;
+  effectiveDate?: string;
 };
 
 export type Alert = {
@@ -40,10 +42,16 @@ export type PortfolioAsset = {
 };
 
 /**
- * New structure for multi-source data storage
- * data: { "BYN": { "nbrb": 3.25, "worldcurrency": 3.26 } }
+ * Enhanced structure for multi-source data storage with date anchoring
+ * v: value
+ * d: effective date (YYYY-MM-DD)
+ * off: is official source
  */
-export type MultiSourceData = Record<string, Record<string, number>>;
+export type MultiSourceData = Record<string, Record<string, { 
+  v: number, 
+  d: string, 
+  off: boolean 
+}>>;
 
 export type UnifiedRatesCache = {
   data: MultiSourceData;

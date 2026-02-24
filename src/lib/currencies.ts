@@ -1,5 +1,5 @@
 import { Currency, ExchangeRate, DataSource, HistoricalRateResult, MultiSourceData } from '@/lib/types';
-import { format, isAfter, isSameDay, addDays, startOfDay, eachDayOfInterval } from 'date-fns';
+import { format, isAfter, isSameDay, addDays, startOfDay, eachDayOfInterval, parseISO } from 'date-fns';
 import { currencyApiPreloadedCurrencies } from './preloaded-data';
 import { doc, getDoc, setDoc, collection, addDoc, Firestore, onSnapshot, serverTimestamp } from 'firebase/firestore';
 
@@ -21,11 +21,11 @@ export const curatedAltcoinCodes = [
 ];
 
 // Memory cache
-let unifiedData: MultiSourceData = { 'USD': { 'base': 1 } };
+let unifiedData: MultiSourceData = {};
 let unifiedDataTomorrow: MultiSourceData = {};
 
 const CRYPTO_TTL = 15 * 60 * 1000;
-const FIAT_TTL = 3 * 60 * 60 * 1000;
+const FIAT_TTL = 30 * 60 * 1000; // Faster updates for banks
 
 const sourceTimezones: Record<string, string> = {
     'nbrb': 'Europe/Minsk',
@@ -34,9 +34,6 @@ const sourceTimezones: Record<string, string> = {
     'ecb': 'Europe/Berlin',
 };
 
-/**
- * Helper to get date objects based on specific timezone
- */
 function getLocalDate(timezone: string, offsetDays = 0): Date {
     const now = new Date();
     const formatter = new Intl.DateTimeFormat('en-US', {
@@ -74,50 +71,57 @@ function getLocalDate(timezone: string, offsetDays = 0): Date {
 export function setDataSource(source: DataSource) { activeDataSource = source; }
 export function getDataSource(): DataSource { return activeDataSource; }
 
+/**
+ * Smart Rate Selector with Date Anchoring and Look-Forward logic
+ */
 export function findRate(from: string, to: string, isTomorrow: boolean = false): number | undefined {
     if (from === to) return 1;
 
-    const isCrypto = (code: string) => popularCryptoCodes.includes(code) || curatedAltcoinCodes.includes(code);
+    const tz = sourceTimezones[activeDataSource] || 'UTC';
+    const targetDate = format(getLocalDate(tz, isTomorrow ? 1 : 0), 'yyyy-MM-dd');
 
-    const getBestPrice = (currency: string, sourceMap: MultiSourceData, currentIsTomorrow: boolean): number | undefined => {
-        const sources = sourceMap[currency];
-        if (!sources) return undefined;
-
-        // 1. User selected source
-        if (sources[activeDataSource] !== undefined) return sources[activeDataSource];
-
-        // 2. Hardcoded priority fallbacks
-        if (currency === 'BYN' && sources['nbrb'] !== undefined) return sources['nbrb'];
-        if (currency === 'RUB' && sources['cbr'] !== undefined) return sources['cbr'];
-        if (currency === 'KZT' && sources['nbk'] !== undefined) return sources['nbk'];
-        if (currency === 'EUR' && sources['ecb'] !== undefined) return sources['ecb'];
+    const getBestPrice = (currency: string, targetDateStr: string): number | undefined => {
+        // Priority logic for official currencies
+        const isOfficialCurrency = currency === 'BYN' || currency === 'RUB' || currency === 'KZT' || currency === 'EUR';
         
-        // 3. Category fallbacks
-        if (isCrypto(currency)) {
-            return sources['coingecko'] || sources['cmc'];
+        const trySource = (src: DataSource, map: MultiSourceData): number | undefined => {
+            const entry = map[currency]?.[src];
+            if (!entry) return undefined;
+
+            // 1. Absolute date match
+            if (entry.d === targetDateStr) return entry.v;
+
+            // 2. Look-forward logic (for weekends/holidays)
+            // If the entry date is in the future relative to our target, but it's the "scheduled" rate
+            if (isOfficialCurrency && entry.off && entry.d > targetDateStr) return entry.v;
+
+            // 3. Look-back logic (if bank hasn't updated yet)
+            if (isOfficialCurrency && entry.off && entry.d < targetDateStr) return entry.v;
+
+            return undefined;
+        };
+
+        // Attempt 1: User selected source (Today or Tomorrow cache)
+        let val = trySource(activeDataSource, unifiedDataTomorrow) || trySource(activeDataSource, unifiedData);
+        if (val !== undefined) return val;
+
+        // Attempt 2: Strict Official Fallbacks (don't mix sources for banks if possible)
+        if (currency === 'BYN') val = trySource('nbrb', unifiedDataTomorrow) || trySource('nbrb', unifiedData);
+        if (currency === 'RUB') val = trySource('cbr', unifiedDataTomorrow) || trySource('cbr', unifiedData);
+        if (val !== undefined) return val;
+
+        // Attempt 3: Market Fallback (ONLY if not found in official or if crypto)
+        const isCrypto = popularCryptoCodes.includes(currency) || curatedAltcoinCodes.includes(currency);
+        if (isCrypto || !isOfficialCurrency) {
+            const mkt = unifiedData[currency]?.['worldcurrencyapi'] || unifiedData[currency]?.['coingecko'];
+            if (mkt) return typeof mkt === 'number' ? mkt : (mkt as any).v;
         }
 
-        // 4. Global fallback (strictly from current map)
-        return sources['worldcurrencyapi'] || Object.values(sources)[0];
+        return undefined;
     };
 
-    // Main Selection logic
-    // For tomorrow, we ONLY fallback to today if it's crypto (traded 24/7). 
-    // For official banks, if tomorrow is requested but not in 'unifiedDataTomorrow', we don't want today's data to overwrite.
-    let fromPrice: number | undefined;
-    let toPrice: number | undefined;
-
-    if (isTomorrow) {
-        fromPrice = getBestPrice(from, unifiedDataTomorrow, true);
-        toPrice = getBestPrice(to, unifiedDataTomorrow, true);
-
-        // Fallback to today ONLY for crypto
-        if (fromPrice === undefined && isCrypto(from)) fromPrice = getBestPrice(from, unifiedData, false);
-        if (toPrice === undefined && isCrypto(to)) toPrice = getBestPrice(to, unifiedData, false);
-    } else {
-        fromPrice = getBestPrice(from, unifiedData, false);
-        toPrice = getBestPrice(to, unifiedData, false);
-    }
+    const fromPrice = getBestPrice(from, targetDate);
+    const toPrice = getBestPrice(to, targetDate);
 
     if (fromPrice !== undefined && toPrice !== undefined && toPrice !== 0) {
         return fromPrice / toPrice;
@@ -142,11 +146,10 @@ export async function preFetchInitialRates(db: Firestore, onApiError?: (source: 
         const snap = await getDoc(docRef);
         const now = Date.now();
         const data = snap.data();
-        const needsCryptoUpdate = !snap.exists() || (now - (data?.updatedAtCrypto || 0) > CRYPTO_TTL);
-        const needsFiatUpdate = !snap.exists() || (now - (data?.updatedAtFiat || 0) > FIAT_TTL);
+        const needsUpdate = !snap.exists() || (now - (data?.updatedAtFiat || 0) > FIAT_TTL);
 
-        if (needsCryptoUpdate || needsFiatUpdate) {
-            await updateAllRatesInCloud(db, needsFiatUpdate, onApiError);
+        if (needsUpdate) {
+            await updateAllRatesInCloud(db, true, onApiError);
         }
     } catch (e) {}
 }
@@ -156,7 +159,6 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
     try {
         const sources = [
             { id: 'coingecko', fn: fetchCoinGecko, type: 'crypto' },
-            { id: 'cmc', fn: fetchCoinMarketCap, type: 'crypto' },
             { id: 'nbrb', fn: fetchNbrb, type: 'fiat' },
             { id: 'cbr', fn: fetchCbr, type: 'fiat' },
             { id: 'worldcurrencyapi', fn: fetchWorldCurrency, type: 'fiat' },
@@ -168,7 +170,6 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
         const results = await Promise.allSettled(activeSources.map(s => s.fn()));
 
         const updatedSources: string[] = [];
-        // Deep clone to ensure memory isolation
         const nextData = JSON.parse(JSON.stringify(unifiedData));
         const nextDataTomorrow = JSON.parse(JSON.stringify(unifiedDataTomorrow));
 
@@ -177,18 +178,23 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
             if (res.status === 'fulfilled' && res.value) {
                 updatedSources.push(sourceInfo.id);
                 
-                const processRates = (rates: Record<string, number>, targetMap: MultiSourceData) => {
+                const processEntry = (rates: Record<string, number>, dateStr: string, targetMap: MultiSourceData) => {
                     Object.keys(rates).forEach(currency => {
                         if (!targetMap[currency]) targetMap[currency] = {};
-                        targetMap[currency][sourceInfo.id] = rates[currency];
+                        targetMap[currency][sourceInfo.id] = {
+                            v: rates[currency],
+                            d: dateStr,
+                            off: sourceInfo.type === 'fiat'
+                        };
                     });
                 };
 
                 if ('tomorrow' in res.value) {
-                    processRates((res.value as any).today, nextData);
-                    processRates((res.value as any).tomorrow, nextDataTomorrow);
+                    processEntry((res.value as any).today.rates, (res.value as any).today.date, nextData);
+                    processEntry((res.value as any).tomorrow.rates, (res.value as any).tomorrow.date, nextDataTomorrow);
                 } else {
-                    processRates(res.value as Record<string, number>, nextData);
+                    const payload = res.value as { rates: Record<string, number>, date: string };
+                    processEntry(payload.rates, payload.date, nextData);
                 }
             } else if (onApiError) {
                 onApiError(sourceInfo.id);
@@ -198,13 +204,13 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
         const updatePayload: any = {
             data: nextData,
             dataTomorrow: nextDataTomorrow,
-            updatedAtCrypto: now,
+            updatedAtFiat: now,
             sources_updated: updatedSources
         };
-        if (updateFiat) updatePayload.updatedAtFiat = now;
 
         await setDoc(doc(db, 'rates_cache', 'unified'), updatePayload, { merge: true });
         
+        // Detailed log for analytics
         await addDoc(collection(db, 'rates_history'), {
             timestamp: serverTimestamp(),
             base: 'USD',
@@ -221,11 +227,11 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
     }
 }
 
-// --- Fetchers with Timezone Logic ---
+// --- Fetchers with Absolute Dates ---
 
 async function fetchNbrb() {
     try {
-        const localNow = getLocalDate(sourceTimezones['nbrb']);
+        const tz = sourceTimezones['nbrb'];
         const fetchByDate = async (d: Date) => {
             const dateStr = format(d, 'yyyy-MM-dd');
             const res = await fetch(`https://api.nbrb.by/exrates/rates?periodicity=0&ondate=${dateStr}`, { cache: 'no-store' });
@@ -238,17 +244,19 @@ async function fetchNbrb() {
                 data.forEach((r: any) => { rates[r.Cur_Abbreviation] = (r.Cur_OfficialRate / r.Cur_Scale) / usdInByn; });
                 rates['BYN'] = 1 / usdInByn;
             }
-            return rates;
+            return { rates, date: dateStr };
         };
-        const today = await fetchByDate(localNow);
-        const tomorrow = await fetchByDate(addDays(localNow, 1));
-        return today ? { today, tomorrow: tomorrow || {} } : null;
+        const today = await fetchByDate(getLocalDate(tz));
+        const tomorrow = await fetchByDate(getLocalDate(tz, 1));
+        return today ? { today, tomorrow: tomorrow || today } : null;
     } catch { return null; }
 }
 
 async function fetchCbr() {
     try {
-        // CBR usually updates for tomorrow after 15:30 MSK
+        const tz = sourceTimezones['cbr'];
+        const todayStr = format(getLocalDate(tz), 'yyyy-MM-dd');
+        // We use the JSON proxy for speed, it contains the date in the response
         const res = await fetch('https://www.cbr-xml-daily.ru/daily_json.js', { cache: 'no-store' });
         if (!res.ok) return null;
         const data = await res.json();
@@ -261,7 +269,9 @@ async function fetchCbr() {
                 rates[code] = (v.Value / v.Nominal) / rubPerUsd;
             });
         }
-        return rates;
+        // CBR usually returns the rate date in the response
+        const effectiveDate = data.Date ? parseISO(data.Date).toISOString().split('T')[0] : todayStr;
+        return { rates, date: effectiveDate };
     } catch { return null; }
 }
 
@@ -292,22 +302,7 @@ async function fetchCoinGecko() {
             const id = mapping[code];
             if (data[id]?.usd) rates[code] = data[id].usd;
         });
-        return rates;
-    } catch { return null; }
-}
-
-async function fetchCoinMarketCap() {
-    try {
-        const res = await fetch('/api/cmc?endpoint=cryptocurrency/listings/latest&limit=100', { cache: 'no-store' });
-        if (!res.ok) return null;
-        const data = await res.json();
-        const rates: Record<string, number> = {};
-        if (data?.data) {
-            data.data.forEach((coin: any) => {
-                rates[coin.symbol] = coin.quote.USD.price;
-            });
-        }
-        return rates;
+        return { rates, date: format(new Date(), 'yyyy-MM-dd') };
     } catch { return null; }
 }
 
@@ -322,7 +317,7 @@ async function fetchWorldCurrency() {
                 if (data.rates[code] > 0) rates[code] = 1 / data.rates[code];
             });
         }
-        return rates;
+        return { rates, date: format(new Date(), 'yyyy-MM-dd') };
     } catch { return null; }
 }
 
@@ -334,7 +329,7 @@ async function fetchEcb() {
     const rates: Record<string, number> = {};
     const eurInUsd = 1 / (ecbData['USD'] || 1);
     Object.keys(ecbData).forEach(code => { rates[code] = (1 / ecbData[code]) / eurInUsd; });
-    return rates;
+    return { rates, date: format(getLocalDate('Europe/Berlin'), 'yyyy-MM-dd') };
   } catch { return null; }
 }
 
@@ -349,7 +344,7 @@ async function fetchNbk() {
       rates['KZT'] = 1 / usdInKzt;
       Object.keys(nbkData).forEach(code => { rates[code] = nbkData[code] / usdInKzt; });
     }
-    return rates;
+    return { rates, date: format(getLocalDate('Asia/Almaty'), 'yyyy-MM-dd') };
   } catch { return null; }
 }
 
@@ -382,18 +377,10 @@ export async function findRateAsync(from: string, to: string, db: Firestore): Pr
 
 export async function getHistoricalRate(from: string, to: string, date: Date, db: Firestore): Promise<HistoricalRateResult | undefined> {
     const now = startOfDay(new Date());
-    const tomorrow = addDays(now, 1);
     const target = startOfDay(date);
-
-    if (isAfter(target, tomorrow)) return undefined;
-    if (isSameDay(target, tomorrow)) {
-        const rate = findRate(from, to, true);
-        if (rate !== undefined) return { rate, date, isFallback: false };
-    }
-    if (isSameDay(target, now)) {
-        const rate = findRate(from, to, false);
-        if (rate !== undefined) return { rate, date, isFallback: false };
-    }
+    const rate = findRate(from, to, isSameDay(target, addDays(now, 1)));
+    
+    if (rate !== undefined) return { rate, date, isFallback: false };
     
     const current = findRate(from, to, false);
     if (current !== undefined) return { rate: current * (0.98 + Math.random() * 0.04), date, isFallback: true };
