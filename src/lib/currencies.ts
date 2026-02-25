@@ -106,12 +106,9 @@ export function findRate(from: string, to: string, isTomorrow: boolean = false):
 
                 if (candidates.length === 0) return undefined;
 
-                // Sort by date proximity to target
-                // First, try exact or future (Look-Forward for weekends)
                 const futureOnes = candidates.filter(c => c.d >= target).sort((a, b) => a.d.localeCompare(b.d));
                 if (futureOnes.length > 0) return futureOnes[0].v;
 
-                // Second, try past (Look-Backward)
                 const pastOnes = candidates.filter(c => c.d < target).sort((a, b) => b.d.localeCompare(a.d));
                 if (pastOnes.length > 0) return pastOnes[0].v;
 
@@ -379,20 +376,50 @@ export async function findRateAsync(from: string, to: string, db: Firestore): Pr
 }
 
 export async function getHistoricalRate(from: string, to: string, date: Date, db: Firestore): Promise<HistoricalRateResult | undefined> {
-    const rate = findRate(from, to, false); 
+    await preFetchInitialRates(db);
+    
+    const tz = sourceTimezones[activeDataSource] || 'UTC';
+    const tomorrowStr = getLocalDate(tz, 1).toISOString().split('T')[0];
+    const requestedStr = format(date, 'yyyy-MM-dd');
+    
+    // Если дата в календаре совпадает с "завтра" банка, берем завтрашний слот
+    const isTomorrow = requestedStr === tomorrowStr;
+    
+    const rate = findRate(from, to, isTomorrow); 
     if (rate !== undefined) return { rate, date, isFallback: false };
     return undefined;
 }
 
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
-    const baseRate = findRate(from, to, false) || 1;
+    const tz = sourceTimezones[activeDataSource] || 'UTC';
+    const todayStr = getLocalDate(tz, 0).toISOString().split('T')[0];
+    const tomorrowStr = getLocalDate(tz, 1).toISOString().split('T')[0];
+    
+    const todayRate = findRate(from, to, false) || 1;
+    const tomorrowRate = findRate(from, to, true) || todayRate;
+
     const isCrypto = popularCryptoCodes.includes(from) || curatedAltcoinCodes.includes(from);
     const volatility = isCrypto ? 0.03 : 0.002;
+
     try {
         const days = eachDayOfInterval({ start: startOfDay(startDate), end: startOfDay(endDate) });
-        return days.map((d) => ({
-            date: format(d, 'dd.MM'),
-            rate: baseRate * (1 + (Math.random() - 0.5) * volatility)
-        }));
+        return days.map((d) => {
+            const dStr = format(d, 'yyyy-MM-dd');
+            
+            let rate: number;
+            if (dStr === tomorrowStr) {
+                rate = tomorrowRate;
+            } else if (dStr === todayStr) {
+                rate = todayRate;
+            } else {
+                // Мокаем исторические данные, используя сегодняшний курс как базу
+                rate = todayRate * (1 + (Math.random() - 0.5) * volatility);
+            }
+
+            return {
+                date: format(d, 'dd.MM'),
+                rate: rate
+            };
+        });
     } catch (e) { return []; }
 }
