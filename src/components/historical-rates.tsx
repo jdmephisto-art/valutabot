@@ -174,8 +174,9 @@ export function HistoricalRates() {
   }
 
   const handleSwapCurrencies = () => {
+    const oldFrom = fromCurrency;
     setFromCurrency(toCurrency);
-    setToCurrency(fromCurrency);
+    setToCurrency(oldFrom);
     setSingleRate(undefined);
     setRangeResult(undefined);
     setDynamicsData([]);
@@ -220,7 +221,7 @@ export function HistoricalRates() {
              <ArrowRightLeft className="h-4 w-4 text-muted-foreground" />
           </Button>
           <div className="flex-1 min-w-0">
-              <CurrencyCombobox value={toCurrency} onChange={setFromCurrency} />
+              <CurrencyCombobox value={toCurrency} onChange={setToCurrency} />
           </div>
         </div>
 
