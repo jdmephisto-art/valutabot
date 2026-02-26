@@ -172,10 +172,6 @@ async function fetchNbrbHistoricalRange(from: Date, to: Date) {
     const fromStr = format(from, 'yyyy-MM-dd');
     const toStr = format(to, 'yyyy-MM-dd');
     try {
-        // Получаем ID для USD
-        const idRes = await fetch('https://api.nbrb.by/exrates/rates/431', { cache: 'no-store' });
-        if (!idRes.ok) return null;
-        
         const res = await fetch(`https://api.nbrb.by/exrates/rates/dynamics/431?startDate=${fromStr}&endDate=${toStr}`, { cache: 'no-store' });
         if (!res.ok) return null;
         const data = await res.json();

@@ -19,9 +19,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // Правила для истории курсов (публичное чтение и запись для формирования архива)
+    // Правила для истории курсов (публичное чтение всем, запись только авторизованным)
     match /rates_history/{id} {
-      allow read, write: if true;
+      allow get, list: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if false; 
     }
 
     match /users/{userId} {
