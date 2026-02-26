@@ -1,7 +1,7 @@
 import { Currency, ExchangeRate, DataSource, HistoricalRateResult, MultiSourceData } from '@/lib/types';
-import { format, isAfter, isSameDay, addDays, startOfDay, eachDayOfInterval, parseISO } from 'date-fns';
+import { format, isAfter, isBefore, isSameDay, addDays, startOfDay, eachDayOfInterval, parseISO, subDays } from 'date-fns';
 import { currencyApiPreloadedCurrencies } from './preloaded-data';
-import { doc, getDoc, setDoc, collection, addDoc, Firestore, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc, Firestore, onSnapshot, serverTimestamp, query, where, orderBy, limit, getDocs, Timestamp } from 'firebase/firestore';
 
 let activeDataSource: DataSource = 'nbrb';
 
@@ -24,7 +24,7 @@ export const curatedAltcoinCodes = [
 let unifiedData: MultiSourceData = {};
 let unifiedDataTomorrow: MultiSourceData = {};
 
-const FIAT_TTL = 30 * 60 * 1000; // 30 minutes for faster bank updates
+const FIAT_TTL = 30 * 60 * 1000; // 30 minutes
 
 const sourceTimezones: Record<string, string> = {
     'nbrb': 'Europe/Minsk',
@@ -71,60 +71,52 @@ export function setDataSource(source: DataSource) { activeDataSource = source; }
 export function getDataSource(): DataSource { return activeDataSource; }
 
 /**
- * Smart Rate Selector with Calendar Anchoring and Look-Forward logic
+ * Smart Rate Selector with Calendar Anchoring and Corrected Holiday Logic
  */
 export function findRate(from: string, to: string, isTomorrow: boolean = false): number | undefined {
     if (from === to) return 1;
 
     const tz = sourceTimezones[activeDataSource] || 'UTC';
     const targetDateStr = format(getLocalDate(tz, isTomorrow ? 1 : 0), 'yyyy-MM-dd');
+    const todayStr = format(getLocalDate(tz, 0), 'yyyy-MM-dd');
 
-    const getBestPrice = (currency: string, targetDateStr: string): number | undefined => {
+    const getBestPrice = (currency: string, target: string): number | undefined => {
         const isOfficialCurrency = currency === 'BYN' || currency === 'RUB' || currency === 'KZT' || currency === 'EUR';
         
         const trySpecific = (source: string, map: MultiSourceData): number | undefined => {
             const entry = map[currency]?.[source];
-            if (entry && entry.d === targetDateStr) return entry.v;
+            if (entry && entry.d === target) return entry.v;
             return undefined;
         };
 
-        // 1. Try active source with exact date match
+        // 1. Exact Match
         let val = trySpecific(activeDataSource, unifiedDataTomorrow) || trySpecific(activeDataSource, unifiedData);
         if (val !== undefined) return val;
 
-        // 2. Official Logic: Look Forward / Look Backward
+        // 2. Holiday/Weekend Logic (Look Forward for Future, Look Backward for Past)
         if (isOfficialCurrency) {
-            const findOfficialClosest = (target: string): number | undefined => {
-                const candidates: { v: number, d: string }[] = [];
-                [unifiedData, unifiedDataTomorrow].forEach(map => {
-                    if (map[currency]) {
-                        Object.values(map[currency]).forEach(e => {
-                            if (e.off) candidates.push(e);
-                        });
-                    }
-                });
+            const candidates: { v: number, d: string }[] = [];
+            [unifiedData, unifiedDataTomorrow].forEach(map => {
+                if (map[currency]) {
+                    Object.values(map[currency]).forEach(e => { if (e.off) candidates.push(e); });
+                }
+            });
 
-                if (candidates.length === 0) return undefined;
-
-                const futureOnes = candidates.filter(c => c.d >= target).sort((a, b) => a.d.localeCompare(b.d));
-                if (futureOnes.length > 0) return futureOnes[0].v;
-
-                const pastOnes = candidates.filter(c => c.d < target).sort((a, b) => b.d.localeCompare(a.d));
+            if (candidates.length > 0) {
+                if (target >= todayStr) {
+                    // FUTURE: Look for the upcoming rate (e.g., Saturday uses Monday's rate)
+                    const futureOnes = candidates.filter(c => c.d >= target).sort((a, b) => a.d.localeCompare(b.d));
+                    if (futureOnes.length > 0) return futureOnes[0].v;
+                }
+                // PAST or FALLBACK: Look for the most recent historical official rate
+                const pastOnes = candidates.filter(c => c.d <= target).sort((a, b) => b.d.localeCompare(a.d));
                 if (pastOnes.length > 0) return pastOnes[0].v;
-
-                return undefined;
-            };
-
-            const officialVal = findOfficialClosest(targetDateStr);
-            if (officialVal !== undefined) return officialVal;
+            }
         }
 
-        // 3. Market Fallback (Extreme Reserve)
-        const isCrypto = popularCryptoCodes.includes(currency) || curatedAltcoinCodes.includes(currency);
-        if (isCrypto || !isOfficialCurrency) {
-            const marketEntry = unifiedData[currency]?.['worldcurrencyapi'] || unifiedData[currency]?.['coingecko'];
-            if (marketEntry) return marketEntry.v;
-        }
+        // 3. Crypto / Global Market Fallback
+        const marketEntry = unifiedData[currency]?.['worldcurrencyapi'] || unifiedData[currency]?.['coingecko'];
+        if (marketEntry) return marketEntry.v;
 
         return undefined;
     };
@@ -375,51 +367,99 @@ export async function findRateAsync(from: string, to: string, db: Firestore): Pr
     return findRate(from, to);
 }
 
+/**
+ * Enhanced Historical Rate Lookup using DB Snapshots and API Fallback
+ */
 export async function getHistoricalRate(from: string, to: string, date: Date, db: Firestore): Promise<HistoricalRateResult | undefined> {
     await preFetchInitialRates(db);
     
     const tz = sourceTimezones[activeDataSource] || 'UTC';
-    const tomorrowStr = getLocalDate(tz, 1).toISOString().split('T')[0];
-    const requestedStr = format(date, 'yyyy-MM-dd');
+    const localToday = getLocalDate(tz, 0);
+    const localTomorrow = getLocalDate(tz, 1);
     
-    // Если дата в календаре совпадает с "завтра" банка, берем завтрашний слот
-    const isTomorrow = requestedStr === tomorrowStr;
-    
-    const rate = findRate(from, to, isTomorrow); 
-    if (rate !== undefined) return { rate, date, isFallback: false };
+    // 1. Current Context Check (Fast)
+    if (isSameDay(date, localToday)) {
+        const r = findRate(from, to, false);
+        if (r) return { rate: r, date, isFallback: false };
+    }
+    if (isSameDay(date, localTomorrow)) {
+        const r = findRate(from, to, true);
+        if (r) return { rate: r, date, isFallback: false };
+    }
+
+    // 2. Database History Check
+    try {
+        const start = startOfDay(date);
+        const end = addDays(start, 1);
+        
+        const q = query(
+            collection(db, 'rates_history'),
+            where('timestamp', '>=', Timestamp.fromDate(start)),
+            where('timestamp', '<', Timestamp.fromDate(end)),
+            orderBy('timestamp', 'desc'),
+            limit(1)
+        );
+        
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+            const data = snap.docs[0].data();
+            const rates = data.data || {};
+            const fromP = rates[from]?.[activeDataSource]?.v || rates[from]?.['worldcurrencyapi']?.v;
+            const toP = rates[to]?.[activeDataSource]?.v || rates[to]?.['worldcurrencyapi']?.v;
+            
+            if (fromP && toP) return { rate: fromP / toP, date, isFallback: false };
+        }
+    } catch (e) { console.error("History DB query error:", e); }
+
+    // 3. Last Resort: Use findRate with the corrected Look-Back logic
+    // This will handle weekends even if snapshots are missing
+    const rate = findRate(from, to, isAfter(date, localToday));
+    if (rate !== undefined) return { rate, date, isFallback: true };
+
     return undefined;
 }
 
-export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date): Promise<{ date: string; rate: number }[]> {
-    const tz = sourceTimezones[activeDataSource] || 'UTC';
-    const todayStr = getLocalDate(tz, 0).toISOString().split('T')[0];
-    const tomorrowStr = getLocalDate(tz, 1).toISOString().split('T')[0];
-    
-    const todayRate = findRate(from, to, false) || 1;
-    const tomorrowRate = findRate(from, to, true) || todayRate;
-
-    const isCrypto = popularCryptoCodes.includes(from) || curatedAltcoinCodes.includes(from);
-    const volatility = isCrypto ? 0.03 : 0.002;
-
+/**
+ * Real Data Dynamics from DB Snapshots
+ */
+export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date, db: Firestore): Promise<{ date: string; rate: number }[]> {
     try {
-        const days = eachDayOfInterval({ start: startOfDay(startDate), end: startOfDay(endDate) });
-        return days.map((d) => {
-            const dStr = format(d, 'yyyy-MM-dd');
-            
-            let rate: number;
-            if (dStr === tomorrowStr) {
-                rate = tomorrowRate;
-            } else if (dStr === todayStr) {
-                rate = todayRate;
-            } else {
-                // Мокаем исторические данные, используя сегодняшний курс как базу
-                rate = todayRate * (1 + (Math.random() - 0.5) * volatility);
-            }
+        const q = query(
+            collection(db, 'rates_history'),
+            where('timestamp', '>=', Timestamp.fromDate(startOfDay(startDate))),
+            where('timestamp', '<=', Timestamp.fromDate(addDays(startOfDay(endDate), 1))),
+            orderBy('timestamp', 'asc')
+        );
+        
+        const snap = await getDocs(q);
+        const dailyPoints = new Map<string, number>();
 
+        snap.docs.forEach(doc => {
+            const d = doc.data();
+            const dateKey = format((d.timestamp as Timestamp).toDate(), 'yyyy-MM-dd');
+            const rates = d.data || {};
+            const fromP = rates[from]?.[activeDataSource]?.v || rates[from]?.['worldcurrencyapi']?.v;
+            const toP = rates[to]?.[activeDataSource]?.v || rates[to]?.['worldcurrencyapi']?.v;
+            
+            if (fromP && toP) dailyPoints.set(dateKey, fromP / toP);
+        });
+
+        // Fill the interval days
+        const days = eachDayOfInterval({ start: startDate, end: endDate });
+        let lastKnownRate = findRate(from, to, false) || 1;
+
+        return days.map(d => {
+            const key = format(d, 'yyyy-MM-dd');
+            const rate = dailyPoints.get(key) || lastKnownRate;
+            if (dailyPoints.has(key)) lastKnownRate = rate;
+            
             return {
                 date: format(d, 'dd.MM'),
                 rate: rate
             };
         });
-    } catch (e) { return []; }
+    } catch (e) { 
+        console.error("Dynamics Fetch Error:", e);
+        return []; 
+    }
 }

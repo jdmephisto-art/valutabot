@@ -109,7 +109,7 @@ export function HistoricalRates() {
         setFetchingDynamics(true);
         setDynamicsData([]);
         try {
-            const data = await getDynamicsForPeriod(fromCurrency, toCurrency, dynamicsRange.from, dynamicsRange.to);
+            const data = await getDynamicsForPeriod(fromCurrency, toCurrency, dynamicsRange.from, dynamicsRange.to, firestore);
             if (!data || data.length === 0) {
                 toast({ variant: 'destructive', title: t('history.noDynamics'), description: t('history.dynamicFetchError') });
             } else {
@@ -220,7 +220,7 @@ export function HistoricalRates() {
              <ArrowRightLeft className="h-4 w-4 text-muted-foreground" />
           </Button>
           <div className="flex-1 min-w-0">
-              <CurrencyCombobox value={toCurrency} onChange={setToCurrency} />
+              <CurrencyCombobox value={toCurrency} onChange={setFromCurrency} />
           </div>
         </div>
 
