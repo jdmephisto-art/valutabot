@@ -71,7 +71,7 @@ export function setDataSource(source: DataSource) { activeDataSource = source; }
 export function getDataSource(): DataSource { return activeDataSource; }
 
 /**
- * Smart Rate Selector with Calendar Anchoring and Corrected Holiday Logic
+ * Smart Rate Selector with Calendar Anchoring
  */
 export function findRate(from: string, to: string, isTomorrow: boolean = false): number | undefined {
     if (from === to) return 1;
@@ -93,7 +93,7 @@ export function findRate(from: string, to: string, isTomorrow: boolean = false):
         let val = trySpecific(activeDataSource, unifiedDataTomorrow) || trySpecific(activeDataSource, unifiedData);
         if (val !== undefined) return val;
 
-        // 2. Holiday/Weekend Logic (Look Forward for Future, Look Backward for Past)
+        // 2. Holiday/Weekend Logic (Only for conversion/latest, not for strict history)
         if (isOfficialCurrency) {
             const candidates: { v: number, d: string }[] = [];
             [unifiedData, unifiedDataTomorrow].forEach(map => {
@@ -104,11 +104,9 @@ export function findRate(from: string, to: string, isTomorrow: boolean = false):
 
             if (candidates.length > 0) {
                 if (target >= todayStr) {
-                    // FUTURE: Look for the upcoming rate (e.g., Saturday uses Monday's rate)
                     const futureOnes = candidates.filter(c => c.d >= target).sort((a, b) => a.d.localeCompare(b.d));
                     if (futureOnes.length > 0) return futureOnes[0].v;
                 }
-                // PAST or FALLBACK: Look for the most recent historical official rate
                 const pastOnes = candidates.filter(c => c.d <= target).sort((a, b) => b.d.localeCompare(a.d));
                 if (pastOnes.length > 0) return pastOnes[0].v;
             }
@@ -224,25 +222,125 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
     }
 }
 
+// --- Historical Logic Helpers ---
+
+async function fetchNbrbHistorical(d: Date) {
+    const dateStr = format(d, 'yyyy-MM-dd');
+    try {
+        const res = await fetch(`https://api.nbrb.by/exrates/rates?periodicity=0&ondate=${dateStr}`, { cache: 'no-store' });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const rates: Record<string, number> = {};
+        const usd = data.find((r: any) => r.Cur_Abbreviation === 'USD');
+        if (usd) {
+            const usdInByn = usd.Cur_OfficialRate / usd.Cur_Scale;
+            data.forEach((r: any) => { rates[r.Cur_Abbreviation] = (r.Cur_OfficialRate / r.Cur_Scale) / usdInByn; });
+            rates['BYN'] = 1 / usdInByn;
+            return rates;
+        }
+    } catch { return null; }
+    return null;
+}
+
+async function fetchCbrHistorical(d: Date) {
+    const dateStr = format(d, 'dd/MM/yyyy');
+    try {
+        const res = await fetch(`/api/cbr/history?date_req=${dateStr}`, { cache: 'no-store' });
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (data?.ValCurs?.Valute) {
+            const rates: Record<string, number> = {};
+            const valutes = Array.isArray(data.ValCurs.Valute) ? data.ValCurs.Valute : [data.ValCurs.Valute];
+            const usd = valutes.find((v: any) => v.CharCode[0] === 'USD');
+            if (usd) {
+                const rubPerUsd = parseFloat(usd.Value[0].replace(',', '.'));
+                rates['RUB'] = 1 / rubPerUsd;
+                valutes.forEach((v: any) => {
+                    const code = v.CharCode[0];
+                    const val = parseFloat(v.Value[0].replace(',', '.'));
+                    const nom = parseInt(v.Nominal[0]);
+                    rates[code] = (val / nom) / rubPerUsd;
+                });
+                return rates;
+            }
+        }
+    } catch { return null; }
+    return null;
+}
+
+/**
+ * Hybrid historical fetcher: tries DB, then APIs, then caches to DB
+ */
+async function fetchAndCacheHistorical(date: Date, db: Firestore): Promise<MultiSourceData | null> {
+    const dateStr = format(date, 'yyyy-MM-dd');
+    
+    // 1. Check DB first
+    try {
+        const start = startOfDay(date);
+        const end = addDays(start, 1);
+        const q = query(
+            collection(db, 'rates_history'),
+            where('timestamp', '>=', Timestamp.fromDate(start)),
+            where('timestamp', '<', Timestamp.fromDate(end)),
+            orderBy('timestamp', 'desc'),
+            limit(1)
+        );
+        const snap = await getDocs(q);
+        if (!snap.empty) return snap.docs[0].data().data;
+    } catch (e) {}
+
+    // 2. Fetch from APIs if not in DB
+    const sources = [
+        { id: 'nbrb', fn: fetchNbrbHistorical },
+        { id: 'cbr', fn: fetchCbrHistorical }
+    ];
+
+    const results = await Promise.allSettled(sources.map(s => s.fn(date)));
+    const historicalData: MultiSourceData = {};
+    const updatedSources: string[] = [];
+
+    results.forEach((res, idx) => {
+        const sourceInfo = sources[idx];
+        if (res.status === 'fulfilled' && res.value) {
+            updatedSources.push(sourceInfo.id);
+            Object.keys(res.value).forEach(currency => {
+                if (!historicalData[currency]) historicalData[currency] = {};
+                historicalData[currency][sourceInfo.id] = {
+                    v: res.value![currency],
+                    d: dateStr,
+                    off: true
+                };
+            });
+        }
+    });
+
+    // 3. Save to DB for future use
+    if (updatedSources.length > 0) {
+        try {
+            await addDoc(collection(db, 'rates_history'), {
+                timestamp: Timestamp.fromDate(startOfDay(date)),
+                base: 'USD',
+                data: historicalData,
+                sources_updated: updatedSources,
+                is_historical_fill: true
+            });
+        } catch (e) {}
+        return historicalData;
+    }
+    return null;
+}
+
+// --- End Historical Logic Helpers ---
+
 async function fetchNbrb() {
     try {
         const tz = sourceTimezones['nbrb'];
-        const fetchByDate = async (d: Date) => {
-            const dateStr = format(d, 'yyyy-MM-dd');
-            const res = await fetch(`https://api.nbrb.by/exrates/rates?periodicity=0&ondate=${dateStr}`, { cache: 'no-store' });
-            if (!res.ok) return null;
-            const data = await res.json();
-            const rates: Record<string, number> = {};
-            const usd = data.find((r: any) => r.Cur_Abbreviation === 'USD');
-            if (usd) {
-                const usdInByn = usd.Cur_OfficialRate / usd.Cur_Scale;
-                data.forEach((r: any) => { rates[r.Cur_Abbreviation] = (r.Cur_OfficialRate / r.Cur_Scale) / usdInByn; });
-                rates['BYN'] = 1 / usdInByn;
-            }
-            return { rates, date: dateStr };
-        };
-        const today = await fetchByDate(getLocalDate(tz));
-        const tomorrow = await fetchByDate(getLocalDate(tz, 1));
+        const todayRates = await fetchNbrbHistorical(getLocalDate(tz));
+        const tomorrowRates = await fetchNbrbHistorical(getLocalDate(tz, 1));
+        
+        const today = todayRates ? { rates: todayRates, date: format(getLocalDate(tz), 'yyyy-MM-dd') } : null;
+        const tomorrow = tomorrowRates ? { rates: tomorrowRates, date: format(getLocalDate(tz, 1), 'yyyy-MM-dd') } : null;
+        
         return today ? { today, tomorrow: tomorrow || today } : null;
     } catch { return null; }
 }
@@ -368,7 +466,7 @@ export async function findRateAsync(from: string, to: string, db: Firestore): Pr
 }
 
 /**
- * Enhanced Historical Rate Lookup using DB Snapshots and API Fallback
+ * Robust Historical Rate Lookup with API Archive Fallback
  */
 export async function getHistoricalRate(from: string, to: string, date: Date, db: Firestore): Promise<HistoricalRateResult | undefined> {
     await preFetchInitialRates(db);
@@ -377,7 +475,7 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
     const localToday = getLocalDate(tz, 0);
     const localTomorrow = getLocalDate(tz, 1);
     
-    // 1. Current Context Check (Fast)
+    // 1. Current Context (Fast)
     if (isSameDay(date, localToday)) {
         const r = findRate(from, to, false);
         if (r) return { rate: r, date, isFallback: false };
@@ -387,32 +485,15 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
         if (r) return { rate: r, date, isFallback: false };
     }
 
-    // 2. Database History Check
-    try {
-        const start = startOfDay(date);
-        const end = addDays(start, 1);
-        
-        const q = query(
-            collection(db, 'rates_history'),
-            where('timestamp', '>=', Timestamp.fromDate(start)),
-            where('timestamp', '<', Timestamp.fromDate(end)),
-            orderBy('timestamp', 'desc'),
-            limit(1)
-        );
-        
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-            const data = snap.docs[0].data();
-            const rates = data.data || {};
-            const fromP = rates[from]?.[activeDataSource]?.v || rates[from]?.['worldcurrencyapi']?.v;
-            const toP = rates[to]?.[activeDataSource]?.v || rates[to]?.['worldcurrencyapi']?.v;
-            
-            if (fromP && toP) return { rate: fromP / toP, date, isFallback: false };
-        }
-    } catch (e) { console.error("History DB query error:", e); }
+    // 2. Hybrid DB + API lookup
+    const data = await fetchAndCacheHistorical(date, db);
+    if (data) {
+        const fromP = data[from]?.[activeDataSource]?.v || data[from]?.['worldcurrencyapi']?.v;
+        const toP = data[to]?.[activeDataSource]?.v || data[to]?.['worldcurrencyapi']?.v;
+        if (fromP && toP) return { rate: fromP / toP, date, isFallback: false };
+    }
 
-    // 3. Last Resort: Use findRate with the corrected Look-Back logic
-    // This will handle weekends even if snapshots are missing
+    // 3. Final resort (if API/DB fails): findRate with strict date logic
     const rate = findRate(from, to, isAfter(date, localToday));
     if (rate !== undefined) return { rate, date, isFallback: true };
 
@@ -420,44 +501,26 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
 }
 
 /**
- * Real Data Dynamics from DB Snapshots
+ * Real Data Dynamics with History Filling
  */
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date, db: Firestore): Promise<{ date: string; rate: number }[]> {
     try {
-        const q = query(
-            collection(db, 'rates_history'),
-            where('timestamp', '>=', Timestamp.fromDate(startOfDay(startDate))),
-            where('timestamp', '<=', Timestamp.fromDate(addDays(startOfDay(endDate), 1))),
-            orderBy('timestamp', 'asc')
-        );
-        
-        const snap = await getDocs(q);
-        const dailyPoints = new Map<string, number>();
-
-        snap.docs.forEach(doc => {
-            const d = doc.data();
-            const dateKey = format((d.timestamp as Timestamp).toDate(), 'yyyy-MM-dd');
-            const rates = d.data || {};
-            const fromP = rates[from]?.[activeDataSource]?.v || rates[from]?.['worldcurrencyapi']?.v;
-            const toP = rates[to]?.[activeDataSource]?.v || rates[to]?.['worldcurrencyapi']?.v;
-            
-            if (fromP && toP) dailyPoints.set(dateKey, fromP / toP);
-        });
-
-        // Fill the interval days
         const days = eachDayOfInterval({ start: startDate, end: endDate });
-        let lastKnownRate = findRate(from, to, false) || 1;
+        const results = [];
+        let lastKnownRate = 1;
 
-        return days.map(d => {
-            const key = format(d, 'yyyy-MM-dd');
-            const rate = dailyPoints.get(key) || lastKnownRate;
-            if (dailyPoints.has(key)) lastKnownRate = rate;
-            
-            return {
-                date: format(d, 'dd.MM'),
-                rate: rate
-            };
-        });
+        // For dynamics, we fetch day by day if not in cache (optimized for 7-14 day ranges)
+        for (const d of days) {
+            const hist = await getHistoricalRate(from, to, d, db);
+            if (hist) {
+                results.push({ date: format(d, 'dd.MM'), rate: hist.rate });
+                lastKnownRate = hist.rate;
+            } else {
+                results.push({ date: format(d, 'dd.MM'), rate: lastKnownRate });
+            }
+        }
+        
+        return results;
     } catch (e) { 
         console.error("Dynamics Fetch Error:", e);
         return []; 
