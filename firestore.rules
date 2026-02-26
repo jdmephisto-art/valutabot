@@ -42,5 +42,10 @@ service cloud.firestore {
     match /rates_cache/{document=**} {
       allow read, write: if true;
     }
+
+    // Правила для истории курсов (публичное чтение и запись для формирования общего архива)
+    match /rates_history/{document=**} {
+      allow read, write: if true;
+    }
   }
 }
