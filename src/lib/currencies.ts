@@ -1,7 +1,7 @@
 import { Currency, ExchangeRate, DataSource, HistoricalRateResult, MultiSourceData } from '@/lib/types';
 import { format, isAfter, isBefore, isSameDay, addDays, startOfDay, eachDayOfInterval, parseISO, subDays, endOfDay } from 'date-fns';
 import { currencyApiPreloadedCurrencies } from './preloaded-data';
-import { doc, getDoc, setDoc, collection, addDoc, Firestore, onSnapshot, serverTimestamp, query, where, orderBy, limit, getDocs, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc, Firestore, onSnapshot, serverTimestamp, query, where, limit, getDocs, Timestamp } from 'firebase/firestore';
 
 let activeDataSource: DataSource = 'nbrb';
 
@@ -96,13 +96,16 @@ export function findRate(from: string, to: string, isTomorrow: boolean = false):
 
 export async function preFetchInitialRates(db: Firestore, onApiError?: (source: string) => void) {
     const docRef = doc(db, 'rates_cache', 'unified');
-    onSnapshot(docRef, (snap) => {
-        if (snap.exists()) {
-            const data = snap.data();
-            unifiedData = data.data || {};
-            unifiedDataTomorrow = data.dataTomorrow || {};
-        }
-    });
+    onSnapshot(docRef, 
+        (snap) => {
+            if (snap.exists()) {
+                const data = snap.data();
+                unifiedData = data.data || {};
+                unifiedDataTomorrow = data.dataTomorrow || {};
+            }
+        },
+        (err) => console.error("Cache Subscription Error:", err)
+    );
     try {
         const snap = await getDoc(docRef);
         const now = Date.now();
@@ -163,24 +166,27 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
     } catch (e) { return unifiedData; }
 }
 
-// --- Historical & Optimization Helpers ---
+// --- Historical Providers ---
 
-async function fetchNbrbHistorical(d: Date) {
-    const dateStr = format(d, 'yyyy-MM-dd');
+async function fetchNbrbHistoricalRange(from: Date, to: Date) {
+    const fromStr = format(from, 'yyyy-MM-dd');
+    const toStr = format(to, 'yyyy-MM-dd');
     try {
-        const res = await fetch(`https://api.nbrb.by/exrates/rates?periodicity=0&ondate=${dateStr}`, { cache: 'no-store' });
+        // Получаем ID для USD
+        const idRes = await fetch('https://api.nbrb.by/exrates/rates/431', { cache: 'no-store' });
+        if (!idRes.ok) return null;
+        
+        const res = await fetch(`https://api.nbrb.by/exrates/rates/dynamics/431?startDate=${fromStr}&endDate=${toStr}`, { cache: 'no-store' });
         if (!res.ok) return null;
         const data = await res.json();
-        const rates: Record<string, number> = {};
-        const usd = data.find((r: any) => r.Cur_Abbreviation === 'USD');
-        if (usd) {
-            const usdInByn = usd.Cur_OfficialRate / usd.Cur_Scale;
-            data.forEach((r: any) => { rates[r.Cur_Abbreviation] = (r.Cur_OfficialRate / r.Cur_Scale) / usdInByn; });
-            rates['BYN'] = 1 / usdInByn;
-            return rates;
-        }
+        
+        const results: Record<string, Record<string, number>> = {};
+        data.forEach((entry: any) => {
+            const dateKey = entry.Date.split('T')[0];
+            results[dateKey] = { 'USD': 1, 'BYN': 1 / entry.Cur_OfficialRate };
+        });
+        return results;
     } catch { return null; }
-    return null;
 }
 
 async function fetchCbrHistorical(d: Date) {
@@ -210,27 +216,33 @@ async function fetchCbrHistorical(d: Date) {
 }
 
 /**
- * Hybrid DB + API Range Loader (Batch)
+ * Hybrid DB + API Range Loader (Highly Optimized)
+ * No orderBy to avoid Index Permissions issues.
  */
 async function loadHistoryRange(from: Date, to: Date, db: Firestore): Promise<Record<string, MultiSourceData>> {
     const results: Record<string, MultiSourceData> = {};
-    
-    // 1. One-shot Firestore query
     try {
+        // Запрос без orderBy — не требует индекса и реже вызывает ошибки прав
         const q = query(
             collection(db, 'rates_history'),
             where('timestamp', '>=', Timestamp.fromDate(startOfDay(from))),
-            where('timestamp', '<=', Timestamp.fromDate(endOfDay(to))),
-            orderBy('timestamp', 'asc')
+            where('timestamp', '<=', Timestamp.fromDate(endOfDay(to)))
         );
         const snap = await getDocs(q);
-        snap.forEach(doc => {
+        
+        // Сортируем в памяти
+        const sortedDocs = snap.docs.sort((a, b) => {
+            const tA = a.data().timestamp?.toMillis() || 0;
+            const tB = b.data().timestamp?.toMillis() || 0;
+            return tA - tB;
+        });
+
+        sortedDocs.forEach(doc => {
             const d = doc.data();
             const dateKey = format(d.timestamp.toDate(), 'yyyy-MM-dd');
             if (!results[dateKey]) results[dateKey] = d.data;
         });
     } catch (e) { console.error("History Batch Error:", e); }
-
     return results;
 }
 
@@ -239,37 +251,30 @@ async function fetchAndCacheHistorical(date: Date, db: Firestore): Promise<Multi
     const cacheKey = `hist-${dateStr}`;
     if (sessionCache.has(cacheKey)) return sessionCache.get(cacheKey);
 
-    const existing = await loadHistoryRange(date, date, db);
-    if (existing[dateStr]) {
-        sessionCache.set(cacheKey, existing[dateStr]);
-        return existing[dateStr];
-    }
+    // Только если это банки, разрешаем фоновый добор
+    if (activeDataSource !== 'nbrb' && activeDataSource !== 'cbr') return null;
 
-    const sources = [
-        { id: 'nbrb', fn: fetchNbrbHistorical },
-        { id: 'cbr', fn: fetchCbrHistorical }
-    ];
-    const results = await Promise.allSettled(sources.map(s => s.fn(date)));
-    const historicalData: MultiSourceData = {};
-    let hasData = false;
+    const sourceFn = activeDataSource === 'nbrb' 
+        ? async (d: Date) => { 
+            const r = await fetchNbrbHistoricalRange(d, d); 
+            return r ? r[format(d, 'yyyy-MM-dd')] : null; 
+          }
+        : fetchCbrHistorical;
 
-    results.forEach((res, idx) => {
-        if (res.status === 'fulfilled' && res.value) {
-            hasData = true;
-            Object.keys(res.value).forEach(currency => {
-                if (!historicalData[currency]) historicalData[currency] = {};
-                historicalData[currency][sources[idx].id] = { v: res.value![currency], d: dateStr, off: true };
-            });
-        }
-    });
-
-    if (hasData) {
+    const rates = await sourceFn(date);
+    if (rates) {
+        const historicalData: MultiSourceData = {};
+        Object.keys(rates).forEach(currency => {
+            historicalData[currency] = { [activeDataSource]: { v: rates[currency], d: dateStr, off: true } };
+        });
+        
         try {
             await addDoc(collection(db, 'rates_history'), {
                 timestamp: Timestamp.fromDate(startOfDay(date)),
                 base: 'USD', data: historicalData, is_historical_fill: true
             });
         } catch {}
+        
         sessionCache.set(cacheKey, historicalData);
         return historicalData;
     }
@@ -281,12 +286,20 @@ async function fetchAndCacheHistorical(date: Date, db: Firestore): Promise<Multi
 async function fetchNbrb() {
     try {
         const tz = sourceTimezones['nbrb'];
-        const todayRates = await fetchNbrbHistorical(getLocalDate(tz));
-        const tomorrowRates = await fetchNbrbHistorical(getLocalDate(tz, 1));
-        const today = todayRates ? { rates: todayRates, date: format(getLocalDate(tz), 'yyyy-MM-dd') } : null;
-        const tomorrow = tomorrowRates ? { rates: tomorrowRates, date: format(getLocalDate(tz, 1), 'yyyy-MM-dd') } : null;
-        return today ? { today, tomorrow: tomorrow || today } : null;
+        const today = getLocalDate(tz);
+        const tomorrow = getLocalDate(tz, 1);
+        const range = await fetchNbrbHistoricalRange(today, tomorrow);
+        
+        if (range) {
+            const todayKey = format(today, 'yyyy-MM-dd');
+            const tomorrowKey = format(tomorrow, 'yyyy-MM-dd');
+            return {
+                today: { rates: range[todayKey], date: todayKey },
+                tomorrow: { rates: range[tomorrowKey] || range[todayKey], date: tomorrowKey }
+            };
+        }
     } catch { return null; }
+    return null;
 }
 
 async function fetchCbr() {
@@ -422,6 +435,7 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
 
 /**
  * Highly Optimized Dynamics Fetcher
+ * Parallel, Batch, and Index-free.
  */
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date, db: Firestore): Promise<{ date: string; rate: number }[]> {
     const cacheKey = `dyn-${from}-${to}-${format(startDate, 'yyyyMMdd')}-${format(endDate, 'yyyyMMdd')}-${activeDataSource}`;
@@ -430,7 +444,7 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
     try {
         const days = eachDayOfInterval({ start: startDate, end: endDate });
         
-        // 1. Batch Load from Firestore
+        // 1. Batch Load from Firestore (Index-free)
         const dbData = await loadHistoryRange(startDate, endDate, db);
         
         // 2. Identify missing dates
@@ -459,7 +473,6 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
             }
 
             if (rate === undefined) {
-                // Fallback to today/tomorrow logic if within range
                 const hist = await getHistoricalRate(from, to, d, db);
                 if (hist) rate = hist.rate;
             }

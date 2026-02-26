@@ -14,6 +14,16 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    // Правила для кэша курсов (публичное чтение и запись для быстрой работы)
+    match /rates_cache/{id} {
+      allow read, write: if true;
+    }
+
+    // Правила для истории курсов (публичное чтение и запись для формирования архива)
+    match /rates_history/{id} {
+      allow read, write: if true;
+    }
+
     match /users/{userId} {
       allow get, list: if isOwner(userId);
       allow create: if isOwner(userId) && request.resource.data.id == userId;
@@ -36,16 +46,6 @@ service cloud.firestore {
     match /exchange_rates/{exchangeRateId} {
       allow get, list: if true;
       allow create, update, delete: if false;
-    }
-
-    // Правила для кэша курсов (публичное чтение и запись для прототипа)
-    match /rates_cache/{document=**} {
-      allow read, write: if true;
-    }
-
-    // Правила для истории курсов (публичное чтение и запись для формирования общего архива)
-    match /rates_history/{document=**} {
-      allow read, write: if true;
     }
   }
 }
