@@ -3,7 +3,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * ValutaBot Security Rules
+     * ValutaBot Security Rules - Final Optimized Version
      */
 
     function isSignedIn() {
@@ -14,18 +14,22 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Правила для кэша курсов (публичное чтение и запись для быстрой работы)
+    // Правила для оперативного кэша (get - всем, list - запрещено, запись - авторизованным пользователям)
     match /rates_cache/{id} {
-      allow read, write: if true;
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if isSignedIn();
+      allow delete: if false;
     }
 
-    // Правила для истории курсов (публичное чтение всем, запись только авторизованным)
+    // Правила для истории (get и list - всем для графиков, create - только авторизованным сессиям)
     match /rates_history/{id} {
       allow get, list: if true;
       allow create: if isSignedIn();
       allow update, delete: if false; 
     }
 
+    // Личные данные пользователей
     match /users/{userId} {
       allow get, list: if isOwner(userId);
       allow create: if isOwner(userId) && request.resource.data.id == userId;
@@ -40,6 +44,7 @@ service cloud.firestore {
       }
     }
 
+    // Публичные справочники
     match /currencies/{currencyId} {
       allow get, list: if true;
       allow create, update, delete: if false; 
