@@ -62,7 +62,8 @@ export function CurrencyConverter() {
     share(t('converter.shareText', { amount, from: fromCurrency, result: convertedAmount, to: toCurrency }));
   };
 
-  const hasRateChange = tomorrowRate && displayRate && Math.abs(tomorrowRate - displayRate) > 0.0001;
+  // Уведомление срабатывает при любом наличии отличия в курсе на завтра
+  const hasRateChange = tomorrowRate && displayRate && Math.abs(tomorrowRate - displayRate) > 0;
   const rateDiff = (tomorrowRate && displayRate) ? (tomorrowRate - displayRate) : 0;
   const diffStr = (rateDiff >= 0 ? '+' : '') + rateDiff.toFixed(4);
 

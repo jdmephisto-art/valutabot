@@ -26,7 +26,7 @@ export const curatedAltcoinCodes = [
 let unifiedData: MultiSourceData = {};
 let unifiedDataTomorrow: MultiSourceData = {};
 
-const FIAT_TTL = 5 * 60 * 1000; // Уменьшили до 5 минут для оперативного отслеживания "завтра"
+const FIAT_TTL = 5 * 60 * 1000;
 
 const sourceTimezones: Record<string, string> = {
     'nbrb': 'Europe/Minsk',
@@ -59,14 +59,12 @@ export function findRate(from: string, to: string, isTomorrow: boolean = false):
 
     const getBestPrice = (currency: string): number | undefined => {
         if (isTomorrow) {
-            // Для завтра берем только из специального кэша
             const entry = unifiedDataTomorrow[currency]?.[activeDataSource] || 
                           unifiedDataTomorrow[currency]?.['nbrb'] || 
                           unifiedDataTomorrow[currency]?.['cbr'];
             return entry?.v;
         }
 
-        // Для сегодня: приоритет источнику, затем резервам
         const entry = unifiedData[currency]?.[activeDataSource] || 
                       unifiedData[currency]?.['worldcurrencyapi'] || 
                       unifiedData[currency]?.['coingecko'];
@@ -80,14 +78,13 @@ export function findRate(from: string, to: string, isTomorrow: boolean = false):
 }
 
 /**
- * Строгий поиск курса по дате (Strict Mode для Истории).
+ * Строгий поиск курса по дате (Strict Mode).
  */
 function strictRateLookup(data: MultiSourceData, currency: string, targetDateStr: string): number | undefined {
     if (currency === 'USD') return 1;
     const entry = data[currency]?.[activeDataSource];
     if (entry && entry.d === targetDateStr) return entry.v;
     
-    // Если активный источник не дал данных на эту дату, проверяем другие официальные
     for (const src of ['nbrb', 'cbr', 'nbk', 'ecb']) {
         const e = data[currency]?.[src];
         if (e && e.d === targetDateStr) return e.v;
@@ -116,6 +113,9 @@ export async function preFetchInitialRates(db: Firestore, onApiError?: (source: 
 
 export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean = true, onApiError?: (source: string) => void) {
     const now = Date.now();
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    console.log(`[Cache Update] Today: ${todayStr}. Starting sources update...`);
+
     try {
         const sources = [
             { id: 'coingecko', fn: fetchCoinGecko, type: 'crypto' },
@@ -133,9 +133,6 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
         const nextDataTomorrow = { ...unifiedDataTomorrow };
         const updatedSources: string[] = [];
 
-        const tz = sourceTimezones[activeDataSource] || 'UTC';
-        const tomorrowStr = format(getLocalDate(tz, 1), 'yyyy-MM-dd');
-
         results.forEach((res, idx) => {
             const sourceInfo = activeSources[idx];
             if (res.status === 'fulfilled' && res.value) {
@@ -149,13 +146,18 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
                     });
                 };
 
-                // 1. Обработка пакетных ответов (НБРБ)
-                if (val.today) processEntry(val.today.rates, val.today.date, nextData);
-                if (val.tomorrow) processEntry(val.tomorrow.rates, val.tomorrow.date, nextDataTomorrow);
+                if (val.today) {
+                    console.log(`[API Response] ${sourceInfo.id} provided Today: ${val.today.date}`);
+                    processEntry(val.today.rates, val.today.date, nextData);
+                }
+                if (val.tomorrow) {
+                    console.log(`[API Response] ${sourceInfo.id} provided Tomorrow: ${val.tomorrow.date}`);
+                    processEntry(val.tomorrow.rates, val.tomorrow.date, nextDataTomorrow);
+                }
 
-                // 2. Обработка одиночных ответов (ЦБ РФ, КоинГеко и др.)
                 if (val.rates && val.date) {
-                    if (val.date >= tomorrowStr) {
+                    console.log(`[API Response] ${sourceInfo.id} provided date: ${val.date}`);
+                    if (val.date > todayStr) {
                         processEntry(val.rates, val.date, nextDataTomorrow);
                     } else {
                         processEntry(val.rates, val.date, nextData);
@@ -183,7 +185,8 @@ async function fetchNbrb() {
         const todayStr = format(getLocalDate(tz, 0), 'yyyy-MM-dd');
         const tomorrowStr = format(getLocalDate(tz, 1), 'yyyy-MM-dd');
 
-        // Опрашиваем апишку на сегодня и на завтра параллельно
+        console.log(`[NBRB Request] Fetching Today (${todayStr}) and Tomorrow (${tomorrowStr})...`);
+
         const [resT, resTm] = await Promise.all([
             fetch(`https://api.nbrb.by/exrates/rates?ondate=${todayStr}&periodicity=0`, { cache: 'no-store' }),
             fetch(`https://api.nbrb.by/exrates/rates?ondate=${tomorrowStr}&periodicity=0`, { cache: 'no-store' })
@@ -205,11 +208,16 @@ async function fetchNbrb() {
         const todayRates = await process(resT);
         const tomorrowRates = await process(resTm);
 
+        console.log(`[NBRB Status] Today OK: ${!!todayRates}, Tomorrow OK: ${!!tomorrowRates}`);
+
         return {
             today: todayRates ? { rates: todayRates, date: todayStr } : null,
             tomorrow: tomorrowRates ? { rates: tomorrowRates, date: tomorrowStr } : null
         };
-    } catch { return null; }
+    } catch (e) { 
+        console.error(`[NBRB Error] ${e.message}`);
+        return null; 
+    }
 }
 
 async function fetchCbr() {
@@ -325,8 +333,9 @@ export async function findRateAsync(from: string, to: string, db: Firestore): Pr
 export async function getHistoricalRate(from: string, to: string, date: Date, db: Firestore): Promise<HistoricalRateResult | undefined> {
     await preFetchInitialRates(db);
     const targetDateStr = format(date, 'yyyy-MM-dd');
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
     
-    // 1. Проверка оперативного кэша (для сегодня/завтра)
+    // 1. Проверка оперативного кэша (для сегодня и будущего)
     const checkCache = (map: MultiSourceData) => {
         const fromP = strictRateLookup(map, from, targetDateStr);
         const toP = strictRateLookup(map, to, targetDateStr);
@@ -334,8 +343,10 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
         return undefined;
     };
 
-    const cacheRate = checkCache(unifiedData) || checkCache(unifiedDataTomorrow);
-    if (cacheRate !== undefined) return { rate: cacheRate, date, isFallback: false };
+    if (targetDateStr >= todayStr) {
+        const cacheRate = checkCache(unifiedDataTomorrow) || checkCache(unifiedData);
+        if (cacheRate !== undefined) return { rate: cacheRate, date, isFallback: false };
+    }
 
     // 2. БД Архива
     const dbData = await loadHistoryRange(date, date, db);
@@ -345,9 +356,8 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
         if (fromP && toP) return { rate: fromP / toP, date, isFallback: false };
     }
 
-    // 3. API Архива (только если дата не в будущем дальше завтрашнего дня)
-    const tz = sourceTimezones[activeDataSource] || 'UTC';
-    const limit = addDays(getLocalDate(tz), 1);
+    // 3. API Архива
+    const limit = addDays(new Date(), 1);
     if (!isAfter(startOfDay(date), limit)) {
         const liveData = await fetchAndCacheHistorical(date, db);
         if (liveData) {
@@ -446,7 +456,6 @@ async function fetchAndCacheHistorical(date: Date, db: Firestore): Promise<Multi
             historicalData[currency] = { [activeDataSource]: { v: rates[currency], d: dateStr, off: true } };
         });
         
-        // Сохраняем в БД для других пользователей
         try {
             await addDoc(collection(db, 'rates_history'), {
                 timestamp: Timestamp.fromDate(startOfDay(date)),
