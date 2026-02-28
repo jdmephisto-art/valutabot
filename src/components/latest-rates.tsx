@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { getDataSource } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
-import { ArrowRight, List, Settings2, Share2, Info } from 'lucide-react';
+import { ArrowRight, List, Settings2, Share2, Timer } from 'lucide-react';
 import { useTranslation } from '@/hooks/use-translation';
 import { useFirestore } from '@/firebase';
 import { useLatestRatesSWR } from '@/hooks/use-latest-rates-swr';
@@ -42,26 +42,28 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
     if (rates.length === 0) return;
     const changed = new Map<string, 'up' | 'down'>();
     const currentRatesMap = new Map<string, number>();
+    
     rates.forEach(r => {
       const key = `${r.from}/${r.to}`;
       if (r.rate !== undefined) {
         currentRatesMap.set(key, r.rate);
         const prevValue = prevRates.get(key);
-        if (prevValue !== undefined && prevValue !== r.rate) {
+        if (prevValue !== undefined && Math.abs(prevValue - r.rate) > 0.000001) {
           changed.set(key, r.rate > prevValue ? 'up' : 'down');
         }
       }
     });
+
     if (changed.size > 0) {
       setChangedRates(changed);
-      setTimeout(() => setChangedRates(new Map()), 2000);
+      setTimeout(() => setChangedRates(new Map()), 3000); // Увеличил время вспышки
     }
     setPrevRates(currentRatesMap);
   }, [rates]);
 
   const formatRate = (rate?: number) => {
     if (rate === undefined) return '...';
-    if (rate > 1000) return rate.toFixed(2);
+    if (rate > 1000) return rate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     if (rate > 10) return rate.toFixed(4);
     return rate.toFixed(8).replace(/\.?0+$/, '');
   };
@@ -120,35 +122,38 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
           </CollapsibleContent>
         </Collapsible>
 
-        <div className="space-y-4">
+        <div className="space-y-5">
           {rates.map(({ from, to, rate, tomorrowRate }) => {
             const key = `${from}/${to}`;
             const isChanged = changedRates.has(key);
             const direction = changedRates.get(key);
-            const showTomorrow = tomorrowRate && tomorrowRate !== rate;
+            const hasTomorrow = tomorrowRate && Math.abs(tomorrowRate - (rate || 0)) > 0.000001;
 
             return (
-              <div key={key} className="space-y-1">
+              <div key={key} className="group relative">
                 <div className="grid grid-cols-[1fr_auto] items-center text-sm gap-x-4">
                   <div className="flex items-center gap-2 font-medium">
-                    <span>{from}</span>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                    <span>{to}</span>
+                    <span className="font-bold">{from}</span>
+                    <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-muted-foreground">{to}</span>
                   </div>
-                  <div className={cn(
-                    'font-mono transition-all duration-700 justify-self-end',
-                    isChanged && (direction === 'up' ? 'text-positive font-bold' : 'text-negative font-bold'),
-                    isChanged && 'scale-110'
-                  )}>
-                    {formatRate(rate)}
+                  
+                  <div className="flex flex-col items-end">
+                    <div className={cn(
+                      'font-mono font-bold text-base transition-all duration-1000',
+                      isChanged && (direction === 'up' ? 'text-positive scale-110' : 'text-negative scale-110'),
+                    )}>
+                      {formatRate(rate)}
+                    </div>
+                    
+                    {hasTomorrow && (
+                      <div className="flex items-center gap-1 text-[10px] text-muted-foreground opacity-80 mt-0.5 font-medium animate-in fade-in slide-in-from-right-1">
+                        <Timer size={10} className="shrink-0" />
+                        <span>{t('latestRates.tomorrow')}: {formatRate(tomorrowRate)}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
-                {showTomorrow && (
-                  <div className="flex justify-end items-center gap-1 opacity-60 text-[10px]">
-                    <Info size={10} />
-                    <span>{t('latestRates.tomorrow')}: {formatRate(tomorrowRate)}</span>
-                  </div>
-                )}
               </div>
             );
           })}

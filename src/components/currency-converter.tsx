@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { findRate, preFetchInitialRates } from '@/lib/currencies';
-import { ArrowRightLeft, Share2, Info } from 'lucide-react';
+import { ArrowRightLeft, Share2, AlertTriangle } from 'lucide-react';
 import { Button } from './ui/button';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useTranslation } from '@/hooks/use-translation';
@@ -38,7 +38,7 @@ export function CurrencyConverter() {
 
         if (rate && amount && !isNaN(parseFloat(amount))) {
           const result = parseFloat(amount) * rate;
-          setConvertedAmount(result > 1000 ? result.toFixed(2) : result.toFixed(4).replace(/\.?0+$/, ''));
+          setConvertedAmount(result > 1000 ? result.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : result.toFixed(4).replace(/\.?0+$/, ''));
         } else {
           setConvertedAmount('');
         }
@@ -62,8 +62,7 @@ export function CurrencyConverter() {
     share(t('converter.shareText', { amount, from: fromCurrency, result: convertedAmount, to: toCurrency }));
   };
 
-  // Уведомление срабатывает при любом наличии отличия в курсе на завтра
-  const hasRateChange = tomorrowRate && displayRate && Math.abs(tomorrowRate - displayRate) > 0;
+  const hasRateChange = tomorrowRate && displayRate && Math.abs(tomorrowRate - displayRate) > 0.000001;
   const rateDiff = (tomorrowRate && displayRate) ? (tomorrowRate - displayRate) : 0;
   const diffStr = (rateDiff >= 0 ? '+' : '') + rateDiff.toFixed(4);
 
@@ -98,9 +97,9 @@ export function CurrencyConverter() {
           </div>
           
           {hasRateChange && (
-            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 flex gap-3 items-start animate-in fade-in slide-in-from-bottom-2">
-              <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-              <p className="text-[10px] text-amber-700 leading-tight">
+            <div className="bg-amber-500/15 border border-amber-500/30 rounded-lg p-3 flex gap-3 items-start animate-in fade-in slide-in-from-bottom-2 shadow-sm">
+              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-amber-800 leading-tight font-medium">
                 {t('converter.tomorrowWarning', { rate: tomorrowRate.toFixed(4), diff: diffStr })}
               </p>
             </div>
@@ -110,7 +109,7 @@ export function CurrencyConverter() {
              <div className="pt-4 border-t border-border/50">
                <div className="bg-primary/10 rounded-lg p-2.5">
                  <p className="text-center text-primary text-[11px] font-mono font-bold">
-                    1 {fromCurrency} = {displayRate > 1000 ? displayRate.toFixed(2) : displayRate.toFixed(8).replace(/\.?0+$/, '')} {toCurrency}
+                    1 {fromCurrency} = {displayRate > 1000 ? displayRate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : displayRate.toFixed(8).replace(/\.?0+$/, '')} {toCurrency}
                  </p>
                </div>
              </div>
