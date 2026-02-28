@@ -1,7 +1,7 @@
 import { Currency, ExchangeRate, DataSource, HistoricalRateResult, MultiSourceData } from '@/lib/types';
-import { format, isSameDay, addDays, startOfDay, eachDayOfInterval, parseISO, endOfDay, isAfter } from 'date-fns';
+import { format, addDays, startOfDay, eachDayOfInterval, endOfDay, isAfter } from 'date-fns';
 import { currencyApiPreloadedCurrencies } from './preloaded-data';
-import { doc, getDoc, setDoc, collection, addDoc, Firestore, onSnapshot, serverTimestamp, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc, Firestore, onSnapshot, query, where, getDocs, Timestamp } from 'firebase/firestore';
 
 let activeDataSource: DataSource = 'nbrb';
 
@@ -33,6 +33,7 @@ export function getDataSource(): DataSource { return activeDataSource; }
 
 /**
  * Глобальный поиск курса с каскадным переключением источников.
+ * Починена база USD и каскад для BYN.
  */
 export function findRate(from: string, to: string, isTomorrow: boolean = false): number | undefined {
     if (from === to) return 1;
@@ -44,20 +45,23 @@ export function findRate(from: string, to: string, isTomorrow: boolean = false):
         // 1. Приоритет активного источника
         if (targetMap[currency]?.[activeDataSource]) return targetMap[currency][activeDataSource].v;
         
-        // 2. Поиск в других официальных банках (Каскад)
-        const officials = ['nbrb', 'cbr', 'nbk', 'ecb'];
+        // 2. Поиск в других официальных банках (Каскад для локальных валют типа BYN)
+        const officials: DataSource[] = ['nbrb', 'cbr', 'nbk', 'ecb'];
         for (const src of officials) {
             if (targetMap[currency]?.[src]) return targetMap[currency][src].v;
         }
         
         // 3. Коммерческие источники
-        const commercial = ['worldcurrencyapi', 'coingecko'];
+        const commercial: string[] = ['worldcurrencyapi', 'coingecko'];
         for (const src of commercial) {
             if (targetMap[currency]?.[src]) return targetMap[currency][src].v;
         }
 
-        // Специальный хак для BYN/BYR
-        if (currency === 'BYN' && targetMap['BYR']) return getBestPrice('BYR');
+        // Специальный хак для старого кода BYR
+        if (currency === 'BYN' && targetMap['BYR']) {
+            const byr = getBestPrice('BYR');
+            if (byr) return byr;
+        }
 
         return undefined;
     };
@@ -116,7 +120,9 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
                 const val = res.value as any;
 
                 const processEntry = (rates: Record<string, number>, dateStr: string) => {
+                    // Любая дата строго больше сегодня - это ЗАВТРА
                     const targetMap = dateStr > todayStr ? nextDataTomorrow : nextData;
+                    
                     Object.keys(rates).forEach(currency => {
                         if (!targetMap[currency]) targetMap[currency] = {};
                         targetMap[currency][sourceInfo.id] = { v: rates[currency], d: dateStr, off: sourceInfo.type === 'fiat' };
@@ -147,6 +153,8 @@ async function fetchNbrb() {
         const todayStr = format(new Date(), 'yyyy-MM-dd');
         const tomorrowStr = format(addDays(new Date(), 1), 'yyyy-MM-dd');
 
+        console.log(`[NBRB Request] Fetching today (${todayStr}) and tomorrow (${tomorrowStr})`);
+
         const [resT, resTm] = await Promise.all([
             fetch(`https://api.nbrb.by/exrates/rates?ondate=${todayStr}&periodicity=0`, { cache: 'no-store' }),
             fetch(`https://api.nbrb.by/exrates/rates?ondate=${tomorrowStr}&periodicity=0`, { cache: 'no-store' })
@@ -155,11 +163,14 @@ async function fetchNbrb() {
         const process = async (res: Response) => {
             if (!res.ok) return null;
             const data = await res.json();
-            if (!Array.isArray(data)) return null;
+            if (!Array.isArray(data) || data.length === 0) return null;
+            
             const r: Record<string, number> = { 'BYN': 1 };
             data.forEach((item: any) => { r[item.Cur_Abbreviation] = item.Cur_OfficialRate / item.Cur_Scale; });
+            
             const usd = r['USD'];
             if (!usd) return null;
+            
             const norm: Record<string, number> = {};
             Object.keys(r).forEach(c => { norm[c] = r[c] / usd; });
             return norm;
@@ -168,26 +179,32 @@ async function fetchNbrb() {
         const tRates = await process(resT);
         const tmRates = await process(resTm);
 
+        console.log(`[NBRB Status] Today: ${!!tRates}, Tomorrow: ${!!tmRates}`);
+
         return {
             today: tRates ? { rates: tRates, date: todayStr } : null,
             tomorrow: tmRates ? { rates: tmRates, date: tomorrowStr } : null
         };
-    } catch { return null; }
+    } catch (e) { 
+        console.error('[NBRB Error]', e);
+        return null; 
+    }
 }
 
 async function fetchCbr() {
     try {
-        const tomorrow = addDays(new Date(), 1);
+        const today = new Date();
+        const tomorrow = addDays(today, 1);
         const tomStr = format(tomorrow, 'dd/MM/yyyy');
         
-        // Получаем сегодня через JSON (быстро) и завтра через XML (официально)
+        // JSON для сегодня, XML для официального будущего
         const [resJson, resXml] = await Promise.all([
             fetch('https://www.cbr-xml-daily.ru/daily_json.js', { cache: 'no-store' }),
             fetch(`/api/cbr/history?date_req=${tomStr}`, { cache: 'no-store' })
         ]);
 
         const ratesToday: Record<string, number> = {};
-        let dateToday = format(new Date(), 'yyyy-MM-dd');
+        let dateToday = format(today, 'yyyy-MM-dd');
 
         if (resJson.ok) {
             const data = await resJson.json();
@@ -199,10 +216,12 @@ async function fetchCbr() {
                     ratesToday[code] = (v.Value / v.Nominal) / rubPerUsd;
                 });
             }
-            if (data.Date) dateToday = parseISO(data.Date).toISOString().split('T')[0];
+            if (data.Date) dateToday = data.Date.split('T')[0];
         }
 
         const ratesTomorrow: Record<string, number> = {};
+        let dateTom = format(tomorrow, 'yyyy-MM-dd');
+        
         if (resXml.ok) {
             const data = await resXml.json();
             if (data?.ValCurs?.Valute) {
@@ -217,13 +236,17 @@ async function fetchCbr() {
                         const nom = parseInt(v.Nominal[0]);
                         ratesTomorrow[code] = (val / nom) / rubPerUsd;
                     });
+                    if (data.ValCurs.$.Date) {
+                        const [d, m, y] = data.ValCurs.$.Date.split('.');
+                        dateTom = `${y}-${m}-${d}`;
+                    }
                 }
             }
         }
 
         return {
             today: { rates: ratesToday, date: dateToday },
-            tomorrow: Object.keys(ratesTomorrow).length > 0 ? { rates: ratesTomorrow, date: format(tomorrow, 'yyyy-MM-dd') } : null
+            tomorrow: Object.keys(ratesTomorrow).length > 0 ? { rates: ratesTomorrow, date: dateTom } : null
         };
     } catch { return null; }
 }
@@ -269,7 +292,7 @@ async function fetchWorldCurrency() {
             Object.keys(data.rates).forEach(code => { 
                 if (data.rates[code] > 0) rates[code] = 1 / data.rates[code]; 
             });
-            // Гарантируем BYN через BYR если нужно
+            // Rescue BYN from BYR if missing
             if (data.rates['BYR'] && !data.rates['BYN']) rates['BYN'] = 1 / data.rates['BYR'];
         }
         return { rates, date: format(new Date(), 'yyyy-MM-dd') };
@@ -313,7 +336,12 @@ export async function getLatestRates(pairs: string[], db: Firestore): Promise<Ex
     await preFetchInitialRates(db);
     return pairs.map(p => {
         const [from, to] = p.split('/');
-        return { from, to, rate: findRate(from, to, false), tomorrowRate: findRate(from, to, true) };
+        return { 
+            from, 
+            to, 
+            rate: findRate(from, to, false), 
+            tomorrowRate: findRate(from, to, true) 
+        };
     });
 }
 
@@ -339,7 +367,8 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
         const data = dbData[targetDateStr];
         const getP = (c: string) => {
             if (c === 'USD') return 1;
-            const officials = ['nbrb', 'cbr', 'nbk', 'ecb'];
+            // Strict official banks only
+            const officials: DataSource[] = ['nbrb', 'cbr', 'nbk', 'ecb'];
             for (const s of officials) if (data[c]?.[s]) return data[c][s].v;
             return undefined;
         };
@@ -348,17 +377,19 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
         if (fP && tP) return { rate: fP / tP, date, isFallback: false };
     }
 
-    // 3. API Архива
-    const liveData = await fetchAndCacheHistorical(date, db);
-    if (liveData) {
-        const getP = (c: string) => {
-            if (c === 'USD') return 1;
-            if (liveData[c]?.[activeDataSource]) return liveData[c][activeDataSource].v;
-            return undefined;
-        };
-        const fP = getP(from);
-        const tP = getP(to);
-        if (fP && tP) return { rate: fP / tP, date, isFallback: false };
+    // 3. API Архива (Direct bank fetch)
+    if (activeDataSource === 'nbrb' || activeDataSource === 'cbr') {
+        const liveData = await fetchAndCacheHistorical(date, db);
+        if (liveData) {
+            const getP = (c: string) => {
+                if (c === 'USD') return 1;
+                if (liveData[c]?.[activeDataSource]) return liveData[c][activeDataSource].v;
+                return undefined;
+            };
+            const fP = getP(from);
+            const tP = getP(to);
+            if (fP && tP) return { rate: fP / tP, date, isFallback: false };
+        }
     }
     
     return undefined;
@@ -369,6 +400,7 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
     const results: { date: string; rate: number }[] = [];
 
     for (const d of days) {
+        // No duplication of previous values here - strictly archival or missing
         const res = await getHistoricalRate(from, to, d, db);
         if (res) results.push({ date: format(d, 'dd.MM'), rate: res.rate });
     }
@@ -406,6 +438,7 @@ async function fetchAndCacheHistorical(date: Date, db: Firestore): Promise<Multi
             const res = await fetch(`https://api.nbrb.by/exrates/rates?ondate=${dStr}&periodicity=0`, { cache: 'no-store' });
             if (!res.ok) return null;
             const data = await res.json();
+            if (!Array.isArray(data) || data.length === 0) return null;
             const r: Record<string, number> = { 'BYN': 1 };
             data.forEach((item: any) => { r[item.Cur_Abbreviation] = item.Cur_OfficialRate / item.Cur_Scale; });
             const usd = r['USD'];

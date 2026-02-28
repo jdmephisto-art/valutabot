@@ -56,7 +56,7 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
 
     if (changed.size > 0) {
       setChangedRates(changed);
-      setTimeout(() => setChangedRates(new Map()), 3000); // Увеличил время вспышки
+      setTimeout(() => setChangedRates(new Map()), 3000); 
     }
     setPrevRates(currentRatesMap);
   }, [rates]);
@@ -127,7 +127,9 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
             const key = `${from}/${to}`;
             const isChanged = changedRates.has(key);
             const direction = changedRates.get(key);
-            const hasTomorrow = tomorrowRate && Math.abs(tomorrowRate - (rate || 0)) > 0.000001;
+            
+            // Show tomorrow if it exists at all (identical logic for all pairs)
+            const hasTomorrow = tomorrowRate !== undefined;
 
             return (
               <div key={key} className="group relative">

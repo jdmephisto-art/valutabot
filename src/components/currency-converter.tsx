@@ -62,7 +62,8 @@ export function CurrencyConverter() {
     share(t('converter.shareText', { amount, from: fromCurrency, result: convertedAmount, to: toCurrency }));
   };
 
-  const hasRateChange = tomorrowRate && displayRate && Math.abs(tomorrowRate - displayRate) > 0.000001;
+  // Show tomorrow block if tomorrowRate exists, regardless of the difference
+  const hasTomorrowData = tomorrowRate !== undefined;
   const rateDiff = (tomorrowRate && displayRate) ? (tomorrowRate - displayRate) : 0;
   const diffStr = (rateDiff >= 0 ? '+' : '') + rateDiff.toFixed(4);
 
@@ -96,7 +97,7 @@ export function CurrencyConverter() {
             </div>
           </div>
           
-          {hasRateChange && (
+          {hasTomorrowData && tomorrowRate !== undefined && (
             <div className="bg-amber-500/15 border border-amber-500/30 rounded-lg p-3 flex gap-3 items-start animate-in fade-in slide-in-from-bottom-2 shadow-sm">
               <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
               <p className="text-[11px] text-amber-800 leading-tight font-medium">
