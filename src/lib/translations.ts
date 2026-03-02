@@ -527,7 +527,7 @@ export const translations = {
     chat: {
       title: 'CurrencyBot',
       online: 'Online',
-      placeholder: 'Hello! I am CurrencyBot. How can I help?',
+      placeholder: 'Hello! I am — your Financial Radar 🛰\n\n📈 I already know official rates for tomorrow.\n💱 I calculate using NBRB, ECB, and other central banks.\n\nClick "Latest rates" to see where the ruble will swing tomorrow. Or use the Converter to plan your exchange.',
       showRates: 'Latest rates',
       showConverter: 'Converter',
       setAlert: 'Set alert',
@@ -621,6 +621,7 @@ export const translations = {
       configTarget: 'Configure currency',
       targetCurrency: 'Show in',
       tomorrow: 'Tomorrow',
+      share: 'Share tomorrow rate',
     },
     converter: {
       title: 'Currency Converter',
@@ -631,6 +632,7 @@ export const translations = {
       share: 'Share Result',
       shareText: "💱 {amount} {from} = {result} {to}. Calculated in @CurrencyAll_bot!",
       tomorrowWarning: "⚠️ Tomorrow the rate will change to {rate}. The rate will change by {diff}",
+      notifyCta: 'Notify me of changes',
     },
     notifications: {
       title: 'Set Rate Alert',
@@ -768,7 +770,7 @@ export const translations = {
     chat: {
       title: 'ВалютаБот',
       online: 'В сети',
-      placeholder: 'Здравствуйте! Я ВалютаБот. Чем могу помочь?',
+      placeholder: 'Привет! Я — твой финансовый радар 🛰\n\n📈 Уже знаю официальные курсы на завтра.\n💱 Считаю по курсам НБРБ, ЕЦБ и других ЦБ.\n\nНажми «Последние курсы», чтобы увидеть, в какую сторону качнется рубль завтра. Или воспользуйся Конвертером, чтобы спланировать обмен.',
       showRates: 'Последние курсы',
       showConverter: 'Конвертировать',
       setAlert: 'Установить оповещение',
@@ -862,6 +864,7 @@ export const translations = {
       configTarget: 'Настройка валюты',
       targetCurrency: 'Отображать в',
       tomorrow: 'Завтра',
+      share: 'Поделиться курсом на завтра',
     },
     converter: {
       title: 'Конвертер валют',
@@ -872,6 +875,7 @@ export const translations = {
       share: 'Поделиться результатом',
       shareText: "💱 {amount} {from} = {result} {to}. Посчитано в @CurrencyAll_bot!",
       tomorrowWarning: "⚠️ Завтра курс изменится на {rate}. Курс изменится на {diff}",
+      notifyCta: 'Уведомить об изменениях',
     },
     notifications: {
       title: 'Установить оповещение о курсе',

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, Box, ArrowUp, ArrowDown, Send, CircleHelp, Smartphone, Apple, Monitor, Briefcase } from 'lucide-react';
+import { Bot, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, Box, ArrowUp, ArrowDown, Send, CircleHelp, Smartphone, Apple, Monitor, Briefcase, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LatestRates } from '@/components/latest-rates';
@@ -205,6 +205,7 @@ export function ChatInterface() {
     { id: 'alert', label: t('chat.setAlert'), icon: BellRing },
     { id: 'history', label: t('chat.showHistory'), icon: History },
     { id: 'track', label: t('chat.trackPair'), icon: Eye },
+    { id: 'pwa', label: t('chat.installGuide'), icon: Download },
     { id: 'settings', label: t('chat.switchSource'), icon: Settings },
   ], [t]);
 
@@ -226,6 +227,11 @@ export function ChatInterface() {
 
   const handleActionClick = (id: string) => {
     haptic('medium');
+    if (id === 'pwa') {
+        setPwaPopoverOpen(true);
+        return;
+    }
+    
     addMessage({ sender: 'user', text: t(`chat.user.${id}`) });
     
     setTimeout(() => {
@@ -274,7 +280,7 @@ export function ChatInterface() {
   useEffect(() => {
     resetChat();
     preFetchInitialRates(firestore, handleApiError);
-  }, [lang, resetChat, firestore, handleApiError]);
+  }, [lang, firestore, handleApiError]);
 
   return (
     <div className="w-full max-w-md h-[88vh] max-h-[900px] flex flex-col bg-card/90 backdrop-blur-xl rounded-2xl shadow-2xl overflow-hidden border border-white/20">
@@ -342,7 +348,7 @@ export function ChatInterface() {
             {messages.map((message) => (
               <motion.div key={message.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={cn('flex items-end gap-2', message.sender === 'user' ? 'justify-end' : 'justify-start')}>
                 <div 
-                  className={cn('rounded-lg', message.component ? 'w-full p-0 overflow-hidden bg-background/40' : 'max-w-[85%] p-3', message.sender === 'user' ? 'bg-primary text-primary-foreground shadow-lg' : 'bg-secondary text-secondary-foreground border')}
+                  className={cn('rounded-lg whitespace-pre-wrap', message.component ? 'w-full p-0 overflow-hidden bg-background/40' : 'max-w-[85%] p-3', message.sender === 'user' ? 'bg-primary text-primary-foreground shadow-lg' : 'bg-secondary text-secondary-foreground border')}
                   data-nosnippet={message.isTechnical ? "true" : undefined}
                 >
                   {message.text && <p className={cn(message.component && "p-3 pb-0")}>{message.text}</p>}

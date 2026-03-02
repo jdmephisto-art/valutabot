@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { findRate, preFetchInitialRates } from '@/lib/currencies';
-import { ArrowRightLeft, Share2, AlertTriangle } from 'lucide-react';
+import { ArrowRightLeft, Share2, AlertTriangle, BellPlus } from 'lucide-react';
 import { Button } from './ui/button';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useTranslation } from '@/hooks/use-translation';
@@ -62,7 +62,12 @@ export function CurrencyConverter() {
     share(t('converter.shareText', { amount, from: fromCurrency, result: convertedAmount, to: toCurrency }));
   };
 
-  // Show tomorrow block if tomorrowRate exists, regardless of the difference
+  const handleNotifyCta = () => {
+    haptic('medium');
+    // For convenience, we could trigger a specific action here, but for now we just show a toast or message
+    // In chat.tsx context, the user would click 'Set Alert'
+  };
+
   const hasTomorrowData = tomorrowRate !== undefined;
   const rateDiff = (tomorrowRate && displayRate) ? (tomorrowRate - displayRate) : 0;
   const diffStr = (rateDiff >= 0 ? '+' : '') + rateDiff.toFixed(4);
@@ -98,11 +103,17 @@ export function CurrencyConverter() {
           </div>
           
           {hasTomorrowData && tomorrowRate !== undefined && (
-            <div className="bg-amber-500/15 border border-amber-500/30 rounded-lg p-3 flex gap-3 items-start animate-in fade-in slide-in-from-bottom-2 shadow-sm">
-              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-              <p className="text-[11px] text-amber-800 leading-tight font-medium">
-                {t('converter.tomorrowWarning', { rate: tomorrowRate.toFixed(4), diff: diffStr })}
-              </p>
+            <div className="bg-amber-500/15 border border-amber-500/30 rounded-lg p-3 space-y-2 animate-in fade-in slide-in-from-bottom-2 shadow-sm">
+              <div className="flex gap-3 items-start">
+                <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-amber-800 leading-tight font-medium">
+                  {t('converter.tomorrowWarning', { rate: tomorrowRate.toFixed(4), diff: diffStr })}
+                </p>
+              </div>
+              <Button variant="outline" size="sm" className="w-full h-7 text-[10px] border-amber-500/30 text-amber-700 hover:bg-amber-500/10 gap-1 bg-white/50" onClick={handleNotifyCta}>
+                <BellPlus size={12} />
+                {t('converter.notifyCta')}
+              </Button>
             </div>
           )}
 

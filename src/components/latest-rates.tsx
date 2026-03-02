@@ -86,6 +86,16 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
     }
   };
 
+  const handleShareTomorrow = (from: string, to: string, rate: number) => {
+    haptic('medium');
+    const shareText = t('otherAssets.shareText', {
+        from,
+        to,
+        rate: formatRate(rate)
+    });
+    share(shareText);
+  };
+
   const currentTarget = currentPairs[0]?.split('/')[1] || 'USD';
 
   return (
@@ -127,8 +137,6 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
             const key = `${from}/${to}`;
             const isChanged = changedRates.has(key);
             const direction = changedRates.get(key);
-            
-            // Show tomorrow if it exists at all (identical logic for all pairs)
             const hasTomorrow = tomorrowRate !== undefined;
 
             return (
@@ -149,10 +157,14 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
                     </div>
                     
                     {hasTomorrow && (
-                      <div className="flex items-center gap-1 text-[10px] text-muted-foreground opacity-80 mt-0.5 font-medium animate-in fade-in slide-in-from-right-1">
+                      <button 
+                        onClick={() => handleShareTomorrow(from, to, tomorrowRate)}
+                        className="flex items-center gap-1 text-[10px] text-muted-foreground opacity-80 mt-0.5 font-medium hover:text-primary transition-colors group/tm"
+                      >
                         <Timer size={10} className="shrink-0" />
                         <span>{t('latestRates.tomorrow')}: {formatRate(tomorrowRate)}</span>
-                      </div>
+                        <Share2 size={8} className="ml-1 opacity-0 group-hover/tm:opacity-100 transition-opacity" />
+                      </button>
                     )}
                   </div>
                 </div>
