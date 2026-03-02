@@ -1,6 +1,6 @@
 @echo off
 echo 🔄 Деплой valutabot...
-cd /d "E:\Работа\Pet-Projects\Курсы валют"
+cd /d E:\Работа\Pet-Projects\Курсы_валют
 git pull origin main
 git add .
 git commit -m "Auto-deploy %date% %time%" || echo "Нет изменений"
