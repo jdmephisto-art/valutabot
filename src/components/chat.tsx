@@ -285,18 +285,11 @@ export function ChatInterface() {
   const renderMessageContent = (message: Message) => {
     if (!message.text) return null;
     
-    // Специальная обработка для приветственного сообщения
-    const lines = message.text.split('\n');
     return (
-      <div className={cn(message.component && "p-3 pb-0")}>
-        {lines.map((line, idx) => {
-          const isSmall = line.includes('📈') || line.includes('💱');
-          return (
-            <p key={idx} className={cn("leading-relaxed", isSmall ? "text-[11px] opacity-80" : "text-sm")}>
-              {line}
-            </p>
-          );
-        })}
+      <div className={cn((message.component || message.options) && "p-3 pb-2")}>
+        <p className="text-sm leading-relaxed font-medium">
+          {message.text}
+        </p>
       </div>
     );
   };
@@ -365,16 +358,31 @@ export function ChatInterface() {
         <div ref={scrollAreaRef} className="h-full overflow-y-auto p-4 space-y-6 scroll-smooth">
           <AnimatePresence initial={false}>
             {messages.map((message) => (
-              <motion.div key={message.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={cn('flex items-end gap-2', message.sender === 'user' ? 'justify-end' : 'justify-start')}>
+              <motion.div key={message.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={cn('flex items-end gap-2 w-full', message.sender === 'user' ? 'justify-end' : 'justify-start')}>
                 <div 
-                  className={cn('rounded-lg whitespace-pre-wrap', message.component ? 'w-full p-0 overflow-hidden bg-background/40' : 'max-w-[85%] p-3', message.sender === 'user' ? 'bg-primary text-primary-foreground shadow-lg' : 'bg-secondary text-secondary-foreground border')}
+                  className={cn(
+                    'rounded-lg whitespace-pre-wrap transition-all duration-300', 
+                    (message.component || message.options) ? 'w-full p-0 overflow-hidden bg-background/40 border-0' : 'max-w-[85%] p-3', 
+                    message.sender === 'user' ? 'bg-primary text-primary-foreground shadow-lg' : 'bg-secondary text-secondary-foreground border'
+                  )}
                   data-nosnippet={message.isTechnical ? "true" : undefined}
                 >
                   {renderMessageContent(message)}
                   {message.component}
                   {message.options && (
-                    <div className="flex flex-col gap-2 mt-3 p-3 pt-0">
-                      {message.options.map(option => <Button key={option.id} variant="outline" size="sm" onClick={() => handleActionClick(option.id)} className="justify-start bg-background/50 hover:bg-primary/10 border-primary/20 transition-all"><option.icon className="mr-2 h-4 w-4" />{option.label}</Button>)}
+                    <div className="flex flex-col gap-2 p-3 pt-0">
+                      {message.options.map(option => (
+                        <Button 
+                          key={option.id} 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => handleActionClick(option.id)} 
+                          className="justify-start bg-background hover:bg-primary/10 border-primary/20 transition-all h-auto py-2.5 whitespace-normal text-left"
+                        >
+                          <option.icon className="mr-2 h-4 w-4 shrink-0 text-primary" />
+                          <span className="flex-1">{option.label}</span>
+                        </Button>
+                      ))}
                     </div>
                   )}
                 </div>

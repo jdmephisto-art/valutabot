@@ -527,7 +527,7 @@ export const translations = {
     chat: {
       title: 'CurrencyBot',
       online: 'Online',
-      placeholder: 'Hello! I am — your Financial Radar 🛰\n\n📈 Already know official rates for tomorrow.\n💱 Calculate using NBRB, ECB, and other central banks.',
+      placeholder: 'Hello! I am — your Financial Radar 🛰',
       tgGreeting: 'Hello! I am — your Financial Radar 🛰\n\n📈 I already know official rates for tomorrow.\n💱 I calculate using NBRB, ECB, and other central banks.\n\nClick "Latest rates" to see where the ruble will swing tomorrow. Or use the Converter to plan your exchange.',
       showRates: 'Latest rates',
       showConverter: 'Converter',
@@ -771,7 +771,7 @@ export const translations = {
     chat: {
       title: 'ВалютаБот',
       online: 'В сети',
-      placeholder: 'Привет! Я — твой финансовый радар 🛰\n\n📈 Уже знаю официальные курсы на завтра.\n💱 Считаю по курсам НБРБ, ЕЦБ и других ЦБ.',
+      placeholder: 'Привет! Я — твой финансовый радар 🛰',
       tgGreeting: 'Привет! Я — твой финансовый радар 🛰\n\n📈 Уже знаю официальные курсы на завтра.\n💱 Считаю по курсам НБРБ, ЕЦБ и других ЦБ.\n\nНажми «Последние курсы», чтобы увидеть, в какую сторону качнется рубль завтра. Или воспользуйся Конвертером, чтобы спланировать обмен.',
       showRates: 'Последние курсы',
       showConverter: 'Конвертировать',
