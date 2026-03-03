@@ -527,7 +527,8 @@ export const translations = {
     chat: {
       title: 'CurrencyBot',
       online: 'Online',
-      placeholder: 'Hello! I am — your Financial Radar 🛰\n\n📈 I already know official rates for tomorrow.\n💱 I calculate using NBRB, ECB, and other central banks.\n\nClick "Latest rates" to see where the ruble will swing tomorrow. Or use the Converter to plan your exchange.',
+      placeholder: 'Hello! I am — your Financial Radar 🛰\n\n📈 Already know official rates for tomorrow.\n💱 Calculate using NBRB, ECB, and other central banks.',
+      tgGreeting: 'Hello! I am — your Financial Radar 🛰\n\n📈 I already know official rates for tomorrow.\n💱 I calculate using NBRB, ECB, and other central banks.\n\nClick "Latest rates" to see where the ruble will swing tomorrow. Or use the Converter to plan your exchange.',
       showRates: 'Latest rates',
       showConverter: 'Converter',
       setAlert: 'Set alert',
@@ -770,7 +771,8 @@ export const translations = {
     chat: {
       title: 'ВалютаБот',
       online: 'В сети',
-      placeholder: 'Привет! Я — твой финансовый радар 🛰\n\n📈 Уже знаю официальные курсы на завтра.\n💱 Считаю по курсам НБРБ, ЕЦБ и других ЦБ.\n\nНажми «Последние курсы», чтобы увидеть, в какую сторону качнется рубль завтра. Или воспользуйся Конвертером, чтобы спланировать обмен.',
+      placeholder: 'Привет! Я — твой финансовый радар 🛰\n\n📈 Уже знаю официальные курсы на завтра.\n💱 Считаю по курсам НБРБ, ЕЦБ и других ЦБ.',
+      tgGreeting: 'Привет! Я — твой финансовый радар 🛰\n\n📈 Уже знаю официальные курсы на завтра.\n💱 Считаю по курсам НБРБ, ЕЦБ и других ЦБ.\n\nНажми «Последние курсы», чтобы увидеть, в какую сторону качнется рубль завтра. Или воспользуйся Конвертером, чтобы спланировать обмен.',
       showRates: 'Последние курсы',
       showConverter: 'Конвертировать',
       setAlert: 'Установить оповещение',
@@ -967,7 +969,7 @@ export const translations = {
       nbkDesc: 'Официальные курсы Национального Банка Казахстана (Приоритет для KZT).',
       worldcurrencyapi: 'WorldCurrencyAPI',
       worldcurrencyapiDesc: 'Частые обновления с мировых валютных рынков.',
-      warning: 'Переключение источника сбросит сеанс чата.',
+      warning: 'Switching the source will reset the chat session.',
       toast: 'Источник данных изменен',
       toastDesc: 'Теперь используется {source}. Чат был сброшен.',
     },

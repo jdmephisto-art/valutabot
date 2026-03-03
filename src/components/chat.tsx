@@ -282,6 +282,25 @@ export function ChatInterface() {
     preFetchInitialRates(firestore, handleApiError);
   }, [lang, firestore, handleApiError]);
 
+  const renderMessageContent = (message: Message) => {
+    if (!message.text) return null;
+    
+    // Специальная обработка для приветственного сообщения
+    const lines = message.text.split('\n');
+    return (
+      <div className={cn(message.component && "p-3 pb-0")}>
+        {lines.map((line, idx) => {
+          const isSmall = line.includes('📈') || line.includes('💱');
+          return (
+            <p key={idx} className={cn("leading-relaxed", isSmall ? "text-[11px] opacity-80" : "text-sm")}>
+              {line}
+            </p>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="w-full max-w-md h-[88vh] max-h-[900px] flex flex-col bg-card/90 backdrop-blur-xl rounded-2xl shadow-2xl overflow-hidden border border-white/20">
       <header className="flex items-center justify-between p-4 border-b bg-background/50">
@@ -351,7 +370,7 @@ export function ChatInterface() {
                   className={cn('rounded-lg whitespace-pre-wrap', message.component ? 'w-full p-0 overflow-hidden bg-background/40' : 'max-w-[85%] p-3', message.sender === 'user' ? 'bg-primary text-primary-foreground shadow-lg' : 'bg-secondary text-secondary-foreground border')}
                   data-nosnippet={message.isTechnical ? "true" : undefined}
                 >
-                  {message.text && <p className={cn(message.component && "p-3 pb-0")}>{message.text}</p>}
+                  {renderMessageContent(message)}
                   {message.component}
                   {message.options && (
                     <div className="flex flex-col gap-2 mt-3 p-3 pt-0">

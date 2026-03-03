@@ -26,7 +26,8 @@ export const curatedAltcoinCodes = [
 let unifiedData: MultiSourceData = {};
 let unifiedDataTomorrow: MultiSourceData = {};
 
-const FIAT_TTL = 5 * 60 * 1000;
+const FIAT_TTL = 60 * 60 * 1000; // 60 минут
+const CRYPTO_TTL = 5 * 60 * 1000; // 5 минут
 
 export function setDataSource(source: DataSource) { activeDataSource = source; }
 export function getDataSource(): DataSource { return activeDataSource; }
@@ -44,7 +45,7 @@ export function findRate(from: string, to: string, isTomorrow: boolean = false):
         // 1. Priority source
         if (targetMap[currency]?.[activeDataSource]) return targetMap[currency][activeDataSource].v;
         
-        // 2. Cascade official sources (Important for BYN rescue)
+        // 2. Cascade official sources
         const officials: DataSource[] = ['nbrb', 'cbr', 'nbk', 'ecb'];
         for (const src of officials) {
             if (targetMap[currency]?.[src]) return targetMap[currency][src].v;
@@ -56,7 +57,6 @@ export function findRate(from: string, to: string, isTomorrow: boolean = false):
             if (targetMap[currency]?.[src]) return targetMap[currency][src].v;
         }
 
-        // Handle legacy BYR code mapping
         if (currency === 'BYN' && targetMap['BYR']) {
             const byr = getBestPrice('BYR');
             if (byr) return byr;
@@ -76,6 +76,8 @@ export function findRate(from: string, to: string, isTomorrow: boolean = false):
 
 export async function preFetchInitialRates(db: Firestore, onApiError?: (source: string) => void) {
     const docRef = doc(db, 'rates_cache', 'unified');
+    
+    // Мгновенная подписка на обновления
     onSnapshot(docRef, (snap) => {
         if (snap.exists()) {
             const data = snap.data();
@@ -87,16 +89,23 @@ export async function preFetchInitialRates(db: Firestore, onApiError?: (source: 
     try {
         const snap = await getDoc(docRef);
         const now = Date.now();
-        if (!snap.exists() || (now - (snap.data()?.updatedAtFiat || 0) > FIAT_TTL)) {
-            await updateAllRatesInCloud(db, true, onApiError);
+        const data = snap.data();
+        
+        // Проверка TTL отдельно для фиата и крипты
+        const updateFiat = !snap.exists() || (now - (data?.updatedAtFiat || 0) > FIAT_TTL);
+        const updateCrypto = !snap.exists() || (now - (data?.updatedAtCrypto || 0) > CRYPTO_TTL);
+
+        if (updateFiat || updateCrypto) {
+            // ВАЖНО: Убираем await, чтобы кнопка нажималась мгновенно
+            updateAllRatesInCloud(db, updateFiat, onApiError, updateCrypto);
         }
     } catch (e) {}
 }
 
 /**
- * Enhanced with priority loading: fetch active source first, then others in background.
+ * Enhanced with priority loading and dual-speed TTL logic.
  */
-export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean = true, onApiError?: (source: string) => void) {
+export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean = true, onApiError?: (source: string) => void, updateCrypto: boolean = true) {
     const now = Date.now();
     const todayStr = format(new Date(), 'yyyy-MM-dd');
 
@@ -109,7 +118,10 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
         { id: 'worldcurrencyapi', fn: fetchWorldCurrency, type: 'fiat' }
     ];
 
-    const activeSources = sources.filter(s => s.type === 'crypto' || updateFiat);
+    // Фильтруем источники на основе того, что реально нужно обновить
+    const activeSources = sources.filter(s => (s.type === 'fiat' && updateFiat) || (s.type === 'crypto' && updateCrypto));
+    if (activeSources.length === 0) return unifiedData;
+
     const prioritySource = activeSources.find(s => s.id === activeDataSource) || activeSources[0];
     const otherSources = activeSources.filter(s => s.id !== prioritySource.id);
 
@@ -119,7 +131,6 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
     const processSourceResult = (val: any, sourceId: string, isOfficial: boolean) => {
         if (!val) return;
         const processEntry = (rates: Record<string, number>, dateStr: string) => {
-            // Any date strictly later than today is TOMORROW
             const targetMap = dateStr > todayStr ? nextDataTomorrow : nextData;
             Object.keys(rates).forEach(currency => {
                 if (!targetMap[currency]) targetMap[currency] = {};
@@ -131,16 +142,16 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
         if (val.rates && val.date) processEntry(val.rates, val.date);
     };
 
-    // 1. Fetch Priority Source FIRST (Fast response for UI)
+    // 1. Приоритетный источник
     try {
         const priorityRes = await prioritySource.fn();
         processSourceResult(priorityRes, prioritySource.id, prioritySource.type === 'fiat');
         
-        // Immediate UI Update
         await setDoc(doc(db, 'rates_cache', 'unified'), {
             data: nextData, 
             dataTomorrow: nextDataTomorrow, 
-            updatedAtFiat: now
+            updatedAtFiat: updateFiat ? now : (unifiedData ? now : 0), // Сохраняем метку времени
+            updatedAtCrypto: updateCrypto ? now : (unifiedData ? now : 0)
         }, { merge: true });
         
         unifiedData = nextData;
@@ -149,7 +160,7 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
         if (onApiError) onApiError(prioritySource.id);
     }
 
-    // 2. Fetch all other sources in background (No await for UI)
+    // 2. Остальные источники в фоне
     (async () => {
         const results = await Promise.allSettled(otherSources.map(s => s.fn()));
         results.forEach((res, idx) => {
@@ -163,8 +174,9 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
 
         await setDoc(doc(db, 'rates_cache', 'unified'), {
             data: nextData, 
-            dataTomorrow: nextDataTomorrow, 
-            updatedAtFiat: now
+            dataTomorrow: nextDataTomorrow,
+            updatedAtFiat: updateFiat ? now : (unifiedData ? now : 0),
+            updatedAtCrypto: updateCrypto ? now : (unifiedData ? now : 0)
         }, { merge: true });
         
         unifiedData = nextData;
@@ -178,8 +190,6 @@ async function fetchNbrb() {
     try {
         const todayStr = format(new Date(), 'yyyy-MM-dd');
         const tomorrowStr = format(addDays(new Date(), 1), 'yyyy-MM-dd');
-
-        console.log(`[NBRB Request] Checking today (${todayStr}) and tomorrow (${tomorrowStr})`);
 
         const [resT, resTm] = await Promise.all([
             fetch(`https://api.nbrb.by/exrates/rates?ondate=${todayStr}&periodicity=0`, { cache: 'no-store' }),
@@ -202,7 +212,7 @@ async function fetchNbrb() {
         const tRates = await process(resT);
         const tmRates = await process(resTm);
 
-        console.log(`[NBRB Response] Tomorrow provided: ${!!tmRates}`);
+        if (tmRates) console.log(`[NBRB Response] Tomorrow published for ${tomorrowStr}`);
 
         return {
             today: tRates ? { rates: tRates, date: todayStr } : null,
@@ -351,7 +361,8 @@ export async function getCurrencies(): Promise<Currency[]> {
 }
 
 export async function getLatestRates(pairs: string[], db: Firestore): Promise<ExchangeRate[]> {
-    await preFetchInitialRates(db);
+    // ВАЖНО: Больше не ждем завершения фонового запроса здесь
+    preFetchInitialRates(db); 
     return pairs.map(p => {
         const [from, to] = p.split('/');
         return { 
@@ -373,7 +384,6 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
     const targetDateStr = format(date, 'yyyy-MM-dd');
     const todayStr = format(new Date(), 'yyyy-MM-dd');
     
-    // Check local unified cache first for tomorrow/today
     if (targetDateStr >= todayStr) {
         const rate = findRate(from, to, targetDateStr > todayStr);
         if (rate !== undefined) return { rate, date, isFallback: false };

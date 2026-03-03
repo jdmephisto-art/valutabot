@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 import { initializeFirebase } from '@/firebase';
 import { doc, getDoc, deleteDoc } from 'firebase/firestore';
@@ -18,7 +17,30 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: false }, { status: 200 });
     }
 
-    // 1. Handle Callback Query (Unsubscribe button click)
+    // 1. Handle Commands (e.g., /start)
+    if (body.message && body.message.text === '/start') {
+      const chatId = body.message.chat.id;
+      const welcomeText = `<b>Привет! Я — твой финансовый радар 🛰</b>\n\n📈 Уже знаю официальные курсы на завтра.\n💱 Считаю по курсам НБРБ, ЕЦБ и других ЦБ.\n\nНажми «Последние курсы», чтобы увидеть, в какую сторону качнется рубль завтра. Или воспользуйся Конвертером, чтобы спланировать обмен.`;
+      
+      const inline_keyboard = [
+        [{ text: 'Открыть ВалютаБот 🤖', url: 'https://t.me/CurrencyAll_bot/app' }],
+        [{ text: '📊 Последние курсы', url: 'https://t.me/CurrencyAll_bot/app?startapp=rates' }]
+      ];
+
+      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: welcomeText,
+          parse_mode: 'HTML',
+          reply_markup: { inline_keyboard }
+        })
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    // 2. Handle Callback Query (Unsubscribe button click)
     if (body.callback_query) {
       const callbackData = body.callback_query.data; // Expected format: stop_userId_alertId
       const callbackId = body.callback_query.id;
@@ -61,7 +83,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    // 2. Handle Inline Query
+    // 3. Handle Inline Query
     if (body.inline_query) {
       const queryId = body.inline_query.id;
       const queryText = body.inline_query.query.trim().toUpperCase();
@@ -78,10 +100,17 @@ export async function POST(request: Request) {
         else if (parts.length === 1) { from = parts[0]; to = 'USD'; }
 
         const snap = await getDoc(doc(firestore, 'rates_cache', 'unified'));
-        const rates = snap.exists() ? snap.data().rates : {};
+        const ratesRaw = snap.exists() ? snap.data().data : {};
+        
+        // Маппинг для инлайна (упрощенный поиск для ТГ)
+        const getP = (c: string) => {
+            if (c === 'USD') return 1;
+            const sources = ratesRaw[c] || {};
+            return sources['nbrb']?.v || sources['worldcurrencyapi']?.v || undefined;
+        };
 
-        const fromPrice = rates[from];
-        const toPrice = rates[to];
+        const fromPrice = getP(from);
+        const toPrice = getP(to);
 
         if (fromPrice && toPrice) {
           const rate = fromPrice / toPrice;
