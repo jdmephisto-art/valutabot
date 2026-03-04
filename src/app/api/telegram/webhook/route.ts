@@ -5,19 +5,20 @@ import { doc, getDoc, deleteDoc } from 'firebase/firestore';
 /**
  * Telegram Webhook Route
  * Handles bot commands, Inline Queries, and Callback Queries (Unsubscribe).
+ * Optimized to respond to /start even if Firebase initialization is slow.
  */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const token = process.env.TELEGRAM_BOT_TOKEN;
-    const { firestore } = initializeFirebase();
 
     if (!token) {
-        console.error('TELEGRAM_BOT_TOKEN is missing');
+        console.error('TELEGRAM_BOT_TOKEN is missing in environment variables');
         return NextResponse.json({ ok: false }, { status: 200 });
     }
 
     // 1. Handle Commands (e.g., /start)
+    // This part does NOT require Firebase, so it should be fast and reliable.
     if (body.message && body.message.text === '/start') {
       const chatId = body.message.chat.id;
       const welcomeText = `<b>Привет! Я — твой финансовый радар 🛰</b>\n\n📈 Уже знаю официальные курсы на завтра.\n💱 Считаю по курсам НБРБ, ЕЦБ и других ЦБ.\n\nНажми «Последние курсы», чтобы увидеть, в какую сторону качнется рубль завтра. Или воспользуйся Конвертером, чтобы спланировать обмен.`;
@@ -41,8 +42,9 @@ export async function POST(request: Request) {
     }
 
     // 2. Handle Callback Query (Unsubscribe button click)
+    // This requires Firestore access.
     if (body.callback_query) {
-      const callbackData = body.callback_query.data; // Expected format: stop_userId_alertId
+      const callbackData = body.callback_query.data;
       const callbackId = body.callback_query.id;
       const chatId = body.callback_query.message.chat.id;
       const messageId = body.callback_query.message.message_id;
@@ -51,10 +53,10 @@ export async function POST(request: Request) {
         const [, userId, alertId] = callbackData.split('_');
         
         try {
+          const { firestore } = initializeFirebase();
           const alertRef = doc(firestore, 'users', userId, 'notifications', alertId);
           await deleteDoc(alertRef);
 
-          // Confirm to Telegram
           await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -65,7 +67,6 @@ export async function POST(request: Request) {
             })
           });
 
-          // Update message text to show success
           await fetch(`https://api.telegram.org/bot${token}/editMessageText`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -77,62 +78,68 @@ export async function POST(request: Request) {
             })
           });
         } catch (e) {
-          console.error('Firestore delete error:', e);
+          console.error('Firestore operation failed in webhook:', e);
         }
       }
       return NextResponse.json({ ok: true });
     }
 
     // 3. Handle Inline Query
+    // This requires Firestore access to get current rates.
     if (body.inline_query) {
       const queryId = body.inline_query.id;
       const queryText = body.inline_query.query.trim().toUpperCase();
       
       if (queryText.length >= 2) {
-        const parts = queryText.split(/\s+/);
-        let amount = 1, from = 'USD', to = 'BYN';
+        try {
+          const { firestore } = initializeFirebase();
+          const parts = queryText.split(/\s+/);
+          let amount = 1, from = 'USD', to = 'BYN';
 
-        if (parts.length === 2) { from = parts[0]; to = parts[1]; }
-        else if (parts.length === 3) { 
-          amount = parseFloat(parts[0].replace(',', '.')) || 1; 
-          from = parts[1]; to = parts[2]; 
-        }
-        else if (parts.length === 1) { from = parts[0]; to = 'USD'; }
+          if (parts.length === 2) { from = parts[0]; to = parts[1]; }
+          else if (parts.length === 3) { 
+            amount = parseFloat(parts[0].replace(',', '.')) || 1; 
+            from = parts[1]; to = parts[2]; 
+          }
+          else if (parts.length === 1) { from = parts[0]; to = 'USD'; }
 
-        const snap = await getDoc(doc(firestore, 'rates_cache', 'unified'));
-        const ratesRaw = snap.exists() ? snap.data().data : {};
-        
-        // Маппинг для инлайна (упрощенный поиск для ТГ)
-        const getP = (c: string) => {
-            if (c === 'USD') return 1;
-            const sources = ratesRaw[c] || {};
-            return sources['nbrb']?.v || sources['worldcurrencyapi']?.v || undefined;
-        };
-
-        const fromPrice = getP(from);
-        const toPrice = getP(to);
-
-        if (fromPrice && toPrice) {
-          const rate = fromPrice / toPrice;
-          const resultValue = amount * rate;
-          const resultText = `${amount} ${from} = ${resultValue > 1000 ? resultValue.toFixed(2) : resultValue.toFixed(4).replace(/\.?0+$/, '')} ${to}`;
+          const snap = await getDoc(doc(firestore, 'rates_cache', 'unified'));
+          const ratesRaw = snap.exists() ? snap.data().data : {};
           
-          const results = [{
-            type: 'article',
-            id: `rate_${from}_${to}_${Date.now()}`,
-            title: resultText,
-            description: `📊 Актуальный курс из ВалютаБот`,
-            input_message_content: {
-              message_text: `<b>Курс валют:</b>\n${resultText}\n\n<a href="https://t.me/CurrencyAll_bot/app">Открыть ВалютаБот 🤖</a>`,
-              parse_mode: 'HTML'
-            }
-          }];
+          const getP = (c: string) => {
+              if (c === 'USD') return 1;
+              const sources = ratesRaw[c] || {};
+              // Cascade logic for inline query
+              return sources['nbrb']?.v || sources['cbr']?.v || sources['worldcurrencyapi']?.v || undefined;
+          };
 
-          await fetch(`https://api.telegram.org/bot${token}/answerInlineQuery`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ inline_query_id: queryId, results, cache_time: 60 })
-          });
+          const fromPrice = getP(from);
+          const toPrice = getP(to);
+
+          if (fromPrice && toPrice) {
+            const rate = fromPrice / toPrice;
+            const resultValue = amount * rate;
+            const resultText = `${amount} ${from} = ${resultValue > 1000 ? resultValue.toFixed(2) : resultValue.toFixed(4).replace(/\.?0+$/, '')} ${to}`;
+            
+            const results = [{
+              type: 'article',
+              id: `rate_${from}_${to}_${Date.now()}`,
+              title: resultText,
+              description: `📊 Актуальный курс из ВалютаБот`,
+              input_message_content: {
+                message_text: `<b>Курс валют:</b>\n${resultText}\n\n<a href="https://t.me/CurrencyAll_bot/app">Открыть ВалютаБот 🤖</a>`,
+                parse_mode: 'HTML'
+              }
+            }];
+
+            await fetch(`https://api.telegram.org/bot${token}/answerInlineQuery`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ inline_query_id: queryId, results, cache_time: 60 })
+            });
+          }
+        } catch (e) {
+          console.error('Inline query rate fetch failed:', e);
         }
       }
       return NextResponse.json({ ok: true });
@@ -140,7 +147,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error('Telegram Webhook error:', error);
+    console.error('Global Telegram Webhook error:', error);
+    // Always return 200 to Telegram to prevent retry loops on errors
     return NextResponse.json({ ok: false }, { status: 200 });
   }
 }
