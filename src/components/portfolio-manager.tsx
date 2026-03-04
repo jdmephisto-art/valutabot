@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -24,48 +23,45 @@ export function PortfolioManager() {
   const firestore = useFirestore();
   const { haptic, share } = useTelegram();
 
-  const [assets, setAssets] = useState<PortfolioAsset[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('valutabot_portfolio');
-      try {
-        return saved ? JSON.parse(saved) : [];
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  });
-
-  const [displayCurrency, setDisplayCurrency] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('valutabot_portfolio_base') || 'USD';
-    }
-    return 'USD';
-  });
-
-  const [lastSeenTotal, setLastSeenTotal] = useState<number | null>(() => {
-    if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem('valutabot_portfolio_last_total');
-        return saved ? parseFloat(saved) : null;
-    }
-    return null;
-  });
+  const [isMounted, setIsMounted] = useState(false);
+  const [assets, setAssets] = useState<PortfolioAsset[]>([]);
+  const [displayCurrency, setDisplayCurrency] = useState('USD');
+  const [lastSeenTotal, setLastSeenTotal] = useState<number | null>(null);
 
   const [newAssetCode, setNewAssetCode] = useState('BTC');
   const [newAssetAmount, setNewAssetAmount] = useState('0');
   const [isBaseCurrencyPickerOpen, setIsBaseCurrencyPickerOpen] = useState(false);
 
   useEffect(() => {
+    setIsMounted(true);
+    const savedAssets = localStorage.getItem('valutabot_portfolio');
+    if (savedAssets) {
+      try {
+        setAssets(JSON.parse(savedAssets));
+      } catch (e) {
+        console.error('Failed to parse portfolio', e);
+      }
+    }
+    const savedBase = localStorage.getItem('valutabot_portfolio_base');
+    if (savedBase) setDisplayCurrency(savedBase);
+
+    const savedTotal = localStorage.getItem('valutabot_portfolio_last_total');
+    if (savedTotal) setLastSeenTotal(parseFloat(savedTotal));
+
     preFetchInitialRates(firestore);
   }, [firestore]);
 
   useEffect(() => {
-    localStorage.setItem('valutabot_portfolio', JSON.stringify(assets));
-  }, [assets]);
+    if (isMounted) {
+      localStorage.setItem('valutabot_portfolio', JSON.stringify(assets));
+    }
+  }, [assets, isMounted]);
 
   useEffect(() => {
-    localStorage.setItem('valutabot_portfolio_base', displayCurrency);
-  }, [displayCurrency]);
+    if (isMounted) {
+      localStorage.setItem('valutabot_portfolio_base', displayCurrency);
+    }
+  }, [displayCurrency, isMounted]);
 
   const totalBalance = useMemo(() => {
     return assets.reduce((sum, asset) => {
@@ -76,13 +72,13 @@ export function PortfolioManager() {
   }, [assets, displayCurrency]);
 
   useEffect(() => {
-    if (totalBalance > 0) {
+    if (isMounted && totalBalance > 0) {
         localStorage.setItem('valutabot_portfolio_last_total', totalBalance.toString());
     }
-  }, [totalBalance]);
+  }, [totalBalance, isMounted]);
 
   const growthInfo = useMemo(() => {
-    if (assets.length === 0) return null;
+    if (!isMounted || assets.length === 0) return null;
     if (lastSeenTotal === null || lastSeenTotal === 0 || totalBalance === 0) {
         return { isInitial: true };
     }
@@ -99,7 +95,7 @@ export function PortfolioManager() {
         percent: percent.toFixed(2),
         isUp: diff > 0
     };
-  }, [totalBalance, lastSeenTotal, assets.length]);
+  }, [totalBalance, lastSeenTotal, assets.length, isMounted]);
 
   const handleAddAsset = () => {
     haptic('medium');
@@ -150,6 +146,8 @@ export function PortfolioManager() {
     });
     share(text);
   };
+
+  if (!isMounted) return null;
 
   return (
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">

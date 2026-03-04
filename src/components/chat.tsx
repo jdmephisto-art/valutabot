@@ -51,15 +51,10 @@ export function ChatInterface() {
   const { haptic, webApp } = useTelegram();
   const { t, lang, setLang } = useTranslation();
   
+  const [isMounted, setIsMounted] = useState(false);
   const [trackedPairs, setTrackedPairs] = useState<Map<string, number>>(new Map());
-  const [displayedPairs, setDisplayedPairs] = useState<string[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('valutabot_displayed_pairs');
-      return saved ? JSON.parse(saved) : defaultDisplayedPairs;
-    }
-    return defaultDisplayedPairs;
-  });
-  const [dataSource, setDataSourceState] = useState<DataSource>(getDataSource());
+  const [displayedPairs, setDisplayedPairs] = useState<string[]>(defaultDisplayedPairs);
+  const [dataSource, setDataSourceState] = useState<DataSource>('nbrb');
   const [autoClearMinutes, setAutoClearMinutes] = useState(0);
   const [autoClearPopoverOpen, setAutoClearPopoverOpen] = useState(false);
   const [pwaPopoverOpen, setPwaPopoverOpen] = useState(false);
@@ -98,6 +93,19 @@ export function ChatInterface() {
   }, []);
 
   useEffect(() => {
+    setIsMounted(true);
+    const savedPairs = localStorage.getItem('valutabot_displayed_pairs');
+    if (savedPairs) {
+      try {
+        setDisplayedPairs(JSON.parse(savedPairs));
+      } catch (e) {
+        console.error('Failed to parse displayed pairs', e);
+      }
+    }
+    setDataSourceState(getDataSource());
+  }, []);
+
+  useEffect(() => {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
@@ -120,8 +128,10 @@ export function ChatInterface() {
   }, [user, webApp, firestore]);
 
   useEffect(() => {
-    localStorage.setItem('valutabot_displayed_pairs', JSON.stringify(displayedPairs));
-  }, [displayedPairs]);
+    if (isMounted) {
+      localStorage.setItem('valutabot_displayed_pairs', JSON.stringify(displayedPairs));
+    }
+  }, [displayedPairs, isMounted]);
 
   useEffect(() => {
     if (autoClearMinutes > 0) {
@@ -280,7 +290,7 @@ export function ChatInterface() {
   useEffect(() => {
     resetChat();
     preFetchInitialRates(firestore, handleApiError);
-  }, [lang, firestore, handleApiError]);
+  }, [lang, firestore, handleApiError, resetChat]);
 
   const renderMessageContent = (message: Message) => {
     if (!message.text) return null;
@@ -323,7 +333,9 @@ export function ChatInterface() {
           </Popover>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-xs font-bold" onClick={() => haptic('light')}>{lang.toUpperCase()}</Button>
+              <Button variant="ghost" size="icon" className="text-xs font-bold" onClick={() => haptic('light')}>
+                {isMounted ? lang.toUpperCase() : 'RU'}
+              </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => { haptic('medium'); setLang('en'); }}>English</DropdownMenuItem>
