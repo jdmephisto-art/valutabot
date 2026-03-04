@@ -12,7 +12,11 @@ import { CurrencyCombobox } from './currency-combobox';
 import { useFirestore } from '@/firebase';
 import { useTelegram } from '@/hooks/use-telegram';
 
-export function CurrencyConverter() {
+type CurrencyConverterProps = {
+  onNotify?: () => void;
+}
+
+export function CurrencyConverter({ onNotify }: CurrencyConverterProps) {
   const { currencies } = useCurrencies();
   const { t } = useTranslation();
   const firestore = useFirestore();
@@ -64,8 +68,7 @@ export function CurrencyConverter() {
 
   const handleNotifyCta = () => {
     haptic('medium');
-    // For convenience, we could trigger a specific action here, but for now we just show a toast or message
-    // In chat.tsx context, the user would click 'Set Alert'
+    if (onNotify) onNotify();
   };
 
   const hasTomorrowData = tomorrowRate !== undefined;

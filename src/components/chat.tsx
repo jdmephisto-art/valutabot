@@ -252,7 +252,7 @@ export function ChatInterface() {
           addMessage({ sender: 'bot', component: <LatestRates mode="single" pairs={[`${from}/USD`]} /> });
           scrollToBottom();
       }} />;
-      if (id === 'convert') component = <CurrencyConverter />;
+      if (id === 'convert') component = <CurrencyConverter onNotify={() => handleActionClick('alert')} />;
       if (id === 'alert') component = <NotificationManager onSetAlert={async (data) => {
         const rate = await findRateAsync(data.from, data.to, firestore);
         if (rate && user) {

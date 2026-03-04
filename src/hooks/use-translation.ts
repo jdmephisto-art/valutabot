@@ -1,4 +1,3 @@
-
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { getLang, setLang as setLangInLib, subscribe, translations, getCurrencyName as getCurrencyNameFromLib } from '@/lib/localization';
@@ -11,8 +10,10 @@ export function useTranslation() {
     const [lang, setLangState] = useState(getLang());
 
     useEffect(() => {
-        const savedLang = localStorage.getItem('valutabot_lang');
-        if (!savedLang) {
+        const savedLang = localStorage.getItem('valutabot_lang') as Language | null;
+        if (savedLang) {
+            setLangInLib(savedLang);
+        } else {
             const tgLang = (window as any).Telegram?.WebApp?.initDataUnsafe?.user?.language_code;
             const browserLang = window.navigator.language?.split('-')[0];
             const detected = tgLang || browserLang;
