@@ -7,22 +7,26 @@ import type { Language } from '@/lib/types';
 const CIS_LANGS = ['ru', 'be', 'uk', 'hy', 'ka', 'az', 'kk', 'uz', 'tg', 'ky', 'tk'];
 
 export function useTranslation() {
-    const [lang, setLangState] = useState(getLang());
+    // Force 'ru' as initial state to match server-side default and prevent hydration mismatch
+    const [lang, setLangState] = useState<Language>('ru');
 
     useEffect(() => {
         const savedLang = localStorage.getItem('valutabot_lang') as Language | null;
         if (savedLang) {
             setLangInLib(savedLang);
+            setLangState(savedLang);
         } else {
             const tgLang = (window as any).Telegram?.WebApp?.initDataUnsafe?.user?.language_code;
             const browserLang = window.navigator.language?.split('-')[0];
             const detected = tgLang || browserLang;
             
+            let detectedLang: Language = 'en';
             if (detected && CIS_LANGS.includes(detected)) {
-                setLangInLib('ru');
-            } else if (detected === 'en') {
-                setLangInLib('en');
+                detectedLang = 'ru';
             }
+            
+            setLangInLib(detectedLang);
+            setLangState(detectedLang);
         }
         
         const unsubscribe = subscribe(setLangState);
@@ -32,6 +36,7 @@ export function useTranslation() {
     const setLang = useCallback((newLang: Language) => {
         localStorage.setItem('valutabot_lang', newLang);
         setLangInLib(newLang);
+        setLangState(newLang);
     }, []);
 
     const t = useCallback((key: string, params?: Record<string, string | number>) => {

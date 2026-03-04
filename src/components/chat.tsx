@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useId, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bot, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, Box, ArrowUp, ArrowDown, Send, CircleHelp, Smartphone, Apple, Monitor, Briefcase, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -44,6 +44,7 @@ type ActionButtonProps = {
 const defaultDisplayedPairs = ['USD/EUR', 'EUR/USD', 'USD/BYN', 'EUR/BYN', 'USD/RUB', 'EUR/RUB', 'BTC/USD', 'TON/USD'];
 
 export function ChatInterface() {
+  const [isMounted, setIsMounted] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const { user } = useUser();
   const auth = useAuth();
@@ -51,7 +52,6 @@ export function ChatInterface() {
   const { haptic, webApp } = useTelegram();
   const { t, lang, setLang } = useTranslation();
   
-  const [isMounted, setIsMounted] = useState(false);
   const [trackedPairs, setTrackedPairs] = useState<Map<string, number>>(new Map());
   const [displayedPairs, setDisplayedPairs] = useState<string[]>(defaultDisplayedPairs);
   const [dataSource, setDataSourceState] = useState<DataSource>('nbrb');
@@ -59,7 +59,6 @@ export function ChatInterface() {
   const [autoClearPopoverOpen, setAutoClearPopoverOpen] = useState(false);
   const [pwaPopoverOpen, setPwaPopoverOpen] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const componentId = useId();
 
   const alertsQuery = useMemoFirebase(() => {
     if (!firestore || !user) return null;
@@ -69,8 +68,8 @@ export function ChatInterface() {
   const { data: cloudAlerts } = useCollection<Alert>(alertsQuery);
 
   const addMessage = useCallback((message: Omit<Message, 'id'>) => {
-    setMessages(prev => [...prev, { ...message, id: `${componentId}-${prev.length}` }]);
-  }, [componentId]);
+    setMessages(prev => [...prev, { ...message, id: `msg-${Date.now()}-${prev.length}` }]);
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     if (scrollAreaRef.current) {
@@ -102,6 +101,10 @@ export function ChatInterface() {
         console.error('Failed to parse displayed pairs', e);
       }
     }
+    const savedAutoClear = localStorage.getItem('valutabot_autoclear');
+    if (savedAutoClear) {
+      setAutoClearMinutes(parseInt(savedAutoClear));
+    }
     setDataSourceState(getDataSource());
   }, []);
 
@@ -110,13 +113,13 @@ export function ChatInterface() {
   }, [messages, scrollToBottom]);
 
   useEffect(() => {
-    if (!user && auth) {
+    if (isMounted && !user && auth) {
       signInAnonymously(auth);
     }
-  }, [user, auth]);
+  }, [user, auth, isMounted]);
 
   useEffect(() => {
-    if (user && webApp?.initDataUnsafe?.user?.id) {
+    if (isMounted && user && webApp?.initDataUnsafe?.user?.id) {
       const userRef = doc(firestore, 'users', user.uid);
       setDoc(userRef, {
         id: user.uid,
@@ -125,7 +128,7 @@ export function ChatInterface() {
         updatedAt: new Date().toISOString()
       }, { merge: true });
     }
-  }, [user, webApp, firestore]);
+  }, [user, webApp, firestore, isMounted]);
 
   useEffect(() => {
     if (isMounted) {
@@ -134,13 +137,19 @@ export function ChatInterface() {
   }, [displayedPairs, isMounted]);
 
   useEffect(() => {
-    if (autoClearMinutes > 0) {
+    if (isMounted) {
+      localStorage.setItem('valutabot_autoclear', autoClearMinutes.toString());
+    }
+  }, [autoClearMinutes, isMounted]);
+
+  useEffect(() => {
+    if (isMounted && autoClearMinutes > 0) {
         const timer = setTimeout(() => {
             resetChat();
         }, autoClearMinutes * 60 * 1000);
         return () => clearTimeout(timer);
     }
-  }, [autoClearMinutes, messages.length]);
+  }, [autoClearMinutes, messages.length, isMounted]);
 
   const handleApiError = useCallback((source: string) => {
     const tgId = webApp?.initDataUnsafe?.user?.id;
@@ -162,7 +171,7 @@ export function ChatInterface() {
   }, [webApp, addMessage]);
 
   useEffect(() => {
-    if (!cloudAlerts || cloudAlerts.length === 0) return;
+    if (!isMounted || !cloudAlerts || cloudAlerts.length === 0) return;
 
     const checkInterval = setInterval(async () => {
       const tgId = webApp?.initDataUnsafe?.user?.id;
@@ -205,7 +214,7 @@ export function ChatInterface() {
     }, 60000);
 
     return () => clearInterval(checkInterval);
-  }, [cloudAlerts, firestore, addMessage, t, webApp, user]);
+  }, [cloudAlerts, firestore, addMessage, t, webApp, user, isMounted]);
 
   const getActionButtons = useCallback((): ActionButtonProps[] => [
     { id: 'rates', label: t('chat.showRates'), icon: LineChart },
@@ -288,9 +297,11 @@ export function ChatInterface() {
   };
 
   useEffect(() => {
-    resetChat();
-    preFetchInitialRates(firestore, handleApiError);
-  }, [lang, firestore, handleApiError, resetChat]);
+    if (isMounted) {
+      resetChat();
+      preFetchInitialRates(firestore, handleApiError);
+    }
+  }, [lang, firestore, handleApiError, resetChat, isMounted]);
 
   const renderMessageContent = (message: Message) => {
     if (!message.text) return null;
@@ -303,6 +314,23 @@ export function ChatInterface() {
       </div>
     );
   };
+
+  // Safe SSR shell to prevent hydration mismatch
+  if (!isMounted) {
+    return (
+      <div className="w-full max-w-md h-[88vh] max-h-[900px] flex flex-col bg-card/90 backdrop-blur-xl rounded-2xl shadow-2xl overflow-hidden border border-white/20">
+        <header className="flex items-center justify-between p-4 border-b bg-background/50">
+          <div className="flex items-center gap-3">
+            <Bot className="h-10 w-10 text-primary" />
+            <div>
+              <span className="text-lg font-bold block leading-tight">{t('chat.title')}</span>
+            </div>
+          </div>
+        </header>
+        <div className="flex-1 overflow-hidden" />
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-md h-[88vh] max-h-[900px] flex flex-col bg-card/90 backdrop-blur-xl rounded-2xl shadow-2xl overflow-hidden border border-white/20">
@@ -334,7 +362,7 @@ export function ChatInterface() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="text-xs font-bold" onClick={() => haptic('light')}>
-                {isMounted ? lang.toUpperCase() : 'RU'}
+                {lang.toUpperCase()}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
