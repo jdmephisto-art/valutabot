@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -356,10 +357,16 @@ export function ChatInterface() {
     <div className="w-full max-w-md h-[88vh] max-h-[900px] flex flex-col bg-card/90 backdrop-blur-xl rounded-2xl shadow-2xl overflow-hidden border border-white/20">
       <header className="flex items-center justify-between p-4 border-b bg-background/50">
         <div className="flex items-center gap-2">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <span className="text-[10px] uppercase tracking-tighter text-muted-foreground font-bold">{t('chat.title')}</span>
-          </motion.div>
-          <div className="h-1 w-1 bg-positive rounded-full animate-pulse" />
+          <div className="bg-primary/10 p-1.5 rounded-lg">
+            <Bot className="h-4 w-4 text-primary" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xs font-bold leading-none">{t('chat.title')}</span>
+            <div className="flex items-center gap-1 mt-0.5">
+              <div className="h-1 w-1 bg-positive rounded-full animate-pulse" />
+              <span className="text-[9px] text-muted-foreground font-medium">{t('chat.online')}</span>
+            </div>
+          </div>
         </div>
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10 h-8 w-8" onClick={() => { haptic('light'); window.open('https://t.me/CurrencyAll_bot', '_blank'); }}>
