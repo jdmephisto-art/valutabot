@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, Box, ArrowUp, ArrowDown, Send, CircleHelp, Smartphone, Apple, Monitor, Briefcase, Download } from 'lucide-react';
+import { Bot, CircleDollarSign, LineChart, BellRing, History, Eye, Settings, Eraser, Timer, Box, ArrowUp, ArrowDown, Send, CircleHelp, Smartphone, Apple, Monitor, Briefcase, Download, MessageSquareMore } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LatestRates } from '@/components/latest-rates';
@@ -20,11 +20,11 @@ import { findRateAsync, setDataSource, getDataSource, preFetchInitialRates } fro
 import { useTranslation } from '@/hooks/use-translation';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { useFirestore, useUser, useMemoFirebase, useCollection } from '@/firebase';
+import { useFirestore, useUser, useMemoFirebase, useCollection, setDocumentNonBlocking } from '@/firebase';
 import { useTelegram } from '@/hooks/use-telegram';
 import { signInAnonymously } from 'firebase/auth';
 import { useAuth } from '@/firebase';
-import { collection, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, deleteDoc } from 'firebase/firestore';
 
 type Message = {
   id: string;
@@ -118,15 +118,22 @@ export function ChatInterface() {
     }
   }, [user, auth, isMounted]);
 
+  // Safe analytics & user profile logging
   useEffect(() => {
-    if (isMounted && user && webApp?.initDataUnsafe?.user?.id) {
+    if (isMounted && user && firestore) {
+      const tgUser = webApp?.initDataUnsafe?.user;
       const userRef = doc(firestore, 'users', user.uid);
-      setDoc(userRef, {
+      
+      const userData = {
         id: user.uid,
-        telegramId: String(webApp.initDataUnsafe.user.id),
-        username: webApp.initDataUnsafe.user.username || 'Anonymous',
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
+        telegramId: tgUser?.id ? String(tgUser.id) : 'web',
+        username: tgUser?.username || 'Anonymous',
+        updatedAt: new Date().toISOString(),
+        platform: webApp?.platform || 'web'
+      };
+
+      // Use non-blocking helper to prevent UI crashes if rules deny permission
+      setDocumentNonBlocking(userRef, userData, { merge: true });
     }
   }, [user, webApp, firestore, isMounted]);
 
@@ -226,6 +233,7 @@ export function ChatInterface() {
     { id: 'track', label: t('chat.trackPair'), icon: Eye },
     { id: 'pwa', label: t('chat.installGuide'), icon: Download },
     { id: 'settings', label: t('chat.switchSource'), icon: Settings },
+    { id: 'support', label: t('chat.support'), icon: MessageSquareMore },
   ], [t]);
 
   const resetChat = useCallback(() => {
@@ -246,9 +254,24 @@ export function ChatInterface() {
 
   const handleActionClick = (id: string) => {
     haptic('medium');
+    
+    // Log user action for metrics (Non-blocking)
+    if (user && firestore) {
+      const userRef = doc(firestore, 'users', user.uid);
+      setDocumentNonBlocking(userRef, { 
+        lastAction: id, 
+        updatedAt: new Date().toISOString() 
+      }, { merge: true });
+    }
+
     if (id === 'pwa') {
         setPwaPopoverOpen(true);
         return;
+    }
+
+    if (id === 'support') {
+      window.open('https://t.me/CurrencyAll_bot', '_blank');
+      return;
     }
     
     addMessage({ sender: 'user', text: t(`chat.user.${id}`) });
@@ -267,13 +290,13 @@ export function ChatInterface() {
         if (rate && user) {
           const alertId = Date.now().toString();
           const alertRef = doc(firestore, 'users', user.uid, 'notifications', alertId);
-          await setDoc(alertRef, {
+          setDocumentNonBlocking(alertRef, {
             ...data,
             id: alertId,
             userId: user.uid,
             baseRate: rate,
             createdAt: new Date().toISOString()
-          });
+          }, { merge: true });
 
           const alertText = t('chat.bot.alertSet', { 
             from: data.from, 
@@ -320,11 +343,8 @@ export function ChatInterface() {
     return (
       <div className="w-full max-w-md h-[88vh] max-h-[900px] flex flex-col bg-card/90 backdrop-blur-xl rounded-2xl shadow-2xl overflow-hidden border border-white/20">
         <header className="flex items-center justify-between p-4 border-b bg-background/50">
-          <div className="flex items-center gap-3">
-            <Bot className="h-10 w-10 text-primary" />
-            <div>
-              <span className="text-lg font-bold block leading-tight">{t('chat.title')}</span>
-            </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-tighter text-muted-foreground opacity-50 font-bold">ValutaBot</span>
           </div>
         </header>
         <div className="flex-1 overflow-hidden" />
@@ -335,24 +355,21 @@ export function ChatInterface() {
   return (
     <div className="w-full max-w-md h-[88vh] max-h-[900px] flex flex-col bg-card/90 backdrop-blur-xl rounded-2xl shadow-2xl overflow-hidden border border-white/20">
       <header className="flex items-center justify-between p-4 border-b bg-background/50">
-        <div className="flex items-center gap-3">
-          <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 3 }}>
-            <Bot className="h-10 w-10 text-primary" />
+        <div className="flex items-center gap-2">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <span className="text-[10px] uppercase tracking-tighter text-muted-foreground font-bold">{t('chat.title')}</span>
           </motion.div>
-          <div>
-            <span className="text-lg font-bold block leading-tight">{t('chat.title')}</span>
-            <p className="text-sm text-positive">{t('chat.online')}</p>
-          </div>
+          <div className="h-1 w-1 bg-positive rounded-full animate-pulse" />
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10" onClick={() => { haptic('light'); window.open('https://t.me/CurrencyAll_bot', '_blank'); }}>
-            <Send className="h-5 w-5" />
+          <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10 h-8 w-8" onClick={() => { haptic('light'); window.open('https://t.me/CurrencyAll_bot', '_blank'); }}>
+            <Send className="h-4 w-4" />
           </Button>
           <Popover open={autoClearPopoverOpen} onOpenChange={setAutoClearPopoverOpen}>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative" onClick={() => haptic('light')}>
-                <Timer className="h-5 w-5" />
-                {autoClearMinutes > 0 && <span className="absolute top-2 right-2 h-2 w-2 bg-primary rounded-full" />}
+              <Button variant="ghost" size="icon" className="relative h-8 w-8" onClick={() => haptic('light')}>
+                <Timer className="h-4 w-4" />
+                {autoClearMinutes > 0 && <span className="absolute top-1 right-1 h-1.5 w-1.5 bg-primary rounded-full" />}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-80">
@@ -361,7 +378,7 @@ export function ChatInterface() {
           </Popover>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-xs font-bold" onClick={() => haptic('light')}>
+              <Button variant="ghost" size="icon" className="text-[10px] font-bold h-8 w-8" onClick={() => haptic('light')}>
                 {lang.toUpperCase()}
               </Button>
             </DropdownMenuTrigger>
@@ -370,12 +387,12 @@ export function ChatInterface() {
               <DropdownMenuItem onClick={() => { haptic('medium'); setLang('ru'); }}>Русский</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="ghost" size="icon" onClick={() => { haptic('heavy'); resetChat(); }}><Eraser className="h-5 w-5" /></Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { haptic('heavy'); resetChat(); }}><Eraser className="h-4 w-4" /></Button>
           
           <Popover open={pwaPopoverOpen} onOpenChange={setPwaPopoverOpen}>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10" onClick={() => haptic('light')}>
-                <CircleHelp className="h-5 w-5" />
+              <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10 h-8 w-8" onClick={() => haptic('light')}>
+                <CircleHelp className="h-4 w-4" />
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-80 p-0 overflow-hidden border-primary/20 shadow-2xl" align="end">

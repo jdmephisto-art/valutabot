@@ -525,7 +525,7 @@ export const currencyNames = {
 export const translations = {
   en: {
     chat: {
-      title: 'CurrencyBot',
+      title: 'ValutaBot',
       online: 'Online',
       placeholder: 'Hello! I am — your Financial Radar 🛰',
       tgGreeting: 'Hello! I am — your Financial Radar 🛰\n\n📈 I already know official rates for tomorrow.\n💱 I calculate using NBRB, ECB, and other central banks.\n\nClick "Latest rates" to see where the ruble will swing tomorrow. Or use the Converter to plan your exchange.',
@@ -543,6 +543,7 @@ export const translations = {
       openInTelegram: 'Open in Telegram',
       installGuide: 'Install App',
       shareAlert: 'Share rate',
+      support: 'Contact support',
       user: {
         rates: 'Show latest rates',
         convert: 'I want to convert currency',
@@ -554,6 +555,7 @@ export const translations = {
         configure_pairs: 'Configure the rates list',
         other_assets: 'Show other assets',
         portfolio: 'Show my portfolio',
+        support: 'I need help / contact developer',
       },
       bot: {
         alertSet: 'OK! Alert is set for {from}/{to} {condition} {threshold}.',
@@ -787,6 +789,7 @@ export const translations = {
       openInTelegram: 'Открыть в Telegram',
       installGuide: 'Установить приложение',
       shareAlert: 'Поделиться курсом',
+      support: 'Связаться с нами',
       user: {
         rates: 'Показать последние курсы',
         convert: 'Я хочу конвертировать валюту',
@@ -798,6 +801,7 @@ export const translations = {
         configure_pairs: 'Настроить список курсов',
         other_assets: 'Показать иные активы',
         portfolio: 'Показать мой портфель',
+        support: 'Связаться с разработчиком / Помощь',
       },
       bot: {
         alertSet: 'ОК! Оповещение установлено для {from}/{to} {condition} {threshold}.',
