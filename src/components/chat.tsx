@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -362,9 +361,12 @@ export function ChatInterface() {
           </div>
           <div className="flex flex-col">
             <span className="text-xs font-bold leading-none">{t('chat.title')}</span>
-            <div className="flex items-center gap-1 mt-0.5">
-              <div className="h-1 w-1 bg-positive rounded-full animate-pulse" />
-              <span className="text-[9px] text-muted-foreground font-medium">{t('chat.online')}</span>
+            <div className="flex flex-col mt-0.5">
+              <div className="flex items-center gap-1">
+                <div className="h-1 w-1 bg-positive rounded-full animate-pulse" />
+                <span className="text-[9px] text-muted-foreground font-medium">{t('chat.online')}</span>
+              </div>
+              <span className="text-[8px] text-muted-foreground/50 font-bold tracking-tight uppercase leading-none mt-0.5">SnapSuit</span>
             </div>
           </div>
         </div>
