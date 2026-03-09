@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { findRate, preFetchInitialRates } from '@/lib/currencies';
+import { findRateWithDate, preFetchInitialRates } from '@/lib/currencies';
 import { ArrowRightLeft, Share2, AlertTriangle, BellPlus } from 'lucide-react';
 import { Button } from './ui/button';
 import { useCurrencies } from '@/hooks/use-currencies';
@@ -27,6 +27,7 @@ export function CurrencyConverter({ onNotify }: CurrencyConverterProps) {
   const [convertedAmount, setConvertedAmount] = useState('');
   const [displayRate, setDisplayRate] = useState<number | undefined>(undefined);
   const [tomorrowRate, setTomorrowRate] = useState<number | undefined>(undefined);
+  const [tomorrowDate, setTomorrowDate] = useState<string | undefined>(undefined);
   const [isConverting, setIsConverting] = useState(false);
 
   useEffect(() => { preFetchInitialRates(firestore); }, [firestore]);
@@ -35,13 +36,15 @@ export function CurrencyConverter({ onNotify }: CurrencyConverterProps) {
     const convert = () => {
         if (!fromCurrency || !toCurrency) return;
         setIsConverting(true);
-        const rate = findRate(fromCurrency, toCurrency);
-        const tRate = findRate(fromCurrency, toCurrency, true);
-        setDisplayRate(rate);
-        setTomorrowRate(tRate);
+        const todayData = findRateWithDate(fromCurrency, toCurrency, false);
+        const futureData = findRateWithDate(fromCurrency, toCurrency, true);
+        
+        setDisplayRate(todayData.rate);
+        setTomorrowRate(futureData.rate);
+        setTomorrowDate(futureData.date);
 
-        if (rate && amount && !isNaN(parseFloat(amount))) {
-          const result = parseFloat(amount) * rate;
+        if (todayData.rate && amount && !isNaN(parseFloat(amount))) {
+          const result = parseFloat(amount) * todayData.rate;
           setConvertedAmount(result > 1000 ? result.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : result.toFixed(4).replace(/\.?0+$/, ''));
         } else {
           setConvertedAmount('');
@@ -74,6 +77,7 @@ export function CurrencyConverter({ onNotify }: CurrencyConverterProps) {
   const hasTomorrowData = tomorrowRate !== undefined;
   const rateDiff = (tomorrowRate && displayRate) ? (tomorrowRate - displayRate) : 0;
   const diffStr = (rateDiff >= 0 ? '+' : '') + rateDiff.toFixed(4);
+  const formattedDate = tomorrowDate ? tomorrowDate.split('-').slice(1).reverse().join('.') : '';
 
   return (
     <Card className="bg-transparent border-0 shadow-none w-full px-[6px] py-2 overflow-hidden">
@@ -110,7 +114,10 @@ export function CurrencyConverter({ onNotify }: CurrencyConverterProps) {
               <div className="flex gap-3 items-start">
                 <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
                 <p className="text-[11px] text-amber-800 leading-tight font-medium">
-                  {t('converter.tomorrowWarning', { rate: tomorrowRate.toFixed(4), diff: diffStr })}
+                  {formattedDate 
+                    ? t('converter.fromDateWarning', { date: formattedDate, rate: tomorrowRate.toFixed(4), diff: diffStr })
+                    : t('converter.tomorrowWarning', { rate: tomorrowRate.toFixed(4), diff: diffStr })
+                  }
                 </p>
               </div>
               <Button variant="outline" size="sm" className="w-full h-7 text-[10px] border-amber-500/30 text-amber-700 hover:bg-amber-500/10 gap-1 bg-white/50" onClick={handleNotifyCta}>

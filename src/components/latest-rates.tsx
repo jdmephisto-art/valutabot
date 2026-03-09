@@ -86,13 +86,14 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
     }
   };
 
-  const handleShareTomorrow = (from: string, to: string, rate: number) => {
+  const handleShareTomorrow = (from: string, to: string, rate: number, date?: string) => {
     haptic('medium');
+    const dateFormatted = date ? date.split('-').slice(1).reverse().join('.') : '';
     const shareText = t('otherAssets.shareText', {
         from,
         to,
         rate: formatRate(rate)
-    });
+    }) + (dateFormatted ? ` (с ${dateFormatted})` : '');
     share(shareText);
   };
 
@@ -133,11 +134,14 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
         </Collapsible>
 
         <div className="space-y-5">
-          {rates.map(({ from, to, rate, tomorrowRate }) => {
+          {rates.map(({ from, to, rate, tomorrowRate, effectiveDate }) => {
             const key = `${from}/${to}`;
             const isChanged = changedRates.has(key);
             const direction = changedRates.get(key);
             const hasTomorrow = tomorrowRate !== undefined;
+            
+            // Format date for label: "с 21.10"
+            const dateLabel = effectiveDate ? effectiveDate.split('-').slice(1).reverse().join('.') : '';
 
             return (
               <div key={key} className="group relative">
@@ -158,12 +162,12 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
                     
                     {hasTomorrow && (
                       <button 
-                        onClick={() => handleShareTomorrow(from, to, tomorrowRate)}
-                        className="flex items-center gap-1 text-[10px] text-muted-foreground opacity-80 mt-0.5 font-medium hover:text-primary transition-colors group/tm"
+                        onClick={() => handleShareTomorrow(from, to, tomorrowRate, effectiveDate)}
+                        className="flex items-center gap-1 text-[9px] text-muted-foreground opacity-80 mt-0.5 font-bold hover:text-primary transition-colors group/tm whitespace-nowrap"
                       >
                         <Timer size={10} className="shrink-0" />
-                        <span>{t('latestRates.tomorrow')}: {formatRate(tomorrowRate)}</span>
-                        <Share2 size={8} className="ml-1 opacity-0 group-hover/tm:opacity-100 transition-opacity" />
+                        <span>{dateLabel ? t('latestRates.fromDate', { date: dateLabel }) : t('latestRates.tomorrow')}: {formatRate(tomorrowRate)}</span>
+                        <Share2 size={8} className="ml-0.5 opacity-0 group-hover/tm:opacity-100 transition-opacity" />
                       </button>
                     )}
                   </div>

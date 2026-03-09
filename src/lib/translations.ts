@@ -624,6 +624,7 @@ export const translations = {
       configTarget: 'Configure currency',
       targetCurrency: 'Show in',
       tomorrow: 'Tomorrow',
+      fromDate: 'from {date}',
       share: 'Share tomorrow rate',
     },
     converter: {
@@ -635,6 +636,7 @@ export const translations = {
       share: 'Share Result',
       shareText: "💱 {amount} {from} = {result} {to}. Calculated in @CurrencyAll_bot!",
       tomorrowWarning: "⚠️ Tomorrow the rate will change to {rate}. The rate will change by {diff}",
+      fromDateWarning: "⚠️ On {date} the rate will change to {rate}. Diff: {diff}",
       notifyCta: 'Notify me of changes',
     },
     notifications: {
@@ -870,6 +872,7 @@ export const translations = {
       configTarget: 'Настройка валюты',
       targetCurrency: 'Отображать в',
       tomorrow: 'Завтра',
+      fromDate: 'с {date}',
       share: 'Поделиться курсом на завтра',
     },
     converter: {
@@ -881,6 +884,7 @@ export const translations = {
       share: 'Поделиться результатом',
       shareText: "💱 {amount} {from} = {result} {to}. Посчитано в @CurrencyAll_bot!",
       tomorrowWarning: "⚠️ Завтра курс изменится на {rate}. Курс изменится на {diff}",
+      fromDateWarning: "⚠️ С {date} курс изменится на {rate}. Разница: {diff}",
       notifyCta: 'Уведомить об изменениях',
     },
     notifications: {
