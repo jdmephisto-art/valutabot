@@ -25,6 +25,7 @@ import { useTelegram } from '@/hooks/use-telegram';
 import { signInAnonymously } from 'firebase/auth';
 import { useAuth } from '@/firebase';
 import { collection, doc, deleteDoc } from 'firebase/firestore';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 type Message = {
   id: string;
@@ -118,7 +119,6 @@ export function ChatInterface() {
     }
   }, [user, auth, isMounted]);
 
-  // Safe analytics & user profile logging
   useEffect(() => {
     if (isMounted && user && firestore) {
       const tgUser = webApp?.initDataUnsafe?.user;
@@ -132,7 +132,6 @@ export function ChatInterface() {
         platform: webApp?.platform || 'web'
       };
 
-      // Use non-blocking helper to prevent UI crashes if rules deny permission
       setDocumentNonBlocking(userRef, userData, { merge: true });
     }
   }, [user, webApp, firestore, isMounted]);
@@ -233,7 +232,6 @@ export function ChatInterface() {
     { id: 'track', label: t('chat.trackPair'), icon: Eye },
     { id: 'pwa', label: t('chat.installGuide'), icon: Download },
     { id: 'settings', label: t('chat.switchSource'), icon: Settings },
-    { id: 'support', label: t('chat.support'), icon: MessageSquareMore },
   ], [t]);
 
   const resetChat = useCallback(() => {
@@ -255,7 +253,6 @@ export function ChatInterface() {
   const handleActionClick = (id: string) => {
     haptic('medium');
     
-    // Log user action for metrics (Non-blocking)
     if (user && firestore) {
       const userRef = doc(firestore, 'users', user.uid);
       setDocumentNonBlocking(userRef, { 
@@ -267,11 +264,6 @@ export function ChatInterface() {
     if (id === 'pwa') {
         setPwaPopoverOpen(true);
         return;
-    }
-
-    if (id === 'support') {
-      window.open('https://t.me/CurrencyAll_bot', '_blank');
-      return;
     }
     
     addMessage({ sender: 'user', text: t(`chat.user.${id}`) });
@@ -338,7 +330,6 @@ export function ChatInterface() {
     );
   };
 
-  // Safe SSR shell to prevent hydration mismatch
   if (!isMounted) {
     return (
       <div className="w-full max-w-md h-[88vh] max-h-[900px] flex flex-col bg-card/90 backdrop-blur-xl rounded-2xl shadow-2xl overflow-hidden border border-white/20">
@@ -371,52 +362,97 @@ export function ChatInterface() {
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10 h-8 w-8" onClick={() => { haptic('light'); window.open('https://t.me/CurrencyAll_bot', '_blank'); }}>
-            <Send className="h-4 w-4" />
-          </Button>
-          <Popover open={autoClearPopoverOpen} onOpenChange={setAutoClearPopoverOpen}>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative h-8 w-8" onClick={() => haptic('light')}>
-                <Timer className="h-4 w-4" />
-                {autoClearMinutes > 0 && <span className="absolute top-1 right-1 h-1.5 w-1.5 bg-primary rounded-full" />}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80">
-              <AutoClearManager currentMinutes={autoClearMinutes} onSetAutoClear={(m) => { setAutoClearMinutes(m); setAutoClearPopoverOpen(false); }} />
-            </PopoverContent>
-          </Popover>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-[10px] font-bold h-8 w-8" onClick={() => haptic('light')}>
-                {lang.toUpperCase()}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => { haptic('medium'); setLang('en'); }}>English</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => { haptic('medium'); setLang('ru'); }}>Русский</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { haptic('heavy'); resetChat(); }}><Eraser className="h-4 w-4" /></Button>
-          
-          <Popover open={pwaPopoverOpen} onOpenChange={setPwaPopoverOpen}>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10 h-8 w-8" onClick={() => haptic('light')}>
-                <CircleHelp className="h-4 w-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80 p-0 overflow-hidden border-primary/20 shadow-2xl" align="end">
-              <div className="p-4 bg-primary text-primary-foreground">
-                <h3 className="font-bold flex items-center gap-2"><Smartphone className="h-4 w-4" />{t('pwa.title')}</h3>
-                <p className="text-xs opacity-90 mt-1">{t('pwa.description')}</p>
-              </div>
-              <div className="p-4 space-y-4 bg-card">
-                <div className="flex gap-3"><Apple className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" /><p className="text-sm">{t('pwa.ios')}</p></div>
-                <div className="flex gap-3"><Smartphone className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" /><p className="text-sm">{t('pwa.android')}</p></div>
-                <div className="flex gap-3"><Monitor className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" /><p className="text-sm">{t('pwa.pc')}</p></div>
-                <Button variant="outline" size="sm" className="w-full mt-2" onClick={() => setPwaPopoverOpen(false)}>{lang === 'ru' ? 'Закрыть' : 'Close'}</Button>
-              </div>
-            </PopoverContent>
-          </Popover>
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10 h-8 w-8" onClick={() => { haptic('light'); window.open('https://t.me/CurrencyAll_bot', '_blank'); }}>
+                  <Send className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Telegram</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Popover open={autoClearPopoverOpen} onOpenChange={setAutoClearPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="icon" className="relative h-8 w-8" onClick={() => haptic('light')}>
+                      <Timer className="h-4 w-4" />
+                      {autoClearMinutes > 0 && <span className="absolute top-1 right-1 h-1.5 w-1.5 bg-primary rounded-full" />}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80">
+                    <AutoClearManager currentMinutes={autoClearMinutes} onSetAutoClear={(m) => { setAutoClearMinutes(m); setAutoClearPopoverOpen(false); }} />
+                  </PopoverContent>
+                </Popover>
+              </TooltipTrigger>
+              <TooltipContent>{t('chat.autoClear')}</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="text-[10px] font-bold h-8 w-8" onClick={() => haptic('light')}>
+                      {lang.toUpperCase()}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => { haptic('medium'); setLang('en'); }}>English</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { haptic('medium'); setLang('ru'); }}>Русский</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TooltipTrigger>
+              <TooltipContent>{lang === 'ru' ? 'Язык' : 'Language'}</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { haptic('heavy'); resetChat(); }}>
+                  <Eraser className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t('chat.clear')}</TooltipContent>
+            </Tooltip>
+            
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Popover open={pwaPopoverOpen} onOpenChange={setPwaPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10 h-8 w-8" onClick={() => haptic('light')}>
+                      <CircleHelp className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 p-0 overflow-hidden border-primary/20 shadow-2xl" align="end">
+                    <div className="p-4 bg-primary text-primary-foreground">
+                      <h3 className="font-bold flex items-center gap-2"><Smartphone className="h-4 w-4" />{t('pwa.title')}</h3>
+                      <p className="text-xs opacity-90 mt-1">{t('pwa.description')}</p>
+                    </div>
+                    <div className="p-4 space-y-4 bg-card">
+                      <div className="flex gap-3"><Apple className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" /><p className="text-sm">{t('pwa.ios')}</p></div>
+                      <div className="flex gap-3"><Smartphone className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" /><p className="text-sm">{t('pwa.android')}</p></div>
+                      <div className="flex gap-3"><Monitor className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" /><p className="text-sm">{t('pwa.pc')}</p></div>
+                      
+                      <div className="pt-2 border-t">
+                        <Button 
+                          variant="secondary" 
+                          size="sm" 
+                          className="w-full gap-2 text-primary font-bold" 
+                          onClick={() => { haptic('medium'); window.open('https://t.me/CurrencyAll_bot', '_blank'); }}
+                        >
+                          <MessageSquareMore className="h-4 w-4" />
+                          {t('chat.support')}
+                        </Button>
+                      </div>
+
+                      <Button variant="outline" size="sm" className="w-full" onClick={() => setPwaPopoverOpen(false)}>{lang === 'ru' ? 'Закрыть' : 'Close'}</Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </TooltipTrigger>
+              <TooltipContent>{lang === 'ru' ? 'Информация' : 'Information'}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </header>
       
