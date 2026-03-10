@@ -783,7 +783,7 @@ export const translations = {
       showHistory: 'История',
       trackPair: 'Отслеживать',
       switchSource: 'Источник данных',
-      autoClear: 'Auto-clear',
+      autoClear: 'Автоочистка',
       clear: 'Очистить чат',
       showDisplayedPairManager: 'Настроить список',
       showOtherAssets: 'Иные активы',
@@ -829,7 +829,7 @@ export const translations = {
       share: 'Поделиться портфелем',
       shareText: "📈 Мой инвестиционный портфель: {balance} {currency}. Следи за активами в @CurrencyAll_bot!",
       growth: "С последнего визита: {diff} ({percent}%) {icon}",
-      stable: "Баланс стабилен ⚖️",
+      stable: "Balance is stable ⚖️",
     },
     pwa: {
       title: 'Установить приложение',
