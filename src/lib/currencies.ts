@@ -294,7 +294,7 @@ async function fetchCbr() {
 
 async function fetchCoinGecko() {
     try {
-        const ids = 'bitcoin,ethereum,litecoin,ripple,bitcoin-cash,dash,solana,the-open-network,dogecoin,cardano,polkadot,tron,matic-network,avalanche-2,chainlink,tether,usd-coin,dai,notcoin,dogs,render-token,fetch-ai,binancecoin,near,cosmos,arbitrum,optimism,decentraland,aave,immutable-x,arweave,uniswap,maker,the-sandbox,axie-infinity,shiba-inu,pepe,floki,bonк,filecoin,storj,helium,theta-token,ondo-finance,okb,crypto-com-chain,singularitynet,ethena,jupiter-exchange,pyth-network,starknet,wormhole,dymension,saga,tnsr,pendle';
+        const ids = 'bitcoin,ethereum,litecoin,ripple,bitcoin-cash,dash,solana,the-open-network,dogecoin,cardano,polkadot,tron,matic-network,avalanche-2,chainlink,tether,usd-coin,dai,notcoin,dogs,render-token,fetch-ai,binancecoin,near,cosmos,arbitrum,optimism,decentraland,aave,immutable-x,arweave,uniswap,maker,the-sandbox,axie-infinity,shiba-inu,pepe,floki,bonk,filecoin,storj,helium,theta-token,ondo-finance,okb,crypto-com-chain,singularitynet,ethena,jupiter-exchange,pyth-network,starknet,wormhole,dymension,saga,tnsr,pendle,aptos,sui';
         const res = await fetch(`/api/coingecko?endpoint=simple/price&ids=${ids}&vs_currencies=usd`, { cache: 'no-store' });
         if (!res.ok) return null;
         const data = await res.json();
@@ -312,7 +312,7 @@ async function fetchCoinGecko() {
             'TRX': 'tron', 'LINK': 'chainlink', 'AGIX': 'singularitynet',
             'ENA': 'ethena', 'JUP': 'jupiter-exchange', 'PYTH': 'pyth-network',
             'STRK': 'starknet', 'W': 'wormhole', 'DYM': 'dymension', 'SAGA': 'saga',
-            'TNSR': 'tnsr', 'PENDLE': 'pendle'
+            'TNSR': 'tnsr', 'PENDLE': 'pendle', 'APT': 'aptos', 'SUI': 'sui'
         };
         const rates: Record<string, number> = {};
         Object.keys(mapping).forEach(code => {

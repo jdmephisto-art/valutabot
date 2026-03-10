@@ -45,7 +45,14 @@ export function CurrencyConverter({ onNotify }: CurrencyConverterProps) {
 
         if (todayData.rate && amount && !isNaN(parseFloat(amount))) {
           const result = parseFloat(amount) * todayData.rate;
-          setConvertedAmount(result > 1000 ? result.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : result.toFixed(4).replace(/\.?0+$/, ''));
+          // Используем повышенную точность для малых значений (как в LatestRates)
+          if (result > 1000) {
+            setConvertedAmount(result.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+          } else if (result > 10) {
+            setConvertedAmount(result.toFixed(4).replace(/\.?0+$/, ''));
+          } else {
+            setConvertedAmount(result.toFixed(8).replace(/\.?0+$/, ''));
+          }
         } else {
           setConvertedAmount('');
         }
