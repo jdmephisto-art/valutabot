@@ -23,7 +23,7 @@ export const curatedAltcoinCodes = [
     'ENA', 'JUP', 'PYTH', 'STRK', 'W', 'DYM', 'SAGA', 'TNSR', 'RENDER', 'PENDLE'
 ];
 
-// Маппинг для CoinGecko (используется и в текущих курсах, и в истории)
+// Маппинг для CoinGecko
 export const cryptoMapping: Record<string, string> = { 
     'BTC': 'bitcoin', 'ETH': 'ethereum', 'TON': 'the-open-network', 'SOL': 'solana', 
     'FET': 'fetch-ai', 'RNDR': 'render-token', 'BNB': 'binancecoin', 'NEAR': 'near', 
@@ -367,97 +367,113 @@ export async function findRateAsync(from: string, to: string, db: Firestore): Pr
 
 /**
  * Enhanced Database-First Historical Rate Fetcher.
- * Checks DB, handles Crypto via CoinGecko, Fiat via NBRB/CBR, and saves results.
+ * Corrected API request params and robust object initialization.
  */
 export async function getHistoricalRate(from: string, to: string, date: Date, db: Firestore): Promise<HistoricalRateResult | undefined> {
-    await preFetchInitialRates(db);
-    const targetDateStr = format(date, 'yyyy-MM-dd');
-    const todayStr = format(new Date(), 'yyyy-MM-dd');
-    
-    if (targetDateStr >= todayStr) {
-        const data = findRateWithDate(from, to, targetDateStr > todayStr);
-        if (data.rate !== undefined) return { rate: data.rate, date, isFallback: false };
-    }
+    try {
+        await preFetchInitialRates(db);
+        const targetDateStr = format(date, 'yyyy-MM-dd');
+        const todayStr = format(new Date(), 'yyyy-MM-dd');
+        
+        if (targetDateStr >= todayStr) {
+            const data = findRateWithDate(from, to, targetDateStr > todayStr);
+            if (data.rate !== undefined) return { rate: data.rate, date, isFallback: false };
+        }
 
-    const dbData = await loadHistoryRange(date, date, db);
-    let dayData = dbData[targetDateStr] || {};
+        const dbData = await loadHistoryRange(date, date, db);
+        let dayData: MultiSourceData = dbData[targetDateStr] || {};
 
-    const getPriceFromData = (currency: string, data: MultiSourceData) => {
-        if (currency === 'USD') return 1;
-        const sources: DataSource[] = ['nbrb', 'cbr', 'nbk', 'ecb', 'coingecko' as any, 'worldcurrencyapi'];
-        for (const s of sources) if (data[currency]?.[s]) return data[currency][s].v;
-        return undefined;
-    };
+        const getPriceFromData = (currency: string, data: MultiSourceData) => {
+            if (currency === 'USD') return 1;
+            const sources: DataSource[] = ['nbrb', 'cbr', 'nbk', 'ecb', 'coingecko' as any, 'worldcurrencyapi'];
+            for (const s of sources) if (data[currency]?.[s]) return data[currency][s].v;
+            return undefined;
+        };
 
-    let fromPrice = getPriceFromData(from, dayData);
-    let toPrice = getPriceFromData(to, dayData);
+        let fromPrice = getPriceFromData(from, dayData);
+        let toPrice = getPriceFromData(to, dayData);
 
-    if (fromPrice === undefined || toPrice === undefined) {
-        const currenciesToFetch = [];
-        if (fromPrice === undefined && from !== 'USD') currenciesToFetch.push(from);
-        if (toPrice === undefined && to !== 'USD') currenciesToFetch.push(to);
+        if (fromPrice === undefined || toPrice === undefined) {
+            const currenciesToFetch = [];
+            if (fromPrice === undefined && from !== 'USD') currenciesToFetch.push(from);
+            if (toPrice === undefined && to !== 'USD') currenciesToFetch.push(to);
 
-        let dataChanged = false;
-        for (const code of currenciesToFetch) {
-            const isCrypto = cryptoMapping[code] !== undefined;
-            let fetchedVal: number | undefined;
-            let sourceId: string = 'unknown';
+            let dataChanged = false;
+            for (const code of currenciesToFetch) {
+                const isCrypto = cryptoMapping[code] !== undefined;
+                let fetchedVal: number | undefined;
+                let sourceId: string = 'unknown';
 
-            if (isCrypto) {
-                const id = cryptoMapping[code];
-                const cgDate = format(date, 'dd-MM-yyyy'); // Fixed format: MM instead of mm
-                const res = await fetch(`/api/coingecko?endpoint=coins/${id}/history?date=${cgDate}`, { cache: 'no-store' });
-                if (res.ok) {
-                    const data = await res.json();
-                    fetchedVal = data?.market_data?.current_price?.usd;
-                    sourceId = 'coingecko';
+                try {
+                    if (isCrypto) {
+                        const id = cryptoMapping[code];
+                        const cgDate = format(date, 'dd-MM-yyyy'); // Correct MM for month
+                        // Corrected URL: use & instead of ? for second parameter
+                        const res = await fetch(`/api/coingecko?endpoint=coins/${id}/history&date=${cgDate}`, { cache: 'no-store' });
+                        if (res.ok) {
+                            const data = await res.json();
+                            fetchedVal = data?.market_data?.current_price?.usd;
+                            sourceId = 'coingecko';
+                        } else {
+                            console.error(`CoinGecko API error for ${code} on ${cgDate}: ${res.status}`);
+                        }
+                    } else if (activeDataSource === 'nbrb' || activeDataSource === 'cbr') {
+                        const liveData = await fetchSourceHistorical(date, activeDataSource);
+                        if (liveData && liveData[code]) {
+                            fetchedVal = liveData[code].v;
+                            sourceId = activeDataSource;
+                        }
+                    }
+                } catch (apiErr) {
+                    console.error(`Historical API fetch failed for ${code} on ${targetDateStr}:`, apiErr);
                 }
-            } else if (activeDataSource === 'nbrb' || activeDataSource === 'cbr') {
-                const liveData = await fetchSourceHistorical(date, activeDataSource);
-                if (liveData && liveData[code]) {
-                    fetchedVal = liveData[code].v;
-                    sourceId = activeDataSource;
+
+                if (fetchedVal !== undefined) {
+                    // Safe initialization to prevent "Cannot set property of undefined"
+                    if (!dayData[code]) dayData[code] = {};
+                    dayData[code][sourceId] = { v: fetchedVal, d: targetDateStr, off: !isCrypto };
+                    dataChanged = true;
                 }
             }
 
-            if (fetchedVal !== undefined) {
-                if (!dayData[code]) dayData[code] = {};
-                dayData[code][sourceId] = { v: fetchedVal, d: targetDateStr, off: !isCrypto };
-                dataChanged = true;
+            if (dataChanged) {
+                // Silent Non-blocking write: No await, only log error to console
+                setDoc(doc(db, 'rates_history', targetDateStr), {
+                    timestamp: Timestamp.fromDate(startOfDay(date)),
+                    base: 'USD',
+                    data: dayData
+                }, { merge: true }).catch(err => {
+                    console.error(`Background history cache write failed for ${targetDateStr}:`, err);
+                });
             }
+
+            fromPrice = getPriceFromData(from, dayData);
+            toPrice = getPriceFromData(to, dayData);
         }
 
-        if (dataChanged) {
-            // Non-blocking background write to prevent permission errors from stopping the UI
-            setDoc(doc(db, 'rates_history', targetDateStr), {
-                timestamp: Timestamp.fromDate(startOfDay(date)),
-                base: 'USD',
-                data: dayData
-            }, { merge: true }).catch(err => {
-                // Log to console for Vercel/Debug, but don't show UI error to user
-                console.error(`Background history cache write failed for ${targetDateStr}:`, err);
-            });
+        if (fromPrice !== undefined && toPrice !== undefined) {
+            return { rate: fromPrice / toPrice, date, isFallback: false };
         }
-
-        fromPrice = getPriceFromData(from, dayData);
-        toPrice = getPriceFromData(to, dayData);
-    }
-
-    if (fromPrice !== undefined && toPrice !== undefined) {
-        return { rate: fromPrice / toPrice, date, isFallback: false };
+    } catch (globalErr) {
+        console.error(`getHistoricalRate failed for ${from}/${to} on ${format(date, 'yyyy-MM-dd')}:`, globalErr);
     }
     
     return undefined;
 }
 
 /**
- * Parallelized Dynamics Fetcher using Promise.all.
+ * Parallelized Dynamics Fetcher with individual day error handling.
  */
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date, db: Firestore): Promise<{ date: string; rate: number }[]> {
     const days = eachDayOfInterval({ start: startDate, end: endDate });
     const results = await Promise.all(days.map(async (d) => {
-        const res = await getHistoricalRate(from, to, d, db);
-        return res ? { date: format(d, 'dd.MM'), rate: res.rate } : null;
+        try {
+            const res = await getHistoricalRate(from, to, d, db);
+            return res ? { date: format(d, 'dd.MM'), rate: res.rate } : null;
+        } catch (e) {
+            console.error(`Dynamic day fetch failed for ${format(d, 'dd.MM.yyyy')}:`, e);
+            return null;
+        }
     }));
     return results.filter((r): r is { date: string; rate: number } => r !== null);
 }
