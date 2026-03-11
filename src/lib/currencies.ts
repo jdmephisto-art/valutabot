@@ -5,7 +5,7 @@ import { doc, getDoc, setDoc, collection, addDoc, Firestore, onSnapshot, query, 
 
 let activeDataSource: DataSource = 'nbrb';
 
-// Сессионный кэш для предотвращения повторных запросов
+// Сессионный кэш для предотвращения повторных запросов в рамках одного сеанса
 const sessionCache = new Map<string, any>();
 
 export const metalsCodes = ['XAU', 'XAG', 'XPT', 'XPD'];
@@ -23,19 +23,33 @@ export const curatedAltcoinCodes = [
     'ENA', 'JUP', 'PYTH', 'STRK', 'W', 'DYM', 'SAGA', 'TNSR', 'RENDER', 'PENDLE'
 ];
 
+// Маппинг для CoinGecko (используется и в текущих курсах, и в истории)
+export const cryptoMapping: Record<string, string> = { 
+    'BTC': 'bitcoin', 'ETH': 'ethereum', 'TON': 'the-open-network', 'SOL': 'solana', 
+    'FET': 'fetch-ai', 'RNDR': 'render-token', 'BNB': 'binancecoin', 'NEAR': 'near', 
+    'ATOM': 'cosmos', 'ARB': 'arbitrum', 'OP': 'optimism', 'LTC': 'litecoin',
+    'XRP': 'ripple', 'BCH': 'bitcoin-cash', 'DOGE': 'dogecoin', 'ADA': 'cardano', 
+    'DOT': 'polkadot', 'NOT': 'notcoin', 'DOGS': 'dogs', 'USDT': 'tether', 'USDC': 'usd-coin',
+    'MANA': 'decentraland', 'AAVE': 'aave', 'IMX': 'immutable-x', 'AR': 'arweave',
+    'UNI': 'uniswap', 'MKR': 'maker', 'SAND': 'the-sandbox', 'AXS': 'axie-infinity',
+    'SHIB': 'shiba-inu', 'PEPE': 'pepe', 'FLOKI': 'floki', 'BONK': 'bonk',
+    'FIL': 'filecoin', 'STORJ': 'storj', 'HNT': 'helium', 'THETA': 'theta-token',
+    'ONDO': 'ondo-finance', 'OKB': 'okb', 'CRO': 'crypto-com-chain',
+    'TRX': 'tron', 'LINK': 'chainlink', 'AGIX': 'singularitynet',
+    'ENA': 'ethena', 'JUP': 'jupiter-exchange', 'PYTH': 'pyth-network',
+    'STRK': 'starknet', 'W': 'wormhole', 'DYM': 'dymension', 'SAGA': 'saga',
+    'TNSR': 'tnsr', 'PENDLE': 'pendle', 'APT': 'aptos', 'SUI': 'sui', 'RENDER': 'render-token'
+};
+
 let unifiedData: MultiSourceData = {};
 let unifiedDataTomorrow: MultiSourceData = {};
 
-const FIAT_TTL = 60 * 60 * 1000; // 60 минут
-const CRYPTO_TTL = 5 * 60 * 1000; // 5 минут
+const FIAT_TTL = 60 * 60 * 1000; 
+const CRYPTO_TTL = 5 * 60 * 1000; 
 
 export function setDataSource(source: DataSource) { activeDataSource = source; }
 export function getDataSource(): DataSource { return activeDataSource; }
 
-/**
- * Global rate finder with cascade logic.
- * Returns both rate and its effective date.
- */
 export function findRateWithDate(from: string, to: string, isFuture: boolean = false): { rate: number | undefined, date: string | undefined } {
     if (from === to) return { rate: 1, date: undefined };
 
@@ -54,10 +68,6 @@ export function findRateWithDate(from: string, to: string, isFuture: boolean = f
             if (entry) return { v: entry.v, d: entry.d };
         }
 
-        if (currency === 'BYN' && targetMap['BYR']) {
-            return getBestData('BYR');
-        }
-
         return { v: undefined, d: undefined };
     };
 
@@ -65,7 +75,6 @@ export function findRateWithDate(from: string, to: string, isFuture: boolean = f
     const toData = getBestData(to);
     
     if (fromData.v !== undefined && toData.v !== undefined && toData.v !== 0) {
-        // Pick the most relevant date (if one source has a date and other doesn't, or pick future-most)
         const effectiveDate = fromData.d || toData.d;
         return { rate: fromData.v / toData.v, date: effectiveDate };
     }
@@ -129,7 +138,6 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
             const targetMap = dateStr > todayStr ? nextDataTomorrow : nextData;
             Object.keys(rates).forEach(currency => {
                 if (!targetMap[currency]) targetMap[currency] = {};
-                // Only overwrite future rates if the new date is later or current is empty
                 if (dateStr > todayStr) {
                     const existingDate = targetMap[currency][sourceId]?.d;
                     if (!existingDate || dateStr >= existingDate) {
@@ -187,18 +195,13 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
     return unifiedData;
 }
 
-/**
- * Optimized NBRB fetch: pulls today and future window (up to +3 days for Monday)
- */
 async function fetchNbrb() {
     try {
         const todayStr = format(new Date(), 'yyyy-MM-dd');
         const tomorrowStr = format(addDays(new Date(), 1), 'yyyy-MM-dd');
         const mondayStr = format(addDays(new Date(), 3), 'yyyy-MM-dd');
 
-        // Fetch Today, Tomorrow and Monday in parallel to find the latest published official rate
         const datesToFetch = [todayStr, tomorrowStr];
-        // On Fridays (5) and Saturdays (6), check Monday as well
         const dayOfWeek = new Date().getDay();
         if (dayOfWeek === 5 || dayOfWeek === 6) datesToFetch.push(mondayStr);
 
@@ -220,16 +223,7 @@ async function fetchNbrb() {
             })
         );
 
-        const todayData = fetchResults[0];
-        // Find the LATEST future data that is different from today
-        const futureData = fetchResults.slice(1)
-            .reverse()
-            .find(res => res !== null);
-
-        return {
-            today: todayData,
-            tomorrow: futureData || null
-        };
+        return { today: fetchResults[0], tomorrow: fetchResults.slice(1).reverse().find(res => res !== null) || null };
     } catch (e) { return null; }
 }
 
@@ -294,29 +288,13 @@ async function fetchCbr() {
 
 async function fetchCoinGecko() {
     try {
-        const ids = 'bitcoin,ethereum,litecoin,ripple,bitcoin-cash,dash,solana,the-open-network,dogecoin,cardano,polkadot,tron,matic-network,avalanche-2,chainlink,tether,usd-coin,dai,notcoin,dogs,render-token,fetch-ai,binancecoin,near,cosmos,arbitrum,optimism,decentraland,aave,immutable-x,arweave,uniswap,maker,the-sandbox,axie-infinity,shiba-inu,pepe,floki,bonk,filecoin,storj,helium,theta-token,ondo-finance,okb,crypto-com-chain,singularitynet,ethena,jupiter-exchange,pyth-network,starknet,wormhole,dymension,saga,tnsr,pendle,aptos,sui';
+        const ids = Object.values(cryptoMapping).join(',');
         const res = await fetch(`/api/coingecko?endpoint=simple/price&ids=${ids}&vs_currencies=usd`, { cache: 'no-store' });
         if (!res.ok) return null;
         const data = await res.json();
-        const mapping: Record<string, string> = { 
-            'BTC': 'bitcoin', 'ETH': 'ethereum', 'TON': 'the-open-network', 'SOL': 'solana', 
-            'FET': 'fetch-ai', 'RNDR': 'render-token', 'BNB': 'binancecoin', 'NEAR': 'near', 
-            'ATOM': 'cosmos', 'ARB': 'arbitrum', 'OP': 'optimism', 'LTC': 'litecoin',
-            'XRP': 'ripple', 'BCH': 'bitcoin-cash', 'DOGE': 'dogecoin', 'ADA': 'cardano', 
-            'DOT': 'polkadot', 'NOT': 'notcoin', 'DOGS': 'dogs', 'USDT': 'tether', 'USDC': 'usd-coin',
-            'MANA': 'decentraland', 'AAVE': 'aave', 'IMX': 'immutable-x', 'AR': 'arweave',
-            'UNI': 'uniswap', 'MKR': 'maker', 'SAND': 'the-sandbox', 'AXS': 'axie-infinity',
-            'SHIB': 'shiba-inu', 'PEPE': 'pepe', 'FLOKI': 'floki', 'BONK': 'bonk',
-            'FIL': 'filecoin', 'STORJ': 'storj', 'HNT': 'helium', 'THETA': 'theta-token',
-            'ONDO': 'ondo-finance', 'OKB': 'okb', 'CRO': 'crypto-com-chain',
-            'TRX': 'tron', 'LINK': 'chainlink', 'AGIX': 'singularitynet',
-            'ENA': 'ethena', 'JUP': 'jupiter-exchange', 'PYTH': 'pyth-network',
-            'STRK': 'starknet', 'W': 'wormhole', 'DYM': 'dymension', 'SAGA': 'saga',
-            'TNSR': 'tnsr', 'PENDLE': 'pendle', 'APT': 'aptos', 'SUI': 'sui'
-        };
         const rates: Record<string, number> = {};
-        Object.keys(mapping).forEach(code => {
-            const id = mapping[code];
+        Object.keys(cryptoMapping).forEach(code => {
+            const id = cryptoMapping[code];
             if (data[id]?.usd) rates[code] = data[id].usd;
         });
         return { rates, date: format(new Date(), 'yyyy-MM-dd') };
@@ -378,14 +356,7 @@ export async function getLatestRates(pairs: string[], db: Firestore): Promise<Ex
         const [from, to] = p.split('/');
         const todayData = findRateWithDate(from, to, false);
         const futureData = findRateWithDate(from, to, true);
-        
-        return { 
-            from, 
-            to, 
-            rate: todayData.rate, 
-            tomorrowRate: futureData.rate,
-            effectiveDate: futureData.date
-        };
+        return { from, to, rate: todayData.rate, tomorrowRate: futureData.rate, effectiveDate: futureData.date };
     });
 }
 
@@ -394,6 +365,10 @@ export async function findRateAsync(from: string, to: string, db: Firestore): Pr
     return findRate(from, to);
 }
 
+/**
+ * Enhanced Database-First Historical Rate Fetcher.
+ * Checks DB, handles Crypto via CoinGecko, Fiat via NBRB/CBR, and saves results.
+ */
 export async function getHistoricalRate(from: string, to: string, date: Date, db: Firestore): Promise<HistoricalRateResult | undefined> {
     await preFetchInitialRates(db);
     const targetDateStr = format(date, 'yyyy-MM-dd');
@@ -405,44 +380,82 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
     }
 
     const dbData = await loadHistoryRange(date, date, db);
-    if (dbData[targetDateStr]) {
-        const data = dbData[targetDateStr];
-        const getP = (c: string) => {
-            if (c === 'USD') return 1;
-            const officials: DataSource[] = ['nbrb', 'cbr', 'nbk', 'ecb'];
-            for (const s of officials) if (data[c]?.[s]) return data[c][s].v;
-            return undefined;
-        };
-        const fP = getP(from);
-        const tP = getP(to);
-        if (fP && tP) return { rate: fP / tP, date, isFallback: false };
+    let dayData = dbData[targetDateStr] || {};
+
+    const getPriceFromData = (currency: string, data: MultiSourceData) => {
+        if (currency === 'USD') return 1;
+        const sources: DataSource[] = ['nbrb', 'cbr', 'nbk', 'ecb', 'coingecko' as any, 'worldcurrencyapi'];
+        for (const s of sources) if (data[currency]?.[s]) return data[currency][s].v;
+        return undefined;
+    };
+
+    let fromPrice = getPriceFromData(from, dayData);
+    let toPrice = getPriceFromData(to, dayData);
+
+    if (fromPrice === undefined || toPrice === undefined) {
+        const currenciesToFetch = [];
+        if (fromPrice === undefined && from !== 'USD') currenciesToFetch.push(from);
+        if (toPrice === undefined && to !== 'USD') currenciesToFetch.push(to);
+
+        let dataChanged = false;
+        for (const code of currenciesToFetch) {
+            const isCrypto = cryptoMapping[code] !== undefined;
+            let fetchedVal: number | undefined;
+            let sourceId: string = 'unknown';
+
+            if (isCrypto) {
+                const id = cryptoMapping[code];
+                const cgDate = format(date, 'dd-mm-yyyy');
+                const res = await fetch(`/api/coingecko?endpoint=coins/${id}/history?date=${cgDate}`, { cache: 'no-store' });
+                if (res.ok) {
+                    const data = await res.json();
+                    fetchedVal = data?.market_data?.current_price?.usd;
+                    sourceId = 'coingecko';
+                }
+            } else if (activeDataSource === 'nbrb' || activeDataSource === 'cbr') {
+                const liveData = await fetchSourceHistorical(date, activeDataSource);
+                if (liveData && liveData[code]) {
+                    fetchedVal = liveData[code].v;
+                    sourceId = activeDataSource;
+                }
+            }
+
+            if (fetchedVal !== undefined) {
+                if (!dayData[code]) dayData[code] = {};
+                dayData[code][sourceId] = { v: fetchedVal, d: targetDateStr, off: !isCrypto };
+                dataChanged = true;
+            }
+        }
+
+        if (dataChanged) {
+            await setDoc(doc(db, 'rates_history', targetDateStr), {
+                timestamp: Timestamp.fromDate(startOfDay(date)),
+                base: 'USD',
+                data: dayData
+            }, { merge: true });
+        }
+
+        fromPrice = getPriceFromData(from, dayData);
+        toPrice = getPriceFromData(to, dayData);
     }
 
-    if (activeDataSource === 'nbrb' || activeDataSource === 'cbr') {
-        const liveData = await fetchAndCacheHistorical(date, db);
-        if (liveData) {
-            const getP = (c: string) => {
-                if (c === 'USD') return 1;
-                if (liveData[c]?.[activeDataSource]) return liveData[c][activeDataSource].v;
-                return undefined;
-            };
-            const fP = getP(from);
-            const tP = getP(to);
-            if (fP && tP) return { rate: fP / tP, date, isFallback: false };
-        }
+    if (fromPrice !== undefined && toPrice !== undefined) {
+        return { rate: fromPrice / toPrice, date, isFallback: false };
     }
     
     return undefined;
 }
 
+/**
+ * Parallelized Dynamics Fetcher using Promise.all.
+ */
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date, db: Firestore): Promise<{ date: string; rate: number }[]> {
     const days = eachDayOfInterval({ start: startDate, end: endDate });
-    const results: { date: string; rate: number }[] = [];
-    for (const d of days) {
+    const results = await Promise.all(days.map(async (d) => {
         const res = await getHistoricalRate(from, to, d, db);
-        if (res) results.push({ date: format(d, 'dd.MM'), rate: res.rate });
-    }
-    return results;
+        return res ? { date: format(d, 'dd.MM'), rate: res.rate } : null;
+    }));
+    return results.filter((r): r is { date: string; rate: number } => r !== null);
 }
 
 async function loadHistoryRange(from: Date, to: Date, db: Firestore): Promise<Record<string, MultiSourceData>> {
@@ -463,14 +476,12 @@ async function loadHistoryRange(from: Date, to: Date, db: Firestore): Promise<Re
     return results;
 }
 
-async function fetchAndCacheHistorical(date: Date, db: Firestore): Promise<MultiSourceData | null> {
+async function fetchSourceHistorical(date: Date, source: DataSource): Promise<Record<string, { v: number, d: string, off: boolean }> | null> {
     const dateStr = format(date, 'yyyy-MM-dd');
-    const cacheKey = `hist-${dateStr}-${activeDataSource}`;
+    const cacheKey = `hist-${dateStr}-${source}`;
     if (sessionCache.has(cacheKey)) return sessionCache.get(cacheKey);
 
-    if (activeDataSource !== 'nbrb' && activeDataSource !== 'cbr') return null;
-
-    const rates = await (activeDataSource === 'nbrb' 
+    const rates = await (source === 'nbrb' 
         ? (async (d: Date) => { 
             const dStr = format(d, 'yyyy-MM-dd');
             const res = await fetch(`https://api.nbrb.by/exrates/rates?ondate=${dStr}&periodicity=0`, { cache: 'no-store' });
@@ -510,18 +521,10 @@ async function fetchAndCacheHistorical(date: Date, db: Firestore): Promise<Multi
         })(date));
 
     if (rates) {
-        const historicalData: MultiSourceData = {};
-        Object.keys(rates).forEach(currency => {
-            historicalData[currency] = { [activeDataSource]: { v: rates[currency], d: dateStr, off: true } };
-        });
-        try {
-            await addDoc(collection(db, 'rates_history'), {
-                timestamp: Timestamp.fromDate(startOfDay(date)),
-                base: 'USD', data: historicalData
-            });
-        } catch {}
-        sessionCache.set(cacheKey, historicalData);
-        return historicalData;
+        const result: Record<string, { v: number, d: string, off: boolean }> = {};
+        Object.keys(rates).forEach(c => { result[c] = { v: rates[c], d: dateStr, off: true }; });
+        sessionCache.set(cacheKey, result);
+        return result;
     }
     return null;
 }
