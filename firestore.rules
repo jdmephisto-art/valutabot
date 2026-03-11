@@ -22,11 +22,11 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Правила для истории (get и list - всем для графиков, create - только авторизованным сессиям)
+    // Правила для истории (get и list - всем для графиков, create и update - только авторизованным сессиям для кэширования)
     match /rates_history/{id} {
       allow get, list: if true;
-      allow create: if isSignedIn();
-      allow update, delete: if false; 
+      allow create, update: if isSignedIn();
+      allow delete: if false; 
     }
 
     // Личные данные пользователей

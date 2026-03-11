@@ -405,7 +405,7 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
 
             if (isCrypto) {
                 const id = cryptoMapping[code];
-                const cgDate = format(date, 'dd-mm-yyyy');
+                const cgDate = format(date, 'dd-MM-yyyy'); // Fixed format: MM instead of mm
                 const res = await fetch(`/api/coingecko?endpoint=coins/${id}/history?date=${cgDate}`, { cache: 'no-store' });
                 if (res.ok) {
                     const data = await res.json();
@@ -428,11 +428,15 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
         }
 
         if (dataChanged) {
-            await setDoc(doc(db, 'rates_history', targetDateStr), {
+            // Non-blocking background write to prevent permission errors from stopping the UI
+            setDoc(doc(db, 'rates_history', targetDateStr), {
                 timestamp: Timestamp.fromDate(startOfDay(date)),
                 base: 'USD',
                 data: dayData
-            }, { merge: true });
+            }, { merge: true }).catch(err => {
+                // Log to console for Vercel/Debug, but don't show UI error to user
+                console.error(`Background history cache write failed for ${targetDateStr}:`, err);
+            });
         }
 
         fromPrice = getPriceFromData(from, dayData);
