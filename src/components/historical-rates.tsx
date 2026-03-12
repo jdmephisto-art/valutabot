@@ -64,7 +64,12 @@ export function HistoricalRates() {
 
   const numberFormatter = (val: number) => {
     if (val === 0) return '0';
-    const options = { minimumFractionDigits: 2, maximumFractionDigits: 4 };
+    // Adaptive precision: more digits for very small numbers (crypto)
+    const isSmall = val < 0.1;
+    const options = { 
+      minimumFractionDigits: isSmall ? 4 : 2, 
+      maximumFractionDigits: isSmall ? 8 : 4 
+    };
     return val.toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US', options);
   };
 
@@ -291,7 +296,7 @@ export function HistoricalRates() {
                                 axisLine={false} 
                                 tickMargin={8} 
                                 tickFormatter={numberFormatter} 
-                                width={60}
+                                width={80}
                                 domain={['dataMin', 'dataMax']}
                             />
                             <ChartTooltip content={<ChartTooltipContent formatter={(value) => numberFormatter(Number(value))} />} />
