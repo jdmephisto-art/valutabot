@@ -26,7 +26,7 @@ export async function POST(request: Request) {
       
       const inline_keyboard = [
         [{ text: 'Открыть ВалютаБот 🤖', web_app: { url: siteUrl } }],
-        [{ text: '📊 Последние курсы', url: `https://t.me/${botUsername}?startapp=rates` }]
+        [{ text: '📊 Последние курсы', web_app: { url: `${siteUrl}/?startapp=rates` } }]
       ];
 
       await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
