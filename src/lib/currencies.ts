@@ -407,8 +407,7 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
                 try {
                     if (isCrypto) {
                         const id = cryptoMapping[code];
-                        const cgDate = format(date, 'dd-MM-yyyy'); // Correct MM for month
-                        // Corrected URL: use & instead of ? for second parameter
+                        const cgDate = format(date, 'dd-MM-yyyy'); 
                         const res = await fetch(`/api/coingecko?endpoint=coins/${id}/history&date=${cgDate}`, { cache: 'no-store' });
                         if (res.ok) {
                             const data = await res.json();
@@ -429,7 +428,6 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
                 }
 
                 if (fetchedVal !== undefined) {
-                    // Safe initialization to prevent "Cannot set property of undefined"
                     if (!dayData[code]) dayData[code] = {};
                     dayData[code][sourceId] = { v: fetchedVal, d: targetDateStr, off: !isCrypto };
                     dataChanged = true;
@@ -437,7 +435,6 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
             }
 
             if (dataChanged) {
-                // Silent Non-blocking write: No await, only log error to console
                 setDoc(doc(db, 'rates_history', targetDateStr), {
                     timestamp: Timestamp.fromDate(startOfDay(date)),
                     base: 'USD',

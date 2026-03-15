@@ -53,6 +53,9 @@ export function ChatInterface() {
   const { haptic, webApp } = useTelegram();
   const { t, lang, setLang } = useTranslation();
   
+  const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'CurrencyAll_bot';
+  const botUrl = `https://t.me/${botUsername}`;
+
   const [trackedPairs, setTrackedPairs] = useState<Map<string, number>>(new Map());
   const [displayedPairs, setDisplayedPairs] = useState<string[]>(defaultDisplayedPairs);
   const [dataSource, setDataSourceState] = useState<DataSource>('nbrb');
@@ -365,7 +368,7 @@ export function ChatInterface() {
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10 h-8 w-8" onClick={() => { haptic('light'); window.open('https://t.me/CurrencyAll_bot', '_blank'); }}>
+                <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10 h-8 w-8" onClick={() => { haptic('light'); window.open(botUrl, '_blank'); }}>
                   <Send className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
@@ -441,7 +444,7 @@ export function ChatInterface() {
                       variant="secondary" 
                       size="sm" 
                       className="w-full gap-2 text-primary font-bold" 
-                      onClick={() => { haptic('medium'); window.open('https://t.me/CurrencyAll_bot', '_blank'); }}
+                      onClick={() => { haptic('medium'); window.open(botUrl, '_blank'); }}
                     >
                       <MessageSquareMore className="h-4 w-4" />
                       {t('chat.support')}

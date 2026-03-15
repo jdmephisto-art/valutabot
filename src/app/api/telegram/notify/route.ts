@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 
 /**
@@ -10,6 +9,7 @@ export async function POST(request: Request) {
     const { chatId, text, userId, alertId, isAdminAlert } = await request.json();
     const token = process.env.TELEGRAM_BOT_TOKEN;
     const adminId = process.env.ADMIN_TELEGRAM_ID;
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://valutabot.vercel.app';
 
     if (!token) {
       console.error('TELEGRAM_BOT_TOKEN is not configured');
@@ -25,9 +25,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'chatId is required' }, { status: 400 });
     }
 
-    // Build the keyboard
+    // Build the keyboard with Native WebApp button
     const inline_keyboard: any[][] = [[
-      { text: 'Открыть ВалютаБот 🤖', url: 'https://t.me/CurrencyAll_bot/app' }
+      { text: 'Открыть ВалютаБот 🤖', web_app: { url: siteUrl } }
     ]];
 
     // Add "Unsubscribe" button if it's a price alert

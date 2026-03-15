@@ -11,6 +11,8 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const token = process.env.TELEGRAM_BOT_TOKEN;
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://valutabot.vercel.app';
+    const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'CurrencyAll_bot';
 
     if (!token) {
         console.error('TELEGRAM_BOT_TOKEN is missing in environment variables');
@@ -18,14 +20,13 @@ export async function POST(request: Request) {
     }
 
     // 1. Handle Commands (e.g., /start)
-    // This part does NOT require Firebase, so it should be fast and reliable.
     if (body.message && body.message.text === '/start') {
       const chatId = body.message.chat.id;
       const welcomeText = `<b>Привет! Я — твой финансовый радар 🛰</b>\n\n📈 Уже знаю официальные курсы на завтра.\n💱 Считаю по курсам НБРБ, ЕЦБ и других ЦБ.\n\nНажми «Последние курсы», чтобы увидеть, в какую сторону качнется рубль завтра. Или воспользуйся Конвертером, чтобы спланировать обмен.`;
       
       const inline_keyboard = [
-        [{ text: 'Открыть ВалютаБот 🤖', url: 'https://t.me/CurrencyAll_bot/app' }],
-        [{ text: '📊 Последние курсы', url: 'https://t.me/CurrencyAll_bot/app?startapp=rates' }]
+        [{ text: 'Открыть ВалютаБот 🤖', web_app: { url: siteUrl } }],
+        [{ text: '📊 Последние курсы', url: `https://t.me/${botUsername}?startapp=rates` }]
       ];
 
       await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -42,7 +43,6 @@ export async function POST(request: Request) {
     }
 
     // 2. Handle Callback Query (Unsubscribe button click)
-    // This requires Firestore access.
     if (body.callback_query) {
       const callbackData = body.callback_query.data;
       const callbackId = body.callback_query.id;
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
             body: JSON.stringify({
               chat_id: chatId,
               message_id: messageId,
-              text: `<b>Уведомление остановлено.</b>\nВы больше не будете получать оповещения по этой паре.\n\n<a href="https://t.me/CurrencyAll_bot/app">Открыть ВалютаБот 🤖</a>`,
+              text: `<b>Уведомление остановлено.</b>\nВы больше не будете получать оповещения по этой паре.\n\n<a href="https://t.me/${botUsername}">Открыть ВалютаБот 🤖</a>`,
               parse_mode: 'HTML'
             })
           });
@@ -85,7 +85,6 @@ export async function POST(request: Request) {
     }
 
     // 3. Handle Inline Query
-    // This requires Firestore access to get current rates.
     if (body.inline_query) {
       const queryId = body.inline_query.id;
       const queryText = body.inline_query.query.trim().toUpperCase();
@@ -109,7 +108,6 @@ export async function POST(request: Request) {
           const getP = (c: string) => {
               if (c === 'USD') return 1;
               const sources = ratesRaw[c] || {};
-              // Cascade logic for inline query
               return sources['nbrb']?.v || sources['cbr']?.v || sources['worldcurrencyapi']?.v || undefined;
           };
 
@@ -127,7 +125,7 @@ export async function POST(request: Request) {
               title: resultText,
               description: `📊 Актуальный курс из ВалютаБот`,
               input_message_content: {
-                message_text: `<b>Курс валют:</b>\n${resultText}\n\n<a href="https://t.me/CurrencyAll_bot/app">Открыть ВалютаБот 🤖</a>`,
+                message_text: `<b>Курс валют:</b>\n${resultText}\n\n<a href="https://t.me/${botUsername}">Открыть ВалютаБот 🤖</a>`,
                 parse_mode: 'HTML'
               }
             }];
@@ -148,7 +146,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error('Global Telegram Webhook error:', error);
-    // Always return 200 to Telegram to prevent retry loops on errors
     return NextResponse.json({ ok: false }, { status: 200 });
   }
 }

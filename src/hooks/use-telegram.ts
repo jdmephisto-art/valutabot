@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -8,6 +7,9 @@ import { useEffect, useState } from 'react';
  */
 export function useTelegram() {
   const [webApp, setWebApp] = useState<any>(null);
+  
+  const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'CurrencyAll_bot';
+  const defaultAppUrl = `https://t.me/${botUsername}`;
 
   useEffect(() => {
     const tg = (window as any).Telegram?.WebApp;
@@ -24,7 +26,7 @@ export function useTelegram() {
     }
   };
 
-  const share = (text: string, url: string = 'https://t.me/CurrencyAll_bot/app') => {
+  const share = (text: string, url: string = defaultAppUrl) => {
     const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
     if (webApp) {
       webApp.openTelegramLink(shareUrl);
