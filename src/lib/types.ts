@@ -25,6 +25,7 @@ export type Alert = {
   baseRate: number;
   createdAt: string;
   sendToTelegram?: boolean;
+  telegramId?: string;
 };
 
 export type DataSource = 'nbrb' | 'worldcurrencyapi' | 'cbr' | 'ecb' | 'nbk';

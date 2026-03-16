@@ -100,6 +100,10 @@
           "type": "string",
           "description": "Reference to the User. (Relationship: User 1:N Notification)"
         },
+        "telegramId": {
+          "type": "string",
+          "description": "The user's Telegram ID for sending push notifications."
+        },
         "baseCurrencyId": {
           "type": "string",
           "description": "Reference to the base Currency. (Relationship: Currency 1:N Notification)"

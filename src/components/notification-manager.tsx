@@ -10,8 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { AlertTriangle, BellPlus, Send } from 'lucide-react';
+import { AlertTriangle, BellPlus, Send, Info } from 'lucide-react';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useTranslation } from '@/hooks/use-translation';
 import { useMemo } from 'react';
@@ -19,6 +18,7 @@ import { CurrencyCombobox } from './currency-combobox';
 
 type NotificationManagerProps = {
     onSetAlert: (data: z.infer<ReturnType<typeof getAlertSchema>>) => void;
+    isTelegramAvailable?: boolean;
 }
 
 const getAlertSchema = (t: (key: string, params?: Record<string, string | number>) => string) => z.object({
@@ -33,9 +33,9 @@ const getAlertSchema = (t: (key: string, params?: Record<string, string | number
   });
 
 
-export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
+export function NotificationManager({ onSetAlert, isTelegramAvailable }: NotificationManagerProps) {
   const { currencies } = useCurrencies();
-  const { t } = useTranslation();
+  const { t, lang } = useTranslation();
 
   const alertSchema = useMemo(() => getAlertSchema(t), [t]);
   type AlertFormValues = z.infer<typeof alertSchema>;
@@ -142,29 +142,45 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
                 />
             </div>
 
-            <FormField
-              control={form.control}
-              name="sendToTelegram"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 bg-primary/5">
-                  <div className="space-y-0.5">
-                    <FormLabel className="text-xs font-bold flex items-center gap-2">
-                      <Send className="h-3 w-3 text-primary" />
-                      {t('notifications.sendToTelegram')}
-                    </FormLabel>
-                    <FormDescription className="text-[10px]">
-                      {t('notifications.sendToTelegramDesc')}
-                    </FormDescription>
-                  </div>
-                  <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                </FormItem>
+            <div className="space-y-2">
+              <FormField
+                control={form.control}
+                name="sendToTelegram"
+                render={({ field }) => (
+                  <FormItem className={cn(
+                    "flex flex-row items-center justify-between rounded-lg border p-3 transition-colors",
+                    !isTelegramAvailable ? "opacity-50 bg-muted/50 cursor-not-allowed" : "bg-primary/5 border-primary/10"
+                  )}>
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-xs font-bold flex items-center gap-2">
+                        <Send className={cn("h-3 w-3", isTelegramAvailable ? "text-primary" : "text-muted-foreground")} />
+                        {t('notifications.sendToTelegram')}
+                      </FormLabel>
+                      <FormDescription className="text-[10px]">
+                        {t('notifications.sendToTelegramDesc')}
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={!isTelegramAvailable}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              {!isTelegramAvailable && (
+                <div className="flex items-center gap-2 p-2 bg-amber-500/10 border border-amber-500/20 rounded-md">
+                  <Info className="h-3 w-3 text-amber-600 shrink-0" />
+                  <p className="text-[9px] text-amber-700 leading-tight">
+                    {lang === 'ru' 
+                      ? 'Функция доступна только внутри Telegram-бота. Откройте ВалютаБот в мессенджере.' 
+                      : 'This feature is only available inside the Telegram bot.'}
+                  </p>
+                </div>
               )}
-            />
+            </div>
 
             <Button type="submit" className="w-full">
               <BellPlus className="mr-2 h-4 w-4" />

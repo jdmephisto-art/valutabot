@@ -144,41 +144,49 @@ export function ChatInterface() {
           scrollToBottom();
       }} />;
       if (id === 'convert') component = <CurrencyConverter onNotify={() => handleActionClick('alert')} />;
-      if (id === 'alert') component = <NotificationManager onSetAlert={async (data) => {
-        const rate = await findRateAsync(data.from, data.to, firestore);
-        if (rate && user) {
-          const alertId = Date.now().toString();
-          const alertRef = doc(firestore, 'users', user.uid, 'notifications', alertId);
-          setDocumentNonBlocking(alertRef, {
-            ...data,
-            id: alertId,
-            userId: user.uid,
-            baseRate: rate,
-            createdAt: new Date().toISOString()
-          }, { merge: true });
+      if (id === 'alert') component = <NotificationManager 
+        isTelegramAvailable={!!webApp?.initDataUnsafe?.user?.id}
+        onSetAlert={async (data) => {
+          const rate = await findRateAsync(data.from, data.to, firestore);
+          const tgUserId = webApp?.initDataUnsafe?.user?.id;
+          
+          if (rate && user) {
+            const alertId = Date.now().toString();
+            const alertRef = doc(firestore, 'users', user.uid, 'notifications', alertId);
+            
+            const alertData = {
+              ...data,
+              id: alertId,
+              userId: user.uid,
+              telegramId: tgUserId ? String(tgUserId) : null,
+              baseRate: rate,
+              createdAt: new Date().toISOString()
+            };
 
-          const alertText = t('chat.bot.alertSet', { 
-            from: data.from, 
-            to: data.to, 
-            condition: data.condition === 'above' ? t('notifications.above') : t('notifications.below'), 
-            threshold: data.threshold 
-          });
-          addMessage({ sender: 'bot', text: alertText });
+            setDocumentNonBlocking(alertRef, alertData, { merge: true });
 
-          // Send confirmation to Telegram if requested
-          const tgId = webApp?.initDataUnsafe?.user?.id;
-          if (data.sendToTelegram && tgId) {
-            fetch('/api/telegram/notify', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                chatId: tgId,
-                text: `✅ <b>Оповещение установлено!</b>\n\nЯ напишу вам сюда, когда пара <b>${data.from}/${data.to}</b> станет ${data.condition === 'above' ? 'выше или равна' : 'ниже или равна'} <b>${data.threshold}</b>.`
-              })
+            const alertText = t('chat.bot.alertSet', { 
+              from: data.from, 
+              to: data.to, 
+              condition: data.condition === 'above' ? t('notifications.above') : t('notifications.below'), 
+              threshold: data.threshold 
             });
+            addMessage({ sender: 'bot', text: alertText });
+
+            // Send confirmation to Telegram if requested and available
+            if (data.sendToTelegram && tgUserId) {
+              fetch('/api/telegram/notify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  chatId: tgUserId,
+                  text: `✅ <b>Оповещение установлено!</b>\n\nЯ напишу вам сюда, когда пара <b>${data.from}/${data.to}</b> станет ${data.condition === 'above' ? 'выше или равна' : 'ниже или равна'} <b>${data.threshold}</b>.`
+                })
+              });
+            }
           }
-        }
-      }} />;
+        }} 
+      />;
       if (id === 'history') component = <HistoricalRates />;
       if (id === 'track') component = <TrackingManager trackedPairs={Array.from(trackedPairs.keys())} onAddPair={async (f, t) => {
         const r = await findRateAsync(f, t, firestore);
@@ -288,8 +296,6 @@ export function ChatInterface() {
     if (!isMounted || !cloudAlerts || cloudAlerts.length === 0) return;
 
     const checkInterval = setInterval(async () => {
-      const tgId = webApp?.initDataUnsafe?.user?.id;
-      
       for (const alert of cloudAlerts) {
         const currentRate = await findRateAsync(alert.from, alert.to, firestore);
         
@@ -305,13 +311,13 @@ export function ChatInterface() {
               component: <RateUpdateCard pair={`${alert.from}/${alert.to}`} oldRate={alert.baseRate} newRate={currentRate} />
             });
 
-            // Send notification to Telegram if flag is set or if it's a global user preference
-            if (tgId && user && alert.sendToTelegram) {
+            // Send notification to Telegram using stored telegramId
+            if (alert.sendToTelegram && alert.telegramId && user) {
               fetch('/api/telegram/notify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  chatId: tgId,
+                  chatId: alert.telegramId,
                   userId: user.uid,
                   alertId: alert.id,
                   text: `🔔 <b>Оповещение о курсе!</b>\n\nПара <b>${alert.from}/${alert.to}</b> достигла <b>${currentRate.toFixed(4)}</b>.\n\nПорог: ${alert.condition === 'above' ? '≥' : '≤'} ${alert.threshold}`
@@ -329,7 +335,7 @@ export function ChatInterface() {
     }, 60000);
 
     return () => clearInterval(checkInterval);
-  }, [cloudAlerts, firestore, addMessage, t, webApp, user, isMounted]);
+  }, [cloudAlerts, firestore, addMessage, t, user, isMounted]);
 
   const handleDataSourceChange = (source: DataSource) => {
     setDataSource(source);
