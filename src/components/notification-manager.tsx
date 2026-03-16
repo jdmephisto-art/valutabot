@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useForm } from 'react-hook-form';
@@ -5,10 +6,12 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertTriangle, BellPlus } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { AlertTriangle, BellPlus, Send } from 'lucide-react';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { useTranslation } from '@/hooks/use-translation';
 import { useMemo } from 'react';
@@ -22,7 +25,8 @@ const getAlertSchema = (t: (key: string, params?: Record<string, string | number
     from: z.string().min(1, t('validation.selectCurrency')),
     to: z.string().min(1, t('validation.selectCurrency')),
     threshold: z.coerce.number().positive(t('validation.positiveThreshold')),
-    condition: z.enum(['above', 'below'], { required_error: t('validation.selectCondition') })
+    condition: z.enum(['above', 'below'], { required_error: t('validation.selectCondition') }),
+    sendToTelegram: z.boolean().default(false),
   }).refine(data => data.from !== data.to, {
     message: t('validation.differentCurrencies'),
     path: ["to"],
@@ -40,9 +44,10 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
     resolver: zodResolver(alertSchema),
     defaultValues: {
       from: 'USD',
-      to: 'EUR',
+      to: 'BYN',
       condition: 'above',
       threshold: 1,
+      sendToTelegram: false,
     },
   });
 
@@ -50,7 +55,7 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
     <Card className="bg-card/50 backdrop-blur-sm border-0 shadow-none">
       <CardHeader>
         <CardTitle className="text-lg font-semibold flex items-center gap-2">
-            <AlertTriangle />
+            <AlertTriangle className="text-primary" />
             {t('notifications.title')}
         </CardTitle>
       </CardHeader>
@@ -136,6 +141,30 @@ export function NotificationManager({ onSetAlert }: NotificationManagerProps) {
                 )}
                 />
             </div>
+
+            <FormField
+              control={form.control}
+              name="sendToTelegram"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 bg-primary/5">
+                  <div className="space-y-0.5">
+                    <FormLabel className="text-xs font-bold flex items-center gap-2">
+                      <Send className="h-3 w-3 text-primary" />
+                      {t('notifications.sendToTelegram')}
+                    </FormLabel>
+                    <FormDescription className="text-[10px]">
+                      {t('notifications.sendToTelegramDesc')}
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
 
             <Button type="submit" className="w-full">
               <BellPlus className="mr-2 h-4 w-4" />

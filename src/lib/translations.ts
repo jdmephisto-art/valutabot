@@ -1,3 +1,4 @@
+
 export const currencyNames = {
   en: {
     'AED': 'United Arab Emirates Dirham',
@@ -401,7 +402,7 @@ export const currencyNames = {
     'TRY': 'Турецкая лира',
     'TTD': 'Доллар Тринидада и Тобаго',
     'TWD': 'Новый тайваньский доллар',
-    'TZS': 'Танзанийский шиллинг',
+    'TZS': 'Tanzanian Shilling',
     'UAH': 'Украинская гривна',
     'UGX': 'Угандийский шиллинг',
     'USD': 'Доллар США',
@@ -648,6 +649,8 @@ export const translations = {
       below: 'Below',
       threshold: 'Threshold',
       button: 'Set Alert',
+      sendToTelegram: 'Send to Telegram bot',
+      sendToTelegramDesc: 'I will send a message to your chat when the rate changes.',
       shareText: "📊 Current {from}/{to} rate: {rate}. Track assets in @CurrencyAll_bot!",
       toast: {
         title: 'Alert set!',
@@ -896,6 +899,8 @@ export const translations = {
       below: 'Ниже',
       threshold: 'Порог',
       button: 'Установить оповещение',
+      sendToTelegram: 'Дублировать в Telegram бот',
+      sendToTelegramDesc: 'Я пришлю сообщение прямо в чат, когда курс изменится.',
       shareText: "📊 Актуальный курс {from}/{to}: {rate}. Следи за активами в @CurrencyAll_bot!",
       toast: {
         title: 'Оповещение установлено!',

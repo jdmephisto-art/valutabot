@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -95,6 +96,101 @@ export function ChatInterface() {
     }
   }, []);
 
+  const getActionButtons = useCallback((): ActionButtonProps[] => [
+    { id: 'rates', label: t('chat.showRates'), icon: LineChart },
+    { id: 'convert', label: t('chat.showConverter'), icon: CircleDollarSign },
+    { id: 'portfolio', label: t('chat.showPortfolio'), icon: Briefcase },
+    { id: 'other_assets', label: t('chat.showOtherAssets'), icon: Box },
+    { id: 'alert', label: t('chat.setAlert'), icon: BellRing },
+    { id: 'history', label: t('chat.showHistory'), icon: History },
+    { id: 'track', label: t('chat.trackPair'), icon: Eye },
+    { id: 'pwa', label: t('chat.installGuide'), icon: Download },
+    { id: 'settings', label: t('chat.switchSource'), icon: Settings },
+  ], [t]);
+
+  const resetChat = useCallback(() => {
+    setMessages([]);
+    addMessage({
+      sender: 'bot',
+      text: t('chat.placeholder'),
+      options: getActionButtons(),
+    });
+  }, [addMessage, getActionButtons, t]);
+
+  const handleActionClick = useCallback((id: string) => {
+    haptic('medium');
+    
+    if (user && firestore) {
+      const userRef = doc(firestore, 'users', user.uid);
+      setDocumentNonBlocking(userRef, { 
+        lastAction: id, 
+        updatedAt: new Date().toISOString() 
+      }, { merge: true });
+    }
+
+    if (id === 'pwa') {
+        setPwaPopoverOpen(true);
+        return;
+    }
+    
+    addMessage({ sender: 'user', text: t(`chat.user.${id}`) });
+    
+    setTimeout(() => {
+      let component: React.ReactNode = null;
+      if (id === 'rates') component = <LatestRates pairs={displayedPairs} onAddPair={(f, t) => { setDisplayedPairs(prev => [...prev, `${f}/${t}`]); return true; }} onRemovePair={(p) => setDisplayedPairs(prev => prev.filter(x => x !== p))} />;
+      if (id === 'portfolio') component = <PortfolioManager />;
+      if (id === 'other_assets') component = <OtherAssetsView onShowRate={(from) => {
+          addMessage({ sender: 'bot', component: <LatestRates mode="single" pairs={[`${from}/USD`]} /> });
+          scrollToBottom();
+      }} />;
+      if (id === 'convert') component = <CurrencyConverter onNotify={() => handleActionClick('alert')} />;
+      if (id === 'alert') component = <NotificationManager onSetAlert={async (data) => {
+        const rate = await findRateAsync(data.from, data.to, firestore);
+        if (rate && user) {
+          const alertId = Date.now().toString();
+          const alertRef = doc(firestore, 'users', user.uid, 'notifications', alertId);
+          setDocumentNonBlocking(alertRef, {
+            ...data,
+            id: alertId,
+            userId: user.uid,
+            baseRate: rate,
+            createdAt: new Date().toISOString()
+          }, { merge: true });
+
+          const alertText = t('chat.bot.alertSet', { 
+            from: data.from, 
+            to: data.to, 
+            condition: data.condition === 'above' ? t('notifications.above') : t('notifications.below'), 
+            threshold: data.threshold 
+          });
+          addMessage({ sender: 'bot', text: alertText });
+
+          // Send confirmation to Telegram if requested
+          const tgId = webApp?.initDataUnsafe?.user?.id;
+          if (data.sendToTelegram && tgId) {
+            fetch('/api/telegram/notify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chatId: tgId,
+                text: `✅ <b>Оповещение установлено!</b>\n\nЯ напишу вам сюда, когда пара <b>${data.from}/${data.to}</b> станет ${data.condition === 'above' ? 'выше или равна' : 'ниже или равна'} <b>${data.threshold}</b>.`
+              })
+            });
+          }
+        }
+      }} />;
+      if (id === 'history') component = <HistoricalRates />;
+      if (id === 'track') component = <TrackingManager trackedPairs={Array.from(trackedPairs.keys())} onAddPair={async (f, t) => {
+        const r = await findRateAsync(f, t, firestore);
+        if (r) { setTrackedPairs(prev => new Map(prev).set(`${f}/${t}`, r)); return true; }
+        return false;
+      }} onRemovePair={(p) => setTrackedPairs(prev => { const n = new Map(prev); n.delete(p); return n; })} onIntervalChange={() => {}} currentInterval={30000} />;
+      if (id === 'settings') component = <DataSourceSwitcher currentSource={dataSource} onSourceChange={handleDataSourceChange} />;
+
+      addMessage({ sender: 'bot', component });
+    }, 400);
+  }, [user, firestore, haptic, addMessage, t, displayedPairs, trackedPairs, dataSource, webApp]);
+
   useEffect(() => {
     setIsMounted(true);
     const savedPairs = localStorage.getItem('valutabot_displayed_pairs');
@@ -111,6 +207,15 @@ export function ChatInterface() {
     }
     setDataSourceState(getDataSource());
   }, []);
+
+  // Handle Deep Linking (start_param === 'rates')
+  useEffect(() => {
+    if (isMounted && webApp?.initDataUnsafe?.start_param === 'rates') {
+      setTimeout(() => {
+        handleActionClick('rates');
+      }, 500);
+    }
+  }, [isMounted, webApp, handleActionClick]);
 
   useEffect(() => {
     scrollToBottom();
@@ -158,7 +263,7 @@ export function ChatInterface() {
         }, autoClearMinutes * 60 * 1000);
         return () => clearTimeout(timer);
     }
-  }, [autoClearMinutes, messages.length, isMounted]);
+  }, [autoClearMinutes, messages.length, isMounted, resetChat]);
 
   const handleApiError = useCallback((source: string) => {
     const tgId = webApp?.initDataUnsafe?.user?.id;
@@ -200,7 +305,8 @@ export function ChatInterface() {
               component: <RateUpdateCard pair={`${alert.from}/${alert.to}`} oldRate={alert.baseRate} newRate={currentRate} />
             });
 
-            if (tgId && user) {
+            // Send notification to Telegram if flag is set or if it's a global user preference
+            if (tgId && user && alert.sendToTelegram) {
               fetch('/api/telegram/notify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -225,93 +331,11 @@ export function ChatInterface() {
     return () => clearInterval(checkInterval);
   }, [cloudAlerts, firestore, addMessage, t, webApp, user, isMounted]);
 
-  const getActionButtons = useCallback((): ActionButtonProps[] => [
-    { id: 'rates', label: t('chat.showRates'), icon: LineChart },
-    { id: 'convert', label: t('chat.showConverter'), icon: CircleDollarSign },
-    { id: 'portfolio', label: t('chat.showPortfolio'), icon: Briefcase },
-    { id: 'other_assets', label: t('chat.showOtherAssets'), icon: Box },
-    { id: 'alert', label: t('chat.setAlert'), icon: BellRing },
-    { id: 'history', label: t('chat.showHistory'), icon: History },
-    { id: 'track', label: t('chat.trackPair'), icon: Eye },
-    { id: 'pwa', label: t('chat.installGuide'), icon: Download },
-    { id: 'settings', label: t('chat.switchSource'), icon: Settings },
-  ], [t]);
-
-  const resetChat = useCallback(() => {
-    setMessages([]);
-    addMessage({
-      sender: 'bot',
-      text: t('chat.placeholder'),
-      options: getActionButtons(),
-    });
-  }, [addMessage, getActionButtons, t]);
-
   const handleDataSourceChange = (source: DataSource) => {
     setDataSource(source);
     setDataSourceState(source);
     resetChat();
     preFetchInitialRates(firestore, handleApiError);
-  };
-
-  const handleActionClick = (id: string) => {
-    haptic('medium');
-    
-    if (user && firestore) {
-      const userRef = doc(firestore, 'users', user.uid);
-      setDocumentNonBlocking(userRef, { 
-        lastAction: id, 
-        updatedAt: new Date().toISOString() 
-      }, { merge: true });
-    }
-
-    if (id === 'pwa') {
-        setPwaPopoverOpen(true);
-        return;
-    }
-    
-    addMessage({ sender: 'user', text: t(`chat.user.${id}`) });
-    
-    setTimeout(() => {
-      let component: React.ReactNode = null;
-      if (id === 'rates') component = <LatestRates pairs={displayedPairs} onAddPair={(f, t) => { setDisplayedPairs(prev => [...prev, `${f}/${t}`]); return true; }} onRemovePair={(p) => setDisplayedPairs(prev => prev.filter(x => x !== p))} />;
-      if (id === 'portfolio') component = <PortfolioManager />;
-      if (id === 'other_assets') component = <OtherAssetsView onShowRate={(from) => {
-          addMessage({ sender: 'bot', component: <LatestRates mode="single" pairs={[`${from}/USD`]} /> });
-          scrollToBottom();
-      }} />;
-      if (id === 'convert') component = <CurrencyConverter onNotify={() => handleActionClick('alert')} />;
-      if (id === 'alert') component = <NotificationManager onSetAlert={async (data) => {
-        const rate = await findRateAsync(data.from, data.to, firestore);
-        if (rate && user) {
-          const alertId = Date.now().toString();
-          const alertRef = doc(firestore, 'users', user.uid, 'notifications', alertId);
-          setDocumentNonBlocking(alertRef, {
-            ...data,
-            id: alertId,
-            userId: user.uid,
-            baseRate: rate,
-            createdAt: new Date().toISOString()
-          }, { merge: true });
-
-          const alertText = t('chat.bot.alertSet', { 
-            from: data.from, 
-            to: data.to, 
-            condition: data.condition === 'above' ? t('notifications.above') : t('notifications.below'), 
-            threshold: data.threshold 
-          });
-          addMessage({ sender: 'bot', text: alertText });
-        }
-      }} />;
-      if (id === 'history') component = <HistoricalRates />;
-      if (id === 'track') component = <TrackingManager trackedPairs={Array.from(trackedPairs.keys())} onAddPair={async (f, t) => {
-        const r = await findRateAsync(f, t, firestore);
-        if (r) { setTrackedPairs(prev => new Map(prev).set(`${f}/${t}`, r)); return true; }
-        return false;
-      }} onRemovePair={(p) => setTrackedPairs(prev => { const n = new Map(prev); n.delete(p); return n; })} onIntervalChange={() => {}} currentInterval={30000} />;
-      if (id === 'settings') component = <DataSourceSwitcher currentSource={dataSource} onSourceChange={handleDataSourceChange} />;
-
-      addMessage({ sender: 'bot', component });
-    }, 400);
   };
 
   useEffect(() => {

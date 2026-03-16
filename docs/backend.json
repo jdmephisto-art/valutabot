@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "User": {
@@ -114,6 +115,10 @@
         "triggerAbove": {
           "type": "boolean",
           "description": "If true, the notification triggers when the rate is above the threshold. If false, when below."
+        },
+        "sendToTelegram": {
+          "type": "boolean",
+          "description": "Whether to send the notification to the user's Telegram bot chat."
         }
       },
       "required": [

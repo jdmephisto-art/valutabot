@@ -1,3 +1,4 @@
+
 import type { LucideIcon } from 'lucide-react';
 
 export type Currency = {
@@ -23,6 +24,7 @@ export type Alert = {
   threshold: number;
   baseRate: number;
   createdAt: string;
+  sendToTelegram?: boolean;
 };
 
 export type DataSource = 'nbrb' | 'worldcurrencyapi' | 'cbr' | 'ecb' | 'nbk';

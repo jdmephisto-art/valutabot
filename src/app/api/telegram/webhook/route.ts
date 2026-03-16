@@ -1,11 +1,11 @@
+
 import { NextResponse } from 'next/server';
 import { initializeFirebase } from '@/firebase';
 import { doc, getDoc, deleteDoc } from 'firebase/firestore';
 
 /**
  * Telegram Webhook Route
- * Handles bot commands, Inline Queries, and Callback Queries (Unsubscribe).
- * Optimized to respond to /start even if Firebase initialization is slow.
+ * Handles bot commands, Inline Queries, Callback Queries, and Direct Text queries.
  */
 export async function POST(request: Request) {
   try {
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || 'CurrencyAll_bot';
 
     if (!token) {
-        console.error('TELEGRAM_BOT_TOKEN is missing in environment variables');
+        console.error('TELEGRAM_BOT_TOKEN is missing');
         return NextResponse.json({ ok: false }, { status: 200 });
     }
 
@@ -42,7 +42,47 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    // 2. Handle Callback Query (Unsubscribe button click)
+    // 2. Handle Direct Text Queries (e.g., user types "USD" or "BTC")
+    if (body.message && body.message.text && !body.message.text.startsWith('/')) {
+      const chatId = body.message.chat.id;
+      const queryText = body.message.text.trim().toUpperCase();
+      
+      try {
+        const { firestore } = initializeFirebase();
+        const snap = await getDoc(doc(firestore, 'rates_cache', 'unified'));
+        const ratesRaw = snap.exists() ? snap.data().data : {};
+        
+        // Search for currency in cache
+        if (ratesRaw[queryText]) {
+          const sources = ratesRaw[queryText];
+          const bestSource = sources['nbrb'] || sources['cbr'] || sources['coingecko'] || Object.values(sources)[0];
+          
+          if (bestSource) {
+            const price = bestSource.v;
+            const date = bestSource.d;
+            const reply = `📊 <b>Курс ${queryText} к USD:</b>\n\nЦена: <code>${price.toFixed(4)}</code>\nДата: ${date}\n\n<i>Для точного расчета воспользуйтесь приложением:</i>`;
+            
+            await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: chatId,
+                text: reply,
+                parse_mode: 'HTML',
+                reply_markup: {
+                  inline_keyboard: [[{ text: 'Открыть ВалютаБот 🤖', web_app: { url: siteUrl } }]]
+                }
+              })
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Text query parsing failed:', e);
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    // 3. Handle Callback Query (Unsubscribe)
     if (body.callback_query) {
       const callbackData = body.callback_query.data;
       const callbackId = body.callback_query.id;
@@ -78,13 +118,13 @@ export async function POST(request: Request) {
             })
           });
         } catch (e) {
-          console.error('Firestore operation failed in webhook:', e);
+          console.error('Firestore delete failed in webhook:', e);
         }
       }
       return NextResponse.json({ ok: true });
     }
 
-    // 3. Handle Inline Query
+    // 4. Handle Inline Query
     if (body.inline_query) {
       const queryId = body.inline_query.id;
       const queryText = body.inline_query.query.trim().toUpperCase();
@@ -145,7 +185,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error('Global Telegram Webhook error:', error);
+    console.error('Global Webhook error:', error);
     return NextResponse.json({ ok: false }, { status: 200 });
   }
 }
