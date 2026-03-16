@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { getDataSource } from '@/lib/currencies';
 import { cn } from '@/lib/utils';
@@ -31,7 +31,7 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
   const { rates, isLoading } = useLatestRatesSWR(currentPairs, firestore);
   
   const [changedRates, setChangedRates] = useState<Map<string, 'up' | 'down'>>(new Map());
-  const [prevRates, setPrevRates] = useState<Map<string, number>>(new Map());
+  const prevRatesRef = useRef<Map<string, number>>(new Map());
   const [isConfigOpen, setIsConfigOpen] = useState(false);
 
   useEffect(() => {
@@ -40,6 +40,7 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
 
   useEffect(() => {
     if (rates.length === 0) return;
+    
     const changed = new Map<string, 'up' | 'down'>();
     const currentRatesMap = new Map<string, number>();
     
@@ -47,19 +48,25 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
       const key = `${r.from}/${r.to}`;
       if (r.rate !== undefined) {
         currentRatesMap.set(key, r.rate);
-        const prevValue = prevRates.get(key);
+        const prevValue = prevRatesRef.current.get(key);
         if (prevValue !== undefined && Math.abs(prevValue - r.rate) > 0.000001) {
           changed.set(key, r.rate > prevValue ? 'up' : 'down');
         }
       }
     });
 
+    let timeoutId: any;
     if (changed.size > 0) {
       setChangedRates(changed);
-      setTimeout(() => setChangedRates(new Map()), 3000); 
+      timeoutId = setTimeout(() => setChangedRates(new Map()), 3000); 
     }
-    setPrevRates(currentRatesMap);
-  }, [rates, prevRates]);
+    
+    prevRatesRef.current = currentRatesMap;
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [rates]);
 
   const formatRate = (rate?: number) => {
     if (rate === undefined) return '...';
