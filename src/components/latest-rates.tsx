@@ -59,7 +59,7 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
       setTimeout(() => setChangedRates(new Map()), 3000); 
     }
     setPrevRates(currentRatesMap);
-  }, [rates]);
+  }, [rates, prevRates]);
 
   const formatRate = (rate?: number) => {
     if (rate === undefined) return '...';
@@ -134,47 +134,57 @@ export function LatestRates({ pairs: initialPairs, onAddPair, onRemovePair, mode
         </Collapsible>
 
         <div className="space-y-5">
-          {rates.map(({ from, to, rate, tomorrowRate, effectiveDate }) => {
-            const key = `${from}/${to}`;
-            const isChanged = changedRates.has(key);
-            const direction = changedRates.get(key);
-            const hasTomorrow = tomorrowRate !== undefined;
-            
-            // Format date for label: "с 21.10"
-            const dateLabel = effectiveDate ? effectiveDate.split('-').slice(1).reverse().join('.') : '';
+          {isLoading && rates.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 space-y-4 animate-pulse">
+              <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{t('latestRates.loading')}</p>
+            </div>
+          ) : rates.length === 0 ? (
+            <div className="text-center py-10 opacity-40">
+              <p className="text-sm">{t('latestRates.noPairs')}</p>
+            </div>
+          ) : (
+            rates.map(({ from, to, rate, tomorrowRate, effectiveDate }) => {
+              const key = `${from}/${to}`;
+              const isChanged = changedRates.has(key);
+              const direction = changedRates.get(key);
+              const hasTomorrow = tomorrowRate !== undefined;
+              
+              const dateLabel = effectiveDate ? effectiveDate.split('-').slice(1).reverse().join('.') : '';
 
-            return (
-              <div key={key} className="group relative">
-                <div className="grid grid-cols-[1fr_auto] items-center text-sm gap-x-4">
-                  <div className="flex items-center gap-2 font-medium">
-                    <span className="font-bold">{from}</span>
-                    <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-muted-foreground">{to}</span>
-                  </div>
-                  
-                  <div className="flex flex-col items-end">
-                    <div className={cn(
-                      'font-mono font-bold text-base transition-all duration-1000',
-                      isChanged && (direction === 'up' ? 'text-positive scale-110' : 'text-negative scale-110'),
-                    )}>
-                      {formatRate(rate)}
+              return (
+                <div key={key} className="group relative">
+                  <div className="grid grid-cols-[1fr_auto] items-center text-sm gap-x-4">
+                    <div className="flex items-center gap-2 font-medium">
+                      <span className="font-bold">{from}</span>
+                      <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-muted-foreground">{to}</span>
                     </div>
                     
-                    {hasTomorrow && (
-                      <button 
-                        onClick={() => handleShareTomorrow(from, to, tomorrowRate, effectiveDate)}
-                        className="flex items-center gap-1 text-[9px] text-muted-foreground opacity-80 mt-0.5 font-bold hover:text-primary transition-colors group/tm whitespace-nowrap"
-                      >
-                        <Timer size={10} className="shrink-0" />
-                        <span>{dateLabel ? t('latestRates.fromDate', { date: dateLabel }) : t('latestRates.tomorrow')}: {formatRate(tomorrowRate)}</span>
-                        <Share2 size={8} className="ml-0.5 opacity-0 group-hover/tm:opacity-100 transition-opacity" />
-                      </button>
-                    )}
+                    <div className="flex flex-col items-end">
+                      <div className={cn(
+                        'font-mono font-bold text-base transition-all duration-1000',
+                        isChanged && (direction === 'up' ? 'text-positive scale-110' : 'text-negative scale-110'),
+                      )}>
+                        {formatRate(rate)}
+                      </div>
+                      
+                      {hasTomorrow && (
+                        <button 
+                          onClick={() => handleShareTomorrow(from, to, tomorrowRate, effectiveDate)}
+                          className="flex items-center gap-1 text-[9px] text-muted-foreground opacity-80 mt-0.5 font-bold hover:text-primary transition-colors group/tm whitespace-nowrap"
+                        >
+                          <Timer size={10} className="shrink-0" />
+                          <span>{dateLabel ? t('latestRates.fromDate', { date: dateLabel }) : t('latestRates.tomorrow')}: {formatRate(tomorrowRate)}</span>
+                          <Share2 size={8} className="ml-0.5 opacity-0 group-hover/tm:opacity-100 transition-opacity" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </CardContent>
     </Card>

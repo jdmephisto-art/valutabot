@@ -85,29 +85,53 @@ export function findRate(from: string, to: string, isTomorrow: boolean = false):
     return findRateWithDate(from, to, isTomorrow).rate;
 }
 
-export async function preFetchInitialRates(db: Firestore, onApiError?: (source: string) => void) {
-    const docRef = doc(db, 'rates_cache', 'unified');
-    
-    onSnapshot(docRef, (snap) => {
-        if (snap.exists()) {
-            const data = snap.data();
-            unifiedData = data.data || {};
-            unifiedDataTomorrow = data.dataTomorrow || {};
-        }
-    });
-    
-    try {
-        const snap = await getDoc(docRef);
-        const now = Date.now();
-        const data = snap.data();
-        
-        const updateFiat = !snap.exists() || (now - (data?.updatedAtFiat || 0) > FIAT_TTL);
-        const updateCrypto = !snap.exists() || (now - (data?.updatedAtCrypto || 0) > CRYPTO_TTL);
+// Global promise to prevent multiple initial fetches
+let initialFetchPromise: Promise<void> | null = null;
+let isInitialFetchDone = false;
+let isListenerSet = false;
 
-        if (updateFiat || updateCrypto) {
-            updateAllRatesInCloud(db, updateFiat, onApiError, updateCrypto);
+export async function preFetchInitialRates(db: Firestore, onApiError?: (source: string) => void) {
+    if (isInitialFetchDone) return;
+    if (initialFetchPromise) return initialFetchPromise;
+
+    initialFetchPromise = (async () => {
+        const docRef = doc(db, 'rates_cache', 'unified');
+        try {
+            const snap = await getDoc(docRef);
+            if (snap.exists()) {
+                const data = snap.data();
+                unifiedData = data.data || {};
+                unifiedDataTomorrow = data.dataTomorrow || {};
+            }
+            
+            if (!isListenerSet) {
+                onSnapshot(docRef, (s) => {
+                    if (s.exists()) {
+                        const d = s.data();
+                        unifiedData = d.data || {};
+                        unifiedDataTomorrow = d.dataTomorrow || {};
+                    }
+                });
+                isListenerSet = true;
+            }
+
+            const now = Date.now();
+            const cacheData = snap.exists() ? snap.data() : null;
+            const updateFiat = !snap.exists() || (now - (cacheData?.updatedAtFiat || 0) > FIAT_TTL);
+            const updateCrypto = !snap.exists() || (now - (cacheData?.updatedAtCrypto || 0) > CRYPTO_TTL);
+
+            if (updateFiat || updateCrypto) {
+                await updateAllRatesInCloud(db, updateFiat, onApiError, updateCrypto);
+            }
+            isInitialFetchDone = true;
+        } catch (e) {
+            console.error("preFetchInitialRates failed:", e);
+        } finally {
+            initialFetchPromise = null;
         }
-    } catch (e) {}
+    })();
+
+    return initialFetchPromise;
 }
 
 export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean = true, onApiError?: (source: string) => void, updateCrypto: boolean = true) {
@@ -160,8 +184,8 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
         await setDoc(doc(db, 'rates_cache', 'unified'), {
             data: nextData, 
             dataTomorrow: nextDataTomorrow, 
-            updatedAtFiat: updateFiat ? now : (unifiedData ? now : 0),
-            updatedAtCrypto: updateCrypto ? now : (unifiedData ? now : 0)
+            updatedAtFiat: updateFiat ? now : (Object.keys(unifiedData).length > 0 ? now : 0),
+            updatedAtCrypto: updateCrypto ? now : (Object.keys(unifiedData).length > 0 ? now : 0)
         }, { merge: true });
         
         unifiedData = nextData;
@@ -183,9 +207,9 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
 
         await setDoc(doc(db, 'rates_cache', 'unified'), {
             data: nextData, 
-            dataTomorrow: nextDataTomorrow,
-            updatedAtFiat: updateFiat ? now : (unifiedData ? now : 0),
-            updatedAtCrypto: updateCrypto ? now : (unifiedData ? now : 0)
+            dataTomorrow: nextDataTomorrow, 
+            updatedAtFiat: updateFiat ? now : (Object.keys(unifiedData).length > 0 ? now : 0),
+            updatedAtCrypto: updateCrypto ? now : (Object.keys(unifiedData).length > 0 ? now : 0)
         }, { merge: true });
         
         unifiedData = nextData;
@@ -351,7 +375,9 @@ export async function getCurrencies(): Promise<Currency[]> {
 }
 
 export async function getLatestRates(pairs: string[], db: Firestore): Promise<ExchangeRate[]> {
-    preFetchInitialRates(db); 
+    if (Object.keys(unifiedData).length === 0) {
+        await preFetchInitialRates(db); 
+    }
     return pairs.map(p => {
         const [from, to] = p.split('/');
         const todayData = findRateWithDate(from, to, false);
@@ -365,10 +391,6 @@ export async function findRateAsync(from: string, to: string, db: Firestore): Pr
     return findRate(from, to);
 }
 
-/**
- * Enhanced Database-First Historical Rate Fetcher.
- * Corrected API request params and robust object initialization.
- */
 export async function getHistoricalRate(from: string, to: string, date: Date, db: Firestore): Promise<HistoricalRateResult | undefined> {
     try {
         await preFetchInitialRates(db);
@@ -413,8 +435,6 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
                             const data = await res.json();
                             fetchedVal = data?.market_data?.current_price?.usd;
                             sourceId = 'coingecko';
-                        } else {
-                            console.error(`CoinGecko API error for ${code} on ${cgDate}: ${res.status}`);
                         }
                     } else if (activeDataSource === 'nbrb' || activeDataSource === 'cbr') {
                         const liveData = await fetchSourceHistorical(date, activeDataSource);
@@ -423,9 +443,7 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
                             sourceId = activeDataSource;
                         }
                     }
-                } catch (apiErr) {
-                    console.error(`Historical API fetch failed for ${code} on ${targetDateStr}:`, apiErr);
-                }
+                } catch (apiErr) {}
 
                 if (fetchedVal !== undefined) {
                     if (!dayData[code]) dayData[code] = {};
@@ -439,9 +457,7 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
                     timestamp: Timestamp.fromDate(startOfDay(date)),
                     base: 'USD',
                     data: dayData
-                }, { merge: true }).catch(err => {
-                    console.error(`Background history cache write failed for ${targetDateStr}:`, err);
-                });
+                }, { merge: true }).catch(() => {});
             }
 
             fromPrice = getPriceFromData(from, dayData);
@@ -451,16 +467,11 @@ export async function getHistoricalRate(from: string, to: string, date: Date, db
         if (fromPrice !== undefined && toPrice !== undefined) {
             return { rate: fromPrice / toPrice, date, isFallback: false };
         }
-    } catch (globalErr) {
-        console.error(`getHistoricalRate failed for ${from}/${to} on ${format(date, 'yyyy-MM-dd')}:`, globalErr);
-    }
+    } catch (globalErr) {}
     
     return undefined;
 }
 
-/**
- * Parallelized Dynamics Fetcher with individual day error handling.
- */
 export async function getDynamicsForPeriod(from: string, to: string, startDate: Date, endDate: Date, db: Firestore): Promise<{ date: string; rate: number }[]> {
     const days = eachDayOfInterval({ start: startDate, end: endDate });
     const results = await Promise.all(days.map(async (d) => {
@@ -468,7 +479,6 @@ export async function getDynamicsForPeriod(from: string, to: string, startDate: 
             const res = await getHistoricalRate(from, to, d, db);
             return res ? { date: format(d, 'dd.MM'), rate: res.rate } : null;
         } catch (e) {
-            console.error(`Dynamic day fetch failed for ${format(d, 'dd.MM.yyyy')}:`, e);
             return null;
         }
     }));
