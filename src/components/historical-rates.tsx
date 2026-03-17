@@ -65,7 +65,7 @@ export function HistoricalRates() {
   const numberFormatter = (val: number) => {
     if (val === 0) return '0';
     // Adaptive precision: more digits for very small numbers (crypto)
-    const isSmall = val < 0.1;
+    const isSmall = Math.abs(val) < 0.1;
     const options = { 
       minimumFractionDigits: isSmall ? 4 : 2, 
       maximumFractionDigits: isSmall ? 8 : 4 
@@ -85,13 +85,16 @@ export function HistoricalRates() {
             rate: numberFormatter(singleRate.rate)
         });
     } else if (activeTab === 'range' && rangeResult && range?.from && range.to) {
-        const change = (((rangeResult.endRate - rangeResult.startRate) / rangeResult.startRate) * 100).toFixed(2);
+        const diff = rangeResult.endRate - rangeResult.startRate;
+        const change = ((diff / rangeResult.startRate) * 100).toFixed(2);
+        const diffStr = (diff >= 0 ? '+' : '') + numberFormatter(diff);
+        
         shareText = t('history.shareTextRange', {
             from: fromCurrency,
             to: toCurrency,
             startRate: numberFormatter(rangeResult.startRate),
             endRate: numberFormatter(rangeResult.endRate),
-            change,
+            change: `${change}% (${diffStr})`,
             start: format(range.from, "MMM dd", { locale: dateLocale }),
             end: format(range.to, "MMM dd", { locale: dateLocale })
         });
@@ -407,7 +410,19 @@ export function HistoricalRates() {
                 <div className="p-4 bg-muted/50 rounded-lg space-y-2">
                     <div className="flex justify-between items-center"><span className="text-sm text-muted-foreground">{t('history.start', { date: range?.from ? format(range.from, "LLL dd", { locale: dateLocale }) : '' })}</span><span className="font-mono font-medium">{numberFormatter(rangeResult.startRate)}</span></div>
                     <div className="flex justify-between items-center"><span className="text-sm text-muted-foreground">{t('history.end', { date: range?.to ? format(range.to, "LLL dd", { locale: dateLocale }) : '' })}</span><span className="font-mono font-medium">{numberFormatter(rangeResult.endRate)}</span></div>
-                    <div className="flex justify-between items-center pt-2 border-t"><span className="text-sm font-semibold">{t('history.change')}</span><span className={cn("font-semibold flex items-center gap-1", rangeResult.endRate >= rangeResult.startRate ? 'text-positive' : 'text-negative')}>{rangeResult.endRate >= rangeResult.startRate ? <TrendingUp size={16} /> : <TrendingDown size={16} />}{(((rangeResult.endRate - rangeResult.startRate) / rangeResult.startRate) * 100).toFixed(2)}%</span></div>
+                    
+                    <div className="flex justify-between items-start pt-2 border-t">
+                        <span className="text-sm font-semibold">{t('history.change')}</span>
+                        <div className="flex flex-col items-end">
+                            <span className={cn("font-semibold flex items-center gap-1", rangeResult.endRate >= rangeResult.startRate ? 'text-positive' : 'text-negative')}>
+                                {rangeResult.endRate >= rangeResult.startRate ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+                                {(((rangeResult.endRate - rangeResult.startRate) / rangeResult.startRate) * 100).toFixed(2)}%
+                            </span>
+                            <span className={cn("text-[10px] font-mono font-bold", rangeResult.endRate >= rangeResult.startRate ? 'text-positive' : 'text-negative')}>
+                                {rangeResult.endRate >= rangeResult.startRate ? '+' : ''}{numberFormatter(rangeResult.endRate - rangeResult.startRate)}
+                            </span>
+                        </div>
+                    </div>
                 </div>
              )}
           </TabsContent>
