@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useForm } from 'react-hook-form';
@@ -15,6 +14,7 @@ import { useCurrencies } from '@/hooks/use-currencies';
 import { useTranslation } from '@/hooks/use-translation';
 import { useMemo } from 'react';
 import { CurrencyCombobox } from './currency-combobox';
+import { cn } from '@/lib/utils';
 
 type NotificationManagerProps = {
     onSetAlert: (data: z.infer<ReturnType<typeof getAlertSchema>>) => void;
