@@ -25,7 +25,7 @@ export type Alert = {
   baseRate: number;
   createdAt: string;
   sendToTelegram?: boolean;
-  telegramId?: string;
+  telegramId?: string | null;
 };
 
 export type DataSource = 'nbrb' | 'worldcurrencyapi' | 'cbr' | 'ecb' | 'nbk';
@@ -64,7 +64,7 @@ export type MultiSourceData = Record<string, Record<string, {
   v: number, 
   d: string, 
   off: boolean 
-}>>;
+}>>>;
 
 export type UnifiedRatesCache = {
   data: MultiSourceData;

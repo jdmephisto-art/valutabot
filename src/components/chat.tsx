@@ -216,7 +216,7 @@ export function ChatInterface() {
     setDataSourceState(getDataSource());
   }, []);
 
-  // Handle Deep Linking (start_param === 'rates')
+  // Handle Deep Linking
   useEffect(() => {
     if (isMounted && webApp?.initDataUnsafe?.start_param === 'rates') {
       setTimeout(() => {
