@@ -16,7 +16,7 @@ import { DataSourceSwitcher } from '@/components/data-source-switcher';
 import { AutoClearManager } from '@/components/auto-clear-manager';
 import { OtherAssetsView } from '@/components/other-assets-view';
 import { PortfolioManager } from '@/components/portfolio-manager';
-import type { Alert, DataSource } from '@/lib/types';
+import type { Alert, DataSource, UserProfile } from '@/lib/types';
 import { findRateAsync, setDataSource, getDataSource, preFetchInitialRates } from '@/lib/currencies';
 import { useTranslation } from '@/hooks/use-translation';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -25,7 +25,7 @@ import { useFirestore, useUser, useMemoFirebase, useCollection, setDocumentNonBl
 import { useTelegram } from '@/hooks/use-telegram';
 import { signInAnonymously } from 'firebase/auth';
 import { useAuth } from '@/firebase';
-import { collection, doc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, deleteDoc, getDoc, updateDoc } from 'firebase/firestore';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 type Message = {
@@ -197,7 +197,7 @@ export function ChatInterface() {
 
       addMessage({ sender: 'bot', component });
     }, 400);
-  }, [user, firestore, haptic, addMessage, t, displayedPairs, trackedPairs, dataSource, webApp]);
+  }, [user, firestore, haptic, addMessage, t, displayedPairs, trackedPairs, dataSource, webApp, scrollToBottom]);
 
   useEffect(() => {
     setIsMounted(true);
@@ -293,9 +293,15 @@ export function ChatInterface() {
   }, [webApp, addMessage]);
 
   useEffect(() => {
-    if (!isMounted || !cloudAlerts || cloudAlerts.length === 0) return;
+    if (!isMounted || !cloudAlerts || cloudAlerts.length === 0 || !user || !firestore) return;
 
     const checkInterval = setInterval(async () => {
+      // Fetch user profile once to get the history of triggered rates
+      const userRef = doc(firestore, 'users', user.uid);
+      const userSnap = await getDoc(userRef);
+      const userProfile = userSnap.exists() ? (userSnap.data() as UserProfile) : null;
+      const lastTriggeredRates = userProfile?.lastTriggeredRates || {};
+
       for (const alert of cloudAlerts) {
         const currentRate = await findRateAsync(alert.from, alert.to, firestore);
         
@@ -305,14 +311,37 @@ export function ChatInterface() {
             : currentRate <= alert.threshold;
           
           if (isTriggered) {
+            const pair = `${alert.from}/${alert.to}`;
+            
+            // Intelligence: Compare with last triggered rate OR baseRate
+            const prevRecordedRate = lastTriggeredRates[pair];
+            const comparisonRate = prevRecordedRate || alert.baseRate;
+            const context = prevRecordedRate ? 'sinceLast' : 'sinceSet';
+
             addMessage({
               sender: 'bot',
               text: t('alertCard.title'),
-              component: <RateUpdateCard pair={`${alert.from}/${alert.to}`} oldRate={alert.baseRate} newRate={currentRate} />
+              component: <RateUpdateCard 
+                pair={pair} 
+                oldRate={comparisonRate} 
+                newRate={currentRate} 
+                createdAt={alert.createdAt}
+                context={context}
+              />
             });
 
-            // Send notification to Telegram using stored telegramId
-            if (alert.sendToTelegram && alert.telegramId && user) {
+            // Update user history in Firestore
+            updateDoc(userRef, {
+              [`lastTriggeredRates.${pair}`]: currentRate,
+              updatedAt: new Date().toISOString()
+            });
+
+            // Send notification to Telegram
+            if (alert.sendToTelegram && alert.telegramId) {
+              const change = ((currentRate - comparisonRate) / comparisonRate) * 100;
+              const changeText = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+              const contextText = context === 'sinceLast' ? 'прошлого уведомления' : 'момента установки';
+
               fetch('/api/telegram/notify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -320,15 +349,13 @@ export function ChatInterface() {
                   chatId: alert.telegramId,
                   userId: user.uid,
                   alertId: alert.id,
-                  text: `🔔 <b>Оповещение о курсе!</b>\n\nПара <b>${alert.from}/${alert.to}</b> достигла <b>${currentRate.toFixed(4)}</b>.\n\nПорог: ${alert.condition === 'above' ? '≥' : '≤'} ${alert.threshold}`
+                  text: `🔔 <b>Оповещение о курсе!</b>\n\nПара <b>${alert.from}/${alert.to}</b> достигла <b>${currentRate.toFixed(4)}</b>.\n\nИзменение: <b>${changeText}</b> (с ${contextText})\nПорог: ${alert.condition === 'above' ? '≥' : '≤'} ${alert.threshold}`
                 })
               });
             }
 
-            if (user) {
-              const alertRef = doc(firestore, 'users', user.uid, 'notifications', alert.id);
-              deleteDoc(alertRef);
-            }
+            // Remove the triggered alert (one-time logic)
+            deleteDoc(doc(firestore, 'users', user.uid, 'notifications', alert.id));
           }
         }
       }

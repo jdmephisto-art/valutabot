@@ -44,6 +44,16 @@ export type PortfolioAsset = {
   amount: number;
 };
 
+export type UserProfile = {
+  id: string;
+  telegramId: string;
+  username: string;
+  updatedAt: string;
+  platform?: string;
+  lastAction?: string;
+  lastTriggeredRates?: Record<string, number>;
+};
+
 /**
  * Enhanced structure for multi-source data storage with date anchoring
  * v: value (relative to USD)

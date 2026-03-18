@@ -18,11 +18,17 @@
         "username": {
           "type": "string",
           "description": "The username of the user."
+        },
+        "lastTriggeredRates": {
+          "type": "object",
+          "description": "Map of currency pairs to the last rate that triggered a notification.",
+          "additionalProperties": {
+            "type": "number"
+          }
         }
       },
       "required": [
-        "id",
-        "telegramId"
+        "id"
       ]
     },
     "Currency": {

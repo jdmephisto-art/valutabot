@@ -741,6 +741,8 @@ export const translations = {
       newRate: 'New rate:',
       change: '(Change: {change}%)',
       share: 'Share',
+      sinceSet: 'Change since set',
+      sinceLast: 'Change since last alert',
     },
     alertCard: {
       title: 'Rate Alert Triggered!',
@@ -991,6 +993,8 @@ export const translations = {
       newRate: 'Новый курс:',
       change: '(Изменение: {change}%)',
       share: 'Поделиться',
+      sinceSet: 'С момента установки',
+      sinceLast: 'С прошлого уведомления',
     },
     alertCard: {
       title: 'Сработало оповещение о курсе!',
