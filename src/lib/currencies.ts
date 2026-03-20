@@ -156,13 +156,14 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
     const nextData = { ...unifiedData };
     const nextDataTomorrow = { ...unifiedDataTomorrow };
 
-    const processSourceResult = (val: any, sourceId: string, isOfficial: boolean) => {
+    const processSourceResult = (val: any, sourceId: string, isOfficial: boolean, isCrypto: boolean) => {
         if (!val) return;
         const processEntry = (rates: Record<string, number>, dateStr: string) => {
-            const targetMap = dateStr > todayStr ? nextDataTomorrow : nextData;
+            // Если это крипто-источник, мы ВСЕГДА пишем только в nextData (текущие), игнорируя logic "на завтра"
+            const targetMap = (dateStr > todayStr && !isCrypto) ? nextDataTomorrow : nextData;
             Object.keys(rates).forEach(currency => {
                 if (!targetMap[currency]) targetMap[currency] = {};
-                if (dateStr > todayStr) {
+                if (dateStr > todayStr && !isCrypto) {
                     const existingDate = targetMap[currency][sourceId]?.d;
                     if (!existingDate || dateStr >= existingDate) {
                         targetMap[currency][sourceId] = { v: rates[currency], d: dateStr, off: isOfficial };
@@ -179,7 +180,7 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
 
     try {
         const priorityRes = await prioritySource.fn();
-        processSourceResult(priorityRes, prioritySource.id, prioritySource.type === 'fiat');
+        processSourceResult(priorityRes, prioritySource.id, prioritySource.type === 'fiat', prioritySource.type === 'crypto');
         
         await setDoc(doc(db, 'rates_cache', 'unified'), {
             data: nextData, 
@@ -199,7 +200,7 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
         results.forEach((res, idx) => {
             const sInfo = otherSources[idx];
             if (res.status === 'fulfilled' && res.value) {
-                processSourceResult(res.value, sInfo.id, sInfo.type === 'fiat');
+                processSourceResult(res.value, sInfo.id, sInfo.type === 'fiat', sInfo.type === 'crypto');
             } else if (onApiError) {
                 onApiError(sInfo.id);
             }
