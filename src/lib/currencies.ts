@@ -160,17 +160,12 @@ export async function updateAllRatesInCloud(db: Firestore, updateFiat: boolean =
         if (!val) return;
         const processEntry = (rates: Record<string, number>, dateStr: string) => {
             // Если это крипто-источник, мы ВСЕГДА пишем только в nextData (текущие), игнорируя logic "на завтра"
-            const targetMap = (dateStr > todayStr && !isCrypto) ? nextDataTomorrow : nextData;
+            const shouldWriteToTomorrow = dateStr > todayStr && !isCrypto;
+            const targetMap = shouldWriteToTomorrow ? nextDataTomorrow : nextData;
+            
             Object.keys(rates).forEach(currency => {
                 if (!targetMap[currency]) targetMap[currency] = {};
-                if (dateStr > todayStr && !isCrypto) {
-                    const existingDate = targetMap[currency][sourceId]?.d;
-                    if (!existingDate || dateStr >= existingDate) {
-                        targetMap[currency][sourceId] = { v: rates[currency], d: dateStr, off: isOfficial };
-                    }
-                } else {
-                    targetMap[currency][sourceId] = { v: rates[currency], d: dateStr, off: isOfficial };
-                }
+                targetMap[currency][sourceId] = { v: rates[currency], d: dateStr, off: isOfficial };
             });
         };
         if (val.today) processEntry(val.today.rates, val.today.date);
@@ -379,11 +374,22 @@ export async function getLatestRates(pairs: string[], db: Firestore): Promise<Ex
     if (Object.keys(unifiedData).length === 0) {
         await preFetchInitialRates(db); 
     }
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
     return pairs.map(p => {
         const [from, to] = p.split('/');
         const todayData = findRateWithDate(from, to, false);
         const futureData = findRateWithDate(from, to, true);
-        return { from, to, rate: todayData.rate, tomorrowRate: futureData.rate, effectiveDate: futureData.date };
+        
+        // Показываем прогноз на завтра только если его дата реально в будущем
+        const showTomorrow = futureData.rate !== undefined && futureData.date && futureData.date > todayStr;
+        
+        return { 
+            from, 
+            to, 
+            rate: todayData.rate, 
+            tomorrowRate: showTomorrow ? futureData.rate : undefined, 
+            effectiveDate: showTomorrow ? futureData.date : undefined 
+        };
     });
 }
 
